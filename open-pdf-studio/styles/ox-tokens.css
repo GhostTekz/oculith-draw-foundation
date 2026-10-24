@@ -1,0 +1,289 @@
+/* Oculith design tokens for Oculith Draw.
+ *
+ * Copied from Oculith desktop/src/ui/tokens.css at commit 5e7ba14a.
+ * Changes from the source:
+ * font URLs point at Oculith Draw's public/fonts/ (same files as
+ * Oculith static/fonts/); the light palette also applies to OcuDraw's
+ * [data-theme="light"] on <html>, which js/core/preferences.js sets. Keep the
+ * values in step with the source; OcuDraw's --theme-* variables (themes.css)
+ * read these --ox-* tokens. Fonts: SIL OFL 1.1, see public/fonts/README.md.
+ *
+ * ---- source file follows ---- */
+
+/* Oculith desktop design tokens.
+ *
+ * Every colour, size and duration the desktop design system uses is a CSS
+ * custom property here, prefixed --ox-. Components (ui.css) only ever read
+ * these, so a theme is just a different set of values.
+ *
+ * The palette is Oculith's: near-black, cool-slate surfaces and
+ * hairlines, the Oculith fonts and the monolith's orange. Status
+ * hues and the chart palette are tokens too, so every screen
+ * colours a state or a series the same way (ui/status.ts, ui/charts.tsx).
+ * Dark is the default. Light applies when <html data-theme="light">, or
+ * data-theme="system" and the OS prefers light (src/ui/theme.ts sets it).
+ * Text contrast (WCAG AA) is checked in both themes by ui/tokens.test.ts.
+ *
+ * Nothing here depends on Bootstrap; Bootstrap's own variables are not read.
+ */
+
+/* Self-hosted fonts from static/fonts (the same files the landing page uses). */
+@font-face { font-family: "Geist"; src: url("/fonts/geist-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Instrument Serif"; src: url("/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
+  font-weight: 400; font-style: italic; font-display: swap; }
+
+:root {
+  /* ---- type ---- */
+  --ox-font: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --ox-font-mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --ox-font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  /* A workstation scale: 13px body, rem-based so Ctrl +/- (theme.ts) and OS
+     scaling (125%, 150%) grow everything together. */
+  --ox-fs-2xs: 0.625rem;  /* 10 */
+  --ox-fs-xs: 0.6875rem;  /* 11 */
+  --ox-fs-sm: 0.75rem;    /* 12 */
+  --ox-fs-md: 0.8125rem;  /* 13: body */
+  --ox-fs-lg: 0.9375rem;  /* 15 */
+  --ox-fs-xl: 1.125rem;   /* 18 */
+  --ox-fs-2xl: 1.5rem;    /* 24 */
+  --ox-fs-3xl: 2rem;      /* 32 */
+  --ox-fs-4xl: 2.75rem;   /* 44 */
+  --ox-lh-tight: 1.15;
+  --ox-lh: 1.45;
+  --ox-fw-regular: 420;
+  --ox-fw-medium: 530;
+  --ox-fw-bold: 640;
+  --ox-tracking-caps: 0.09em;
+
+  /* ---- spacing (4px grid) ---- */
+  --ox-sp-0: 0.125rem;
+  --ox-sp-1: 0.25rem;
+  --ox-sp-2: 0.5rem;
+  --ox-sp-3: 0.75rem;
+  --ox-sp-4: 1rem;
+  --ox-sp-5: 1.5rem;
+  --ox-sp-6: 2rem;
+  --ox-sp-7: 2.5rem;
+  --ox-sp-8: 3rem;
+
+  /* ---- shape ---- */
+  --ox-r-xs: 3px;
+  --ox-r-sm: 5px;
+  --ox-r-md: 7px;
+  --ox-r-lg: 12px;   /* cards, panels (the web uses 12–14) */
+  --ox-r-xl: 14px;
+  --ox-r-pill: 999px;
+
+  /* ---- control + chrome sizes ---- */
+  --ox-control-sm: 1.5rem;   /* 24 */
+  --ox-control: 1.875rem;    /* 30 */
+  --ox-control-lg: 2.5rem;   /* 40 */
+  --ox-titlebar: 2.375rem;   /* 38 */
+  --ox-rail: 4.25rem;        /* 68 */
+  --ox-sidebar: 15rem;
+  --ox-statusbar: 1.625rem;  /* 26 */
+  --ox-row: 1.875rem;        /* dense table row */
+
+  /* ---- motion ---- */
+  --ox-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ox-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ox-dur-fast: 90ms;
+  --ox-dur: 160ms;
+  --ox-dur-slow: 280ms;
+
+  /* ---- z layers ---- */
+  --ox-z-sticky: 5;
+  --ox-z-popover: 50;
+  --ox-z-overlay: 80;
+  --ox-z-toast: 90;
+
+  /* ---- colour: dark (default) ----
+     The neutrals are the web app's (static/platform.css, crews.css): near-black
+     #0b0b0c, cool slate surfaces #141518 / #1a1c20, hairlines like #23252b,
+     ink #e9edf1 and muted #9aa3ae. */
+  color-scheme: dark;
+  --ox-bg: #0b0b0c;            /* window */
+  --ox-surface-0: #0e0f11;     /* content well */
+  --ox-surface-1: #141518;     /* panels, sidebars (web: --surface) */
+  --ox-surface-2: #1a1c20;     /* cards, inputs (web: --surface-2) */
+  --ox-surface-3: #202329;     /* hover, raised (web: --surface-3) */
+  --ox-surface-4: #2a2d34;     /* pressed, selected */
+  --ox-chrome: #0d0e11;        /* title bar, rail, status bar (web: --sidebar) */
+  --ox-line: rgba(214, 224, 240, 0.075);
+  --ox-line-2: rgba(214, 224, 240, 0.12);
+  --ox-line-3: rgba(214, 224, 240, 0.2);
+  --ox-text: #e9edf1;
+  --ox-text-2: #9aa3ae;
+  --ox-text-3: #848d99;        /* clears AA on --ox-bg … --ox-surface-2 */
+  --ox-text-disabled: #575d67;
+  --ox-accent: #ff7a00;        /* the monolith's eye; the tenant brand inside the shell */
+  --ox-accent-hover: #ff8c1a;
+  --ox-accent-hi: #ffb066;
+  --ox-accent-ink: #ffa04d;    /* accent used as text/icon on dark surfaces */
+  --ox-on-accent: #0b0b0c;
+  --ox-accent-soft: rgba(255, 122, 0, 0.12);
+  --ox-accent-line: rgba(255, 122, 0, 0.42);
+  --ox-focus: #ffb066;
+  --ox-focus-ring: 0 0 0 2px var(--ox-bg), 0 0 0 4px var(--ox-focus);
+
+  /* Status scale (severity): ok → warn → serious → danger, plus info and
+     neutral. `-ink` is the readable text/icon colour on the `-soft` fill. */
+  --ox-ok: #3cc878;
+  --ox-ok-ink: #8fe6b4;
+  --ox-ok-soft: rgba(60, 200, 120, 0.13);
+  --ox-warn: #ffb020;
+  --ox-warn-ink: #ffcf7a;
+  --ox-warn-soft: rgba(255, 176, 32, 0.12);
+  --ox-serious: #ff8a3d;
+  --ox-serious-ink: #ffc08f;
+  --ox-serious-soft: rgba(255, 138, 61, 0.13);
+  --ox-danger: #ff5c5c;
+  --ox-danger-ink: #ffa3a3;
+  --ox-danger-soft: rgba(255, 92, 92, 0.12);
+  --ox-info: #5aa9ff;
+  --ox-info-ink: #a8d1ff;
+  --ox-info-soft: rgba(90, 169, 255, 0.12);
+  --ox-neutral: #8f99a6;
+  --ox-neutral-ink: #c3cad3;
+  --ox-neutral-soft: rgba(143, 153, 166, 0.13);
+
+  /* Hues for workflow states (ui/status.ts maps a status word to one) and
+     for any colour that names a thing. Solid = dots, stripes, bars; ink =
+     text on a 14 % tint of the hue. Never the tenant accent: a brand colour
+     is not a status (the web's cribvault.css rule). */
+  --ox-hue-slate: #8f99a6;   --ox-hue-slate-ink: #c3cad3;
+  --ox-hue-blue: #4f8cff;    --ox-hue-blue-ink: #a8c7ff;
+  --ox-hue-indigo: #818cf8;  --ox-hue-indigo-ink: #c7cbff;
+  --ox-hue-violet: #a78bfa;  --ox-hue-violet-ink: #d4c6ff;
+  --ox-hue-teal: #2dd4bf;    --ox-hue-teal-ink: #99f0e1;
+  --ox-hue-green: #3cc878;   --ox-hue-green-ink: #8fe6b4;
+  --ox-hue-amber: #ffb020;   --ox-hue-amber-ink: #ffcf7a;
+  --ox-hue-orange: #ff8a3d;  --ox-hue-orange-ink: #ffc08f;
+  --ox-hue-red: #ff5c5c;     --ox-hue-red-ink: #ffa3a3;
+  --ox-hue-pink: #ec4899;    --ox-hue-pink-ink: #f9a8d4;
+  --ox-hue-cyan: #22c7e0;    --ox-hue-cyan-ink: #9eeefc;
+
+  /* Charts (ui/charts.tsx). Categorical series in this fixed order, never
+     cycled (a 9th series folds into "Other"); validated for colour-blind
+     separation and ≥ 3:1 on the dark panels. A single series uses
+     --ox-chart-accent (the tenant brand). Text on a chart is ink, never a
+     series colour. */
+  --ox-chart-1: #3987e5;
+  --ox-chart-2: #d95926;
+  --ox-chart-3: #199e70;
+  --ox-chart-4: #c98500;
+  --ox-chart-5: #d55181;
+  --ox-chart-6: #008300;
+  --ox-chart-7: #9085e9;
+  --ox-chart-8: #e66767;
+  --ox-chart-grid: rgba(214, 224, 240, 0.08);
+  --ox-chart-axis: rgba(214, 224, 240, 0.22);
+  --ox-chart-label: var(--ox-text-3);
+  --ox-chart-track: var(--ox-surface-3);
+  --ox-chart-mid: #383b42;     /* diverging midpoint */
+
+  --ox-scrim: rgba(3, 4, 6, 0.62);
+  --ox-shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.45);
+  --ox-shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -6px rgba(0, 0, 0, 0.65);
+  --ox-shadow-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 24px 60px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(214, 224, 240, 0.08);
+  /* a card at rest, like the web's .card (a faint top light, a soft drop) */
+  --ox-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.025) inset, 0 8px 24px -14px rgba(0, 0, 0, 0.7);
+  --ox-selection: rgba(255, 122, 0, 0.32);
+}
+
+/* ---- colour: light ----
+   The web app is dark-only; light is the same cool-slate family, stepped
+   for a white page (every ink re-checked for AA, ui/tokens.test.ts). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ox-bg: #eceef1;
+  --ox-surface-0: #f4f5f7;
+  --ox-surface-1: #fafbfc;
+  --ox-surface-2: #ffffff;
+  --ox-surface-3: #eef0f3;
+  --ox-surface-4: #e2e5ea;
+  --ox-chrome: #e4e7eb;
+  --ox-line: rgba(15, 23, 42, 0.08);
+  --ox-line-2: rgba(15, 23, 42, 0.13);
+  --ox-line-3: rgba(15, 23, 42, 0.22);
+  --ox-text: #14171c;
+  --ox-text-2: #4a5260;
+  --ox-text-3: #5c6470;
+  --ox-text-disabled: #a0a6b0;
+  --ox-accent: #ff7a00;
+  --ox-accent-hover: #f06e00;
+  --ox-accent-hi: #c75c00;
+  --ox-accent-ink: #b35200;    /* AA on white */
+  --ox-on-accent: #0b0b0c;
+  --ox-accent-soft: rgba(255, 122, 0, 0.12);
+  --ox-accent-line: rgba(214, 98, 0, 0.5);
+  --ox-focus: #d96500;
+  --ox-ok: #1f9d57;
+  --ox-ok-ink: #17703f;
+  --ox-ok-soft: rgba(31, 157, 87, 0.12);
+  --ox-warn: #c77a00;
+  --ox-warn-ink: #8a5400;
+  --ox-warn-soft: rgba(199, 122, 0, 0.12);
+  --ox-serious: #ea580c;
+  --ox-serious-ink: #9a3412;
+  --ox-serious-soft: rgba(234, 88, 12, 0.11);
+  --ox-danger: #d43c3c;
+  --ox-danger-ink: #a32424;
+  --ox-danger-soft: rgba(212, 60, 60, 0.1);
+  --ox-info: #2563eb;
+  --ox-info-ink: #1d4ed8;
+  --ox-info-soft: rgba(37, 99, 235, 0.1);
+  --ox-neutral: #64748b;
+  --ox-neutral-ink: #475569;
+  --ox-neutral-soft: rgba(100, 116, 139, 0.12);
+  --ox-hue-slate: #64748b;   --ox-hue-slate-ink: #475569;
+  --ox-hue-blue: #2563eb;    --ox-hue-blue-ink: #1d4ed8;
+  --ox-hue-indigo: #4f46e5;  --ox-hue-indigo-ink: #4338ca;
+  --ox-hue-violet: #7c3aed;  --ox-hue-violet-ink: #6d28d9;
+  --ox-hue-teal: #0d9488;    --ox-hue-teal-ink: #0b6b63;
+  --ox-hue-green: #1f9d57;   --ox-hue-green-ink: #17703f;
+  --ox-hue-amber: #c77a00;   --ox-hue-amber-ink: #8a5400;
+  --ox-hue-orange: #ea580c;  --ox-hue-orange-ink: #9a3412;
+  --ox-hue-red: #d43c3c;     --ox-hue-red-ink: #a32424;
+  --ox-hue-pink: #db2777;    --ox-hue-pink-ink: #be185d;
+  --ox-hue-cyan: #0891b2;    --ox-hue-cyan-ink: #0b6680;
+  /* Light series: slots 3, 4 and 5 sit under 3:1 on white, so a light chart
+     with them labels its marks directly or offers the table (relief rule). */
+  --ox-chart-1: #2a78d6;
+  --ox-chart-2: #eb6834;
+  --ox-chart-3: #1baf7a;
+  --ox-chart-4: #eda100;
+  --ox-chart-5: #e87ba4;
+  --ox-chart-6: #008300;
+  --ox-chart-7: #6250d6;
+  --ox-chart-8: #e34948;
+  --ox-chart-grid: rgba(15, 23, 42, 0.08);
+  --ox-chart-axis: rgba(15, 23, 42, 0.24);
+  --ox-chart-mid: #e2e5ea;
+  --ox-scrim: rgba(20, 24, 32, 0.32);
+  --ox-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.07);
+  --ox-shadow-2: 0 8px 24px -8px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  --ox-shadow-3: 0 24px 60px -16px rgba(15, 23, 42, 0.32), 0 0 0 1px rgba(15, 23, 42, 0.1);
+  --ox-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 18px -12px rgba(15, 23, 42, 0.18);
+  --ox-selection: rgba(255, 122, 0, 0.25);
+}
+
+/* Tokens derived from the accent are declared again where the tenant brand
+   re-defines the accent (shell.css: .ox-app, .ox-picker): a custom property's
+   var() resolves where it is declared, so a :root-only alias would keep
+   Oculith orange inside a re-branded shell. */
+:root, .ox-app, .ox-picker {
+  --ox-chart-accent: var(--ox-accent);
+  /* forecasting: actual = solid accent; forecast = the same, dashed; band = its range */
+  --ox-chart-actual: var(--ox-chart-accent);
+  --ox-chart-forecast: var(--ox-chart-accent);
+  --ox-chart-band: color-mix(in srgb, var(--ox-chart-accent) 16%, transparent);
+  --ox-chart-target: var(--ox-text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --ox-dur-fast: 0ms; --ox-dur: 0ms; --ox-dur-slow: 0ms; }
+}

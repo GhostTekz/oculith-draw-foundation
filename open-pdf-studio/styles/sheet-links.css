@@ -1,0 +1,84 @@
+/* Document > Page Labels and Batch > Link dialogs: compact plan-review lists
+   on the Oculith tokens. */
+.sheet-links-dialog { width: 600px; max-width: calc(100vw - 32px); }
+.sheet-links-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--theme-text);
+  font-size: 12px;
+}
+.sheet-links-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sheet-links-row label { display: inline-flex; align-items: center; gap: 4px; }
+.sheet-links-muted { color: var(--theme-text-secondary); }
+.sheet-links-warning { color: var(--theme-error, #dc2626); }
+.sheet-links-body input[type='text'],
+.sheet-links-body input[type='number'],
+.sheet-links-body select {
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.sheet-links-body input[type='number'] { width: 64px; }
+.sheet-links-body input[type='color'] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--theme-border); border-radius: var(--ox-r-xs, 3px); }
+.sheet-links-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px 8px;
+  border: 1px solid var(--theme-panel-border, var(--theme-border));
+  border-radius: var(--ox-r-sm, 5px);
+}
+.sheet-links-fieldset legend { padding: 0 4px; color: var(--theme-text-secondary); }
+.sheet-links-table-wrap {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--theme-panel-border, var(--theme-border));
+  border-radius: var(--ox-r-xs, 3px);
+}
+.sheet-links-table { width: 100%; border-collapse: collapse; }
+.sheet-links-table th,
+.sheet-links-table td {
+  height: 26px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--theme-panel-border, var(--theme-border));
+  text-align: left;
+  white-space: nowrap;
+}
+.sheet-links-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--theme-panel-bg);
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+}
+.sheet-links-table td input[type='text'] { width: 100%; }
+.sheet-links-table tr.is-current td { background: var(--theme-hover); }
+.sheet-links-table .num { width: 1%; text-align: right; color: var(--theme-text-secondary); }
+.sheet-links-note { color: var(--theme-text-secondary); font-style: italic; }
+.sheet-links-btn {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  font-size: 12px;
+}
+.sheet-links-btn:hover:not(:disabled) { border-color: var(--theme-accent); }
+.sheet-links-btn:disabled { opacity: 0.5; }
+.sheet-links-btn.primary { background: var(--theme-accent); border-color: var(--theme-accent); color: var(--theme-accent-text, #fff); }
+.sheet-links-footer { display: flex; justify-content: space-between; gap: 6px; width: 100%; }
+.sheet-links-footer > div { display: flex; gap: 6px; }
+/* Batch > Link > Set Batch Link */
+.set-batch-link-dialog { width: 680px; }
+.set-batch-link-dialog .batch-summary-list { height: 132px; }
+.set-batch-link-result { white-space: pre-line; }

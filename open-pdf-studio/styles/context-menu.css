@@ -1,0 +1,160 @@
+/* Context menus (external plan-review files menu density): 26px rows, a 16px icon column (a
+   checked item shows its check mark there), the label, a right-aligned
+   shortcut column, separators and ▸ submenus. Colours, border and radius
+   come from the Oculith tokens (see also oculith-workspace.css). */
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  display: none;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-md, 7px);
+  background: var(--ox-surface-2, var(--theme-surface));
+  box-shadow: var(--ox-shadow-3, 0 12px 32px rgba(0, 0, 0, 0.32));
+  color: var(--theme-text);
+  font-size: var(--ox-fs-sm, 12px);
+  user-select: none;
+}
+
+.context-menu.visible {
+  display: block;
+}
+
+.context-menu .context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: var(--theme-text);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.context-menu .context-menu-item:hover,
+.context-menu .context-menu-item:focus-visible,
+.context-menu .context-menu-submenu[aria-expanded='true'] {
+  background: var(--theme-hover);
+  outline: none;
+}
+
+.context-menu .context-menu-item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--theme-focus, var(--theme-accent));
+}
+
+.context-menu .context-menu-item.disabled {
+  color: var(--theme-text-secondary);
+  opacity: 0.5;
+}
+
+.context-menu .context-menu-item.disabled:hover,
+.context-menu .context-menu-item.disabled:focus-visible {
+  background: transparent;
+  box-shadow: none;
+}
+
+.context-menu .context-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--theme-text-secondary);
+}
+
+.context-menu .context-menu-icon svg {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.context-menu .context-menu-checkbox.checked .context-menu-icon {
+  color: var(--ox-accent, var(--theme-accent));
+}
+
+.context-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right-aligned shortcut column (empty when the item has none). */
+.context-menu-shortcut {
+  flex: none;
+  min-width: 0;
+  margin-left: 24px;
+  color: var(--theme-text-secondary);
+  font-size: var(--ox-fs-xs, 11px);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.context-menu-shortcut:empty {
+  margin-left: 0;
+}
+
+.context-menu-arrow {
+  display: flex;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: 16px;
+  color: var(--theme-text-secondary);
+}
+
+.context-menu-arrow svg {
+  width: 12px;
+  height: 12px;
+}
+
+.context-menu-value {
+  color: var(--theme-text-secondary);
+  font-weight: 500;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--ox-line, var(--theme-border));
+}
+
+/* No separator at the start or end of a menu, and none twice in a row. */
+.context-menu > .context-menu-separator:first-child,
+.context-menu > .context-menu-separator:last-child,
+.context-menu-submenu-content > .context-menu-separator:first-child,
+.context-menu-submenu-content > .context-menu-separator:last-child,
+.context-menu-separator + .context-menu-separator {
+  display: none;
+}
+
+.context-menu-submenu {
+  position: relative;
+}
+
+.context-menu-submenu:not(.disabled):hover > .context-menu-submenu-content,
+.context-menu-submenu:not(.disabled):focus-within > .context-menu-submenu-content {
+  display: block;
+}
+
+.context-menu-submenu-content {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  display: none;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-md, 7px);
+  background: var(--ox-surface-2, var(--theme-surface));
+  box-shadow: var(--ox-shadow-3, 0 12px 32px rgba(0, 0, 0, 0.32));
+}

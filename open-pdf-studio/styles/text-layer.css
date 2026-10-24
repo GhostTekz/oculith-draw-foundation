@@ -1,0 +1,181 @@
+/* Text Layer - for PDF text selection */
+/* CSS based on official PDF.js pdf_viewer.css (v5 TextLayer) */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 5;
+  pointer-events: auto;
+
+  /* PDF.js TextLayer CSS variable system */
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  /* PDF.js sizes the layer as round(down, var(--total-scale-factor) * page,
+     var(--scale-round-x/y)). Without these the declaration is invalid and the
+     layer fell back to inset:0, i.e. the container's (already rotated) box: on
+     a page turned 90/270 degrees the spans and search highlights then landed
+     beside the text. */
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+/* PDF.js lays out text in the page's original coordinate frame. Rotate the
+   complete layer so native and synthetic text share the rendered page frame. */
+.textLayer[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+
+.textLayer[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+
+.textLayer[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  pointer-events: auto;
+}
+
+/* PDF.js TextLayer: CSS variable-based font sizing and transforms */
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+/* PDF.js markedContent wrappers should not create layout boxes */
+.textLayer .markedContent {
+  display: contents;
+}
+
+/* Hidden canvas used by PDF.js TextLayer for text width measurement */
+.hiddenCanvasElement {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
+}
+
+.textLayer .endOfContent.active {
+  top: 0;
+}
+
+/* Translucent, as in PDF.js: the drawing stays visible under a selection.
+   An opaque fill hid the linework under every selected line, and the dark
+   glyphs it needed were the text layer's font, drawn a little beside the
+   page's own glyphs. Runs that overlap at a word boundary show a slightly
+   darker sliver; that is the cost of seeing the sheet. pdf-viewport.js
+   repeats this rule with !important. */
+.textLayer ::selection {
+  background: var(--ox-selection, rgba(255, 122, 0, 0.28));
+  color: transparent;
+}
+
+.textLayer br::selection {
+  background: transparent !important;
+}
+
+/* Spook-selectie tegengaan: lege en witruimte-only spans (PDF.js zendt die uit
+   voor grote positiesprongen — trailing spaties aan regeleindes, inspring- en
+   kolomgaten) mogen GEEN selectie-achtergrond krijgen. Anders verschijnen bij
+   het slepen losse blauwe streepjes/kolommen in de marge en tussen kolommen,
+   los van de eigenlijke tekst. Echte spaties tussen woorden zitten IN de
+   woord-span zelf en blijven dus gewoon oplichten.
+
+   `!important` is VERPLICHT: het vector-viewport-pad (pdf-viewport.js) injecteert
+   een inline <style> met `.textLayer ::selection { ... !important }`. Zonder
+   `!important` hier zou die geïnjecteerde regel deze neutralisatie overrulen
+   (important wint altijd van niet-important) en keerde de marge-spook-selectie
+   terug. */
+.textLayer span[data-ws]::-moz-selection {
+  background: transparent !important;
+}
+
+.textLayer span[data-ws]::selection {
+  background: transparent !important;
+}
+
+/* Search highlight styles */
+.textLayer .highlight {
+  margin: -1px;
+  padding: 1px;
+  background-color: rgba(180, 0, 170, 0.4);
+  border-radius: 4px;
+}
+
+.textLayer .highlight.appended {
+  position: initial;
+}
+
+.textLayer .highlight.begin {
+  border-radius: 4px 0 0 4px;
+}
+
+.textLayer .highlight.end {
+  border-radius: 0 4px 4px 0;
+}
+
+.textLayer .highlight.middle {
+  border-radius: 0;
+}
+
+.textLayer .highlight.selected {
+  background-color: rgba(0, 100, 0, 1);
+}
+
+/* Link Layer - for PDF link annotations */
+.linkLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.linkLayer .pdf-link {
+  display: block;
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  z-index: 10;
+}
+
+.linkLayer .pdf-link:hover {
+  background: rgba(255, 255, 0, 0.3);
+}

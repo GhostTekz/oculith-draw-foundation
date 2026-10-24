@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="default">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Oculith Draw</title>
+  <link rel="icon" type="image/svg+xml" href="community-icon.svg">
+  <link rel="apple-touch-icon" href="community-icon.svg">
+  <script src="js/theme-init.js"></script>
+  <style>html,body{margin:0;padding:0;background:#08080a}[data-theme="light"],[data-theme="light"] body{background:#f5f5f5}[data-theme="dark"],[data-theme="dark"] body{background:#1a1a2e}</style>
+  <link rel="stylesheet" href="styles/launch-screen.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app-root"></div>
+  <!-- The launch screen: the Oculith monolith with its wandering eye, the
+       edition, and what is loading (styles/launch-screen.css,
+       js/launch-screen.js). It paints before any script runs. -->
+  <div id="launch-screen" class="ls" aria-live="polite">
+    <div class="ls-scene" aria-hidden="true">
+      <div class="ls-stage" id="lsStage">
+        <canvas class="ls-smoke"></canvas>
+        <div class="ls-smoke-fb"></div>
+        <div class="ls-mono">
+<svg class="ls-mono-svg" viewBox="0 0 440 640" preserveAspectRatio="xMidYMax meet" focusable="false">
+  <defs>
+    <linearGradient id="lsmface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#23242b"/>
+      <stop offset=".34" stop-color="#101014"/>
+      <stop offset=".7" stop-color="#060608"/>
+      <stop offset="1" stop-color="#0d0b0a"/>
+    </linearGradient>
+    <linearGradient id="lsmedge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset=".22" stop-color="#fff" stop-opacity=".03"/>
+      <stop offset=".62" stop-color="#ff7a00" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#ff8a1f" stop-opacity=".85"/>
+    </linearGradient>
+    <linearGradient id="lsmrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb066" stop-opacity="0"/>
+      <stop offset=".45" stop-color="#ff9a3c" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ff7a00" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="lsmside" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1a1f"/>
+      <stop offset=".55" stop-color="#070708"/>
+      <stop offset="1" stop-color="#3a1c05"/>
+    </linearGradient>
+    <linearGradient id="lsmgrain" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".035"/>
+      <stop offset=".18" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".82" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".35"/>
+    </linearGradient>
+    <linearGradient id="lsmfloor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7a00" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ff7a00" stop-opacity=".1"/>
+    </linearGradient>
+    <radialGradient id="lsmiris" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff4e4"/>
+      <stop offset=".22" stop-color="#ffc07a"/>
+      <stop offset=".55" stop-color="#ff7a00"/>
+      <stop offset="1" stop-color="#9e3f00"/>
+    </radialGradient>
+    <clipPath id="lsmslab"><rect x="100" y="60" width="240" height="560" rx="8"/></clipPath>
+    <clipPath id="lsmeyeclip"><path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z"/></clipPath>
+    <filter id="lsmblur" x="-60%" y="-40%" width="220%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+
+  <!-- the slab: a right-hand side facet gives it mass, so it reads as stone, not glass -->
+  <path d="M336,64 L364,82 L364,602 L336,620 Z" fill="url(#lsmside)"/>
+  <path d="M336.5,64 L364,82" stroke="#fff" stroke-opacity=".14"/>
+  <rect x="100" y="60" width="240" height="560" rx="8" fill="url(#lsmface)"/>
+  <g clip-path="url(#lsmslab)">
+    <!-- orange horizon light licking the lower edges -->
+    <rect x="100" y="60" width="4" height="560" fill="url(#lsmrim)"/>
+    <rect x="336" y="60" width="4" height="560" fill="url(#lsmrim)" opacity=".45"/>
+    <rect x="100" y="60" width="240" height="560" fill="url(#lsmgrain)"/>
+    <rect x="100" y="420" width="240" height="200" fill="url(#lsmfloor)"/>
+  </g>
+  <rect x="100.5" y="60.5" width="239" height="559" rx="7.5" fill="none" stroke="url(#lsmedge)"/>
+
+  <!-- light the eye throws onto the slab -->
+  <path class="ls-eye-halo" d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="#ff7a00" filter="url(#lsmblur)"/>
+
+  <!-- the eye -->
+  <g class="ls-eye">
+    <path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="url(#lsmiris)"/>
+    <g clip-path="url(#lsmeyeclip)">
+      <circle cx="220" cy="318" r="50" fill="none" stroke="#ffe0bd" stroke-opacity=".35" stroke-width="1"/>
+      <circle cx="220" cy="318" r="36" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="6"/>
+      <g class="ls-pupil">
+        <circle cx="220" cy="318" r="25" fill="#060607"/>
+        <circle cx="228" cy="309" r="4.5" fill="#fff" opacity=".85"/>
+      </g>
+    </g>
+    <path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="none" stroke="#ffe4c4" stroke-opacity=".7" stroke-width="1.4"/>
+  </g>
+</svg>
+        </div>
+        <div class="ls-reflect">
+<svg class="ls-mono-svg" viewBox="0 0 440 640" preserveAspectRatio="xMidYMax meet" focusable="false">
+  <defs>
+    <linearGradient id="lsrface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#23242b"/>
+      <stop offset=".34" stop-color="#101014"/>
+      <stop offset=".7" stop-color="#060608"/>
+      <stop offset="1" stop-color="#0d0b0a"/>
+    </linearGradient>
+    <linearGradient id="lsredge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset=".22" stop-color="#fff" stop-opacity=".03"/>
+      <stop offset=".62" stop-color="#ff7a00" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#ff8a1f" stop-opacity=".85"/>
+    </linearGradient>
+    <linearGradient id="lsrrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb066" stop-opacity="0"/>
+      <stop offset=".45" stop-color="#ff9a3c" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ff7a00" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="lsrside" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1a1f"/>
+      <stop offset=".55" stop-color="#070708"/>
+      <stop offset="1" stop-color="#3a1c05"/>
+    </linearGradient>
+    <linearGradient id="lsrgrain" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".035"/>
+      <stop offset=".18" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".82" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".35"/>
+    </linearGradient>
+    <linearGradient id="lsrfloor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7a00" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ff7a00" stop-opacity=".1"/>
+    </linearGradient>
+    <radialGradient id="lsriris" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff4e4"/>
+      <stop offset=".22" stop-color="#ffc07a"/>
+      <stop offset=".55" stop-color="#ff7a00"/>
+      <stop offset="1" stop-color="#9e3f00"/>
+    </radialGradient>
+    <clipPath id="lsrslab"><rect x="100" y="60" width="240" height="560" rx="8"/></clipPath>
+    <clipPath id="lsreyeclip"><path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z"/></clipPath>
+    <filter id="lsrblur" x="-60%" y="-40%" width="220%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+
+  <!-- the slab: a right-hand side facet gives it mass, so it reads as stone, not glass -->
+  <path d="M336,64 L364,82 L364,602 L336,620 Z" fill="url(#lsrside)"/>
+  <path d="M336.5,64 L364,82" stroke="#fff" stroke-opacity=".14"/>
+  <rect x="100" y="60" width="240" height="560" rx="8" fill="url(#lsrface)"/>
+  <g clip-path="url(#lsrslab)">
+    <!-- orange horizon light licking the lower edges -->
+    <rect x="100" y="60" width="4" height="560" fill="url(#lsrrim)"/>
+    <rect x="336" y="60" width="4" height="560" fill="url(#lsrrim)" opacity=".45"/>
+    <rect x="100" y="60" width="240" height="560" fill="url(#lsrgrain)"/>
+    <rect x="100" y="420" width="240" height="200" fill="url(#lsrfloor)"/>
+  </g>
+  <rect x="100.5" y="60.5" width="239" height="559" rx="7.5" fill="none" stroke="url(#lsredge)"/>
+
+  <!-- light the eye throws onto the slab -->
+  <path class="ls-eye-halo" d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="#ff7a00" filter="url(#lsrblur)"/>
+
+  <!-- the eye -->
+  <g class="ls-eye">
+    <path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="url(#lsriris)"/>
+    <g clip-path="url(#lsreyeclip)">
+      <circle cx="220" cy="318" r="50" fill="none" stroke="#ffe0bd" stroke-opacity=".35" stroke-width="1"/>
+      <circle cx="220" cy="318" r="36" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="6"/>
+      <g class="ls-pupil">
+        <circle cx="220" cy="318" r="25" fill="#060607"/>
+        <circle cx="228" cy="309" r="4.5" fill="#fff" opacity=".85"/>
+      </g>
+    </g>
+    <path d="M220,150 Q326,318 220,486 Q114,318 220,150 Z" fill="none" stroke="#ffe4c4" stroke-opacity=".7" stroke-width="1.4"/>
+  </g>
+</svg>
+        </div>
+        <div class="ls-horizon"></div>
+      </div>
+    </div>
+    <div class="ls-text">
+      <div class="ls-eyebrow">Oculith Draw</div>
+      <div class="ls-word" id="lsWord"></div>
+      <div class="ls-status"><span id="lsStatus">Loading</span><span class="ls-dots"><i></i><i></i><i></i></span></div>
+    </div>
+  </div>
+
+  <script>
+    // Boot diagnostics — installed BEFORE the module graph loads so even
+    // import-time errors are recorded as privacy-safe startup phases instead
+    // of producing a silent white screen.
+    window.addEventListener('error', function (e) {
+      try {
+        window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke(
+          'startup_diagnostic', { phase: 'frontend-error', detail: e.message || '?' }
+        );
+      } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      try {
+        var r = e.reason || {};
+        window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke(
+          'startup_diagnostic', { phase: 'frontend-rejection', detail: String(r.message || r) }
+        );
+      } catch (_) {}
+    });
+  </script>
+  <script src="js/boot.js" type="module"></script>
+</body>
+</html>

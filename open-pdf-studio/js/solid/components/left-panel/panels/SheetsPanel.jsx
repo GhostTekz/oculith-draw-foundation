@@ -1,0 +1,501 @@
+import { For, Show, createMemo, createSignal, onMount, onCleanup } from 'solid-js';
+import { activeTab } from '../../../stores/leftPanelStore.js';
+import { sheetRegister, saveSheetRegister } from '../../../stores/sheetRegisterStore.js';
+import { updateSheet, replaceSheet, relinkSheet, relinkHistoricalSource, removeSheet, parseSheetRegister, filterSheets, sortSheetsByLabel, adjacentSheet, drawingLogCsv } from '../../../../sets/sheet-register.js';
+import { addPdfPages, assertRecordedContentUnchanged, fingerprintPdfBytes, inspectPdfPages, matchingCurrentPdfSource, relinkMatchingPdfSource } from '../../../../sets/pdf-page-import.js';
+import { inspectSheetFile, inspectHistoricalFiles } from '../../../../sets/sheet-file-status.js';
+import { extractFileName, fileExists, isTauri, openFileDialog, readBinaryFile, saveFileDialog, writeBinaryFile, invoke } from '../../../../core/platform.js';
+import { createTab } from '../../../../ui/chrome/tabs.js';
+import { loadPDFIfNeeded } from '../../../../pdf/loader.js';
+import { goToPage } from '../../../../pdf/renderer.js';
+import { state } from '../../../../core/state.js';
+import { openDialog } from '../../../stores/dialogStore.js';
+import { useTranslation } from '../../../../i18n/useTranslation.js';
+import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
+
+function safeName(name) {
+  return (name || 'drawing-set').replace(/[\\/:*?"<>|]/g, '_');
+}
+
+export default function SheetsPanel() {
+  const { t } = useTranslation('common');
+  const [selectedId, setSelectedId] = createSignal(null);
+  const [message, setMessage] = createSignal('');
+  const [availability, setAvailability] = createSignal({});
+  const [historyAvailability, setHistoryAvailability] = createSignal({});
+  const [nextRevision, setNextRevision] = createSignal('');
+  const [sourceCandidate, setSourceCandidate] = createSignal(null);
+  const [applyingSource, setApplyingSource] = createSignal(false);
+  const [importing, setImporting] = createSignal(false);
+  const [exportingPdf, setExportingPdf] = createSignal(false);
+  const [publishingSet, setPublishingSet] = createSignal(false);
+  const [openingSheet, setOpeningSheet] = createSignal(false);
+  const [slipReading, setSlipReading] = createSignal(false);
+  const [query, setQuery] = createSignal('');
+  const [revisionFilter, setRevisionFilter] = createSignal('');
+  const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
+  const selectedIndex = () => visibleSheets().findIndex(sheet => sheet.id === selectedId());
+  const currentRevisions = createMemo(() => [...new Set(sheetRegister().sheets.map(sheet => sheet.revision).filter(Boolean))]
+    .sort((first, second) => first.localeCompare(second)));
+  const selected = () => visibleSheets().find(sheet => sheet.id === selectedId());
+
+  function onSheetListKeyDown(event) {
+    const row = event.target.closest?.('.sheets-row');
+    if (!row || !event.currentTarget.contains(row)) return;
+    const rows = [...event.currentTarget.querySelectorAll('.sheets-row')];
+    const index = rows.indexOf(row);
+    let next;
+    if (event.key === 'ArrowDown') next = Math.min(index + 1, rows.length - 1);
+    else if (event.key === 'ArrowUp') next = Math.max(index - 1, 0);
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = rows.length - 1;
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+    rows[next]?.focus();
+    rows[next]?.click();
+  }
+
+  function inspectFile(path) {
+    return inspectSheetFile(path, filePath => invoke('allow_fs_scope', { path: filePath }), fileExists);
+  }
+
+  async function refreshAvailability() {
+    if (!isTauri()) return;
+    const register = sheetRegister();
+    const [entries, historical] = await Promise.all([
+      Promise.all(register.sheets.map(async sheet => [sheet.id, await inspectFile(sheet.filePath)])),
+      inspectHistoricalFiles(register, inspectFile),
+    ]);
+    setAvailability(Object.fromEntries(entries));
+    setHistoryAvailability(historical);
+  }
+
+  onMount(refreshAvailability);
+  // Batch ▸ Slip Sheet (sets/slip-sheet-request.js).
+  onMount(() => onCleanup(onSlipSheetRequest(() => {
+    if (sheetRegister().sheets.length) void slipSheet(); else setMessage(t('batchOps.slipSheetNeedsSet'));
+  })));
+
+  function commit(register) {
+    saveSheetRegister(register);
+    setMessage('');
+    void refreshAvailability();
+  }
+
+  async function addPdfs() {
+    if (importing()) return;
+    setImporting(true);
+    try {
+      const picked = await openFileDialog(['pdf'], { multiple: true });
+      if (!picked) return;
+      let register = sheetRegister();
+      let added = 0;
+      let alreadyPresent = 0;
+      let relinked = 0;
+      let contentMatches = 0;
+      const skipped = [];
+      for (const path of (Array.isArray(picked) ? picked : [picked])) {
+        try {
+          if (isTauri()) await invoke('allow_fs_scope', { path });
+          const bytes = await readBinaryFile(path);
+          const [{ pageCount, pageLabels }, fingerprint] = await Promise.all([
+            inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
+          ]);
+          assertRecordedContentUnchanged(register, path, fingerprint);
+          const matched = matchingCurrentPdfSource(register, fingerprint, pageCount);
+          let fileRegister = register;
+          let fileRelinked = 0;
+          if (matched?.some(sheet => sheet.filePath !== path)
+            && confirm(`This PDF has the same contents as ${matched.length} current sheet${matched.length === 1 ? '' : 's'} in the drawing set. Relink those sheets to ${extractFileName(path)}? Cancel keeps their recorded paths.`)) {
+            fileRegister = relinkMatchingPdfSource(register, matched, path, fingerprint);
+            fileRelinked = matched.filter(sheet => sheet.filePath !== path).length;
+          }
+          const result = addPdfPages(fileRegister, path, pageCount, pageLabels, fingerprint);
+          register = result.register;
+          relinked += fileRelinked;
+          added += result.added.length;
+          alreadyPresent += result.alreadyPresent;
+          contentMatches += result.contentMatches;
+        } catch (error) { skipped.push(`${extractFileName(path)}: ${error.message}`); }
+      }
+      if (register !== sheetRegister()) commit(register);
+      setMessage(`${added} sheet${added === 1 ? '' : 's'} added.${relinked ? ` ${relinked} relinked to the selected PDF.` : ''}${alreadyPresent ? ` ${alreadyPresent} already in this set.` : ''}${contentMatches ? ` ${contentMatches} matched existing PDF contents; use Relink or Record revision to change their source.` : ''}${skipped.length ? ` ${skipped.join(' ')}` : ''}`);
+    } catch (error) { setMessage(error.message); }
+    finally { setImporting(false); }
+  }
+
+  async function slipSheet() {
+    if (slipReading() || !sheetRegister().sheets.length) return;
+    setSlipReading(true);
+    try {
+      const picked = await openFileDialog(['pdf'], { multiple: true });
+      if (!picked) return;
+      const { inspectRevisionPdf, readRevisionFile } = await import('../../../../sets/slip-sheet-run.js');
+      const { planSlipSheet } = await import('../../../../sets/slip-sheet-match.js');
+      const files = [];
+      const skipped = [];
+      for (const path of (Array.isArray(picked) ? picked : [picked])) {
+        try { files.push({ filePath: path, ...(await inspectRevisionPdf(await readRevisionFile(path))) }); }
+        catch (error) { skipped.push(`${extractFileName(path)}: ${error.message}`); }
+      }
+      if (!files.length) { setMessage(skipped.join(' ')); return; }
+      const { rows } = planSlipSheet(sheetRegister(), files);
+      setMessage(skipped.join(' '));
+      openDialog('slipSheet', { files: files.map(({ filePath, pageCount }) => ({ filePath, pageCount })), rows,
+        onDone: (text) => { setSelectedId(null); setSourceCandidate(null); setMessage(text); void refreshAvailability(); } });
+    } catch (error) { setMessage(error.message); }
+    finally { setSlipReading(false); }
+  }
+
+  function edit(id, changes) {
+    try { commit(updateSheet(sheetRegister(), id, changes)); }
+    catch (error) { setMessage(error.message); }
+  }
+
+  async function choosePdf() {
+    const picked = await openFileDialog(['pdf']);
+    return Array.isArray(picked) ? picked[0] : picked;
+  }
+
+  async function chooseSource(mode) {
+    const sheet = selected();
+    if (!sheet) return;
+    setSourceCandidate(null);
+    try {
+      const path = await choosePdf();
+      if (!path) return;
+      if (isTauri()) await invoke('allow_fs_scope', { path });
+      const bytes = await readBinaryFile(path);
+      const [{ pageCount, pageLabels }, fingerprint] = await Promise.all([
+        inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
+      ]);
+      if (selectedId() !== sheet.id) return;
+      const labeledPage = pageLabels?.findIndex(label => label?.trim().toLocaleLowerCase() === sheet.label.toLocaleLowerCase()) ?? -1;
+      setSourceCandidate({ sheetId: sheet.id, mode, path, pageCount, pageLabels, fingerprint,
+        page: labeledPage >= 0 ? labeledPage + 1 : Math.min(sheet.page, pageCount) });
+      setMessage('');
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function chooseHistoricalSource(sheetId, historyIndex) {
+    const sheet = sheetRegister().sheets.find(item => item.id === sheetId);
+    const prior = sheet?.history[historyIndex];
+    if (!prior) return;
+    setSourceCandidate(null);
+    if (!prior.sourceSha256) {
+      setMessage('This earlier revision has no recorded PDF fingerprint. Reimport it at its recorded path before relinking.');
+      return;
+    }
+    try {
+      const path = await choosePdf();
+      if (!path) return;
+      if (isTauri()) await invoke('allow_fs_scope', { path });
+      const bytes = await readBinaryFile(path);
+      const [{ pageCount }, fingerprint] = await Promise.all([
+        inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
+      ]);
+      if (selectedId() !== sheetId || sheetRegister().sheets.find(item => item.id === sheetId)?.history[historyIndex] !== prior) return;
+      relinkHistoricalSource(sheetRegister(), sheetId, historyIndex, path, fingerprint, pageCount);
+      setSourceCandidate({ sheetId, mode: 'history', historyIndex, recordedPath: prior.filePath,
+        path, page: prior.page, pageCount, fingerprint });
+      setMessage('');
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function applySource() {
+    const sheet = selected();
+    const candidate = sourceCandidate();
+    if (!sheet || !candidate || candidate.sheetId !== sheet.id || applyingSource()) return;
+    setApplyingSource(true);
+    try {
+      if (candidate.mode === 'history' && sheet.history[candidate.historyIndex]?.filePath !== candidate.recordedPath) {
+        throw new Error('Earlier revision changed. Choose its PDF again.');
+      }
+      let verified = null;
+      if (candidate.mode === 'history') {
+        const bytes = await readBinaryFile(candidate.path);
+        const [{ pageCount }, fingerprint] = await Promise.all([
+          inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
+        ]);
+        if (sourceCandidate() !== candidate || selectedId() !== sheet.id) return;
+        const currentPrior = sheetRegister().sheets.find(item => item.id === sheet.id)?.history[candidate.historyIndex];
+        if (currentPrior?.filePath !== candidate.recordedPath || currentPrior.page !== candidate.page
+          || currentPrior.sourceSha256 !== candidate.fingerprint) {
+          throw new Error('Earlier revision changed. Choose its PDF again.');
+        }
+        verified = { pageCount, fingerprint };
+      }
+      let next;
+      if (candidate.mode === 'history') {
+        next = relinkHistoricalSource(sheetRegister(), sheet.id, candidate.historyIndex,
+          candidate.path, verified.fingerprint, verified.pageCount);
+      } else if (candidate.mode === 'replace') {
+        next = replaceSheet(sheetRegister(), sheet.id, candidate.path, nextRevision(),
+          new Date().toISOString(), candidate.page, candidate.fingerprint);
+      } else {
+        next = relinkSheet(sheetRegister(), sheet.id, candidate.path, candidate.page, candidate.fingerprint);
+      }
+      commit(next);
+      if (candidate.mode === 'history' && !isTauri()) {
+        setHistoryAvailability(current => ({ ...current, [candidate.path]: 'Present' }));
+      }
+      setSourceCandidate(null);
+      if (candidate.mode === 'replace') setNextRevision('');
+      setMessage(candidate.mode === 'replace' ? 'Revision recorded.'
+        : candidate.mode === 'history' ? 'Earlier revision relinked to the verified PDF.' : 'Sheet source relinked.');
+    } catch (error) { setMessage(error.message); }
+    finally { setApplyingSource(false); }
+  }
+
+  function removeSelected() {
+    const sheet = selected();
+    if (!sheet || !confirm(`Remove ${sheet.label} from this drawing set? The PDF will stay on disk.`)) return;
+    commit(removeSheet(sheetRegister(), sheet.id));
+    setSelectedId(null);
+    setSourceCandidate(null);
+  }
+
+  async function openSource(sheet, source, historical = false) {
+    if (openingSheet()) return;
+    setOpeningSheet(true);
+    const description = historical
+      ? `earlier revision ${source.revision || 'Unnumbered'} of ${sheet.label}`
+      : sheet.label;
+    const setSourceAvailability = status => historical
+      ? setHistoryAvailability(current => ({ ...current, [source.filePath]: status }))
+      : setAvailability(current => ({ ...current, [sheet.id]: status }));
+    try {
+      setMessage(`Opening ${description} · ${extractFileName(source.filePath)} · Page ${source.page}…`);
+      if (isTauri()) {
+        const status = await inspectFile(source.filePath);
+        setSourceAvailability(status);
+        if (status !== 'Present') {
+          setMessage(status === 'Missing'
+            ? `Cannot open ${description}: PDF missing at ${source.filePath}. ${historical
+              ? 'Use Relink on this earlier revision to locate an identical PDF.'
+              : 'Use Relink to point to its new location.'}`
+            : `Cannot check file access for ${description}: ${source.filePath}. ${historical
+              ? 'Use Relink on this earlier revision if the PDF moved.'
+              : 'Use Relink if the file moved.'}`);
+          return;
+        }
+      } else {
+        const bytes = await readBinaryFile(source.filePath);
+        if (!bytes?.length) {
+          setSourceAvailability('Missing');
+          setMessage(`Cannot open ${description}: PDF unavailable in this browser session (${source.filePath}). ${historical
+            ? 'Use Relink on this earlier revision to locate an identical PDF.'
+            : 'Add the PDF again or use Relink.'}`);
+          return;
+        }
+        setSourceAvailability('Present');
+      }
+      const { index } = createTab(source.filePath);
+      await loadPDFIfNeeded(source.filePath, index);
+      const document = state.documents[index];
+      if (source.page > (document?.pdfDoc?.numPages || 0)) {
+        throw new Error(`Page ${source.page} is not in ${extractFileName(source.filePath)}.`);
+      }
+      await goToPage(source.page);
+      setMessage(historical
+        ? `Viewing earlier revision ${source.revision || 'Unnumbered'} of ${sheet.label} · Page ${source.page}. Current source remains revision ${sheet.revision || 'Unnumbered'}.`
+        : '');
+    } catch (error) { setMessage(`Cannot open ${description}: ${error.message}`); }
+    finally { setOpeningSheet(false); }
+  }
+
+  function openSheet(sheet) { return openSource(sheet, sheet); }
+
+  function navigateSheet(direction) {
+    if (openingSheet()) return;
+    const target = adjacentSheet(visibleSheets(), selectedId(), direction);
+    if (!target) return;
+    setSelectedId(target.id);
+    setNextRevision('');
+    setSourceCandidate(null);
+    void openSheet(target);
+  }
+
+  async function exportFile(extension, content) {
+    try {
+      const path = await saveFileDialog(`${safeName(sheetRegister().name)}.${extension}`,
+        [{ name: extension.toUpperCase(), extensions: [extension] }]);
+      if (path) await writeBinaryFile(path, new TextEncoder().encode(content));
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function exportDrawingLogPdf() {
+    if (exportingPdf()) return;
+    setExportingPdf(true);
+    setMessage('');
+    try {
+      const register = sheetRegister();
+      const fileStatus = availability();
+      const path = await saveFileDialog(`${safeName(register.name)}-drawing-log.pdf`,
+        [{ name: 'PDF', extensions: ['pdf'] }]);
+      if (!path) return;
+      const [module, response] = await Promise.all([
+        import('../../../../sets/drawing-log-pdf.js'),
+        fetch('/pdfjs/web/standard_fonts/LiberationSans-Regular.ttf'),
+      ]);
+      if (!response.ok) throw new Error('Could not load the bundled drawing log font.');
+      const bytes = await module.buildDrawingLogPdf(register, fileStatus, new Uint8Array(await response.arrayBuffer()));
+      await writeBinaryFile(path, bytes);
+      setMessage('Drawing log PDF exported.');
+    } catch (error) { setMessage(`Could not export drawing log PDF: ${error.message}`); }
+    finally { setExportingPdf(false); }
+  }
+
+  async function publishCurrentSet() {
+    if (publishingSet()) return;
+    setPublishingSet(true);
+    setMessage('');
+    try {
+      const register = sheetRegister();
+      const { buildCurrentSetPdf } = await import('../../../../sets/publish-current-pdf.js');
+      const bytes = await buildCurrentSetPdf(register, async path => {
+        if (isTauri()) await invoke('allow_fs_scope', { path });
+        return readBinaryFile(path);
+      });
+      // A revision recorded while source PDFs were being read must not cause
+      // the old manifest to be published under the new set name.
+      if (sheetRegister() !== register) throw new Error('The drawing set changed during publishing. Try again.');
+      const path = await saveFileDialog(`${safeName(register.name)}-current-revisions.pdf`,
+        [{ name: 'PDF', extensions: ['pdf'] }]);
+      if (!path) return;
+      if (sheetRegister() !== register) throw new Error('The drawing set changed during publishing. Try again.');
+      const { assertSafeSetDestination } = await import('../../../../sets/publish-destination.js');
+      await assertSafeSetDestination(path, register, isTauri() ? {
+        fileExists: async source => {
+          await invoke('allow_fs_scope', { path: source });
+          // The platform wrapper may return false when plugin stat is denied
+          // by scope; the existing native command checks the same path without
+          // treating that error as proof that the destination is new.
+          return await fileExists(source) || await invoke('file_exists', { path: source });
+        },
+      } : {});
+      if (sheetRegister() !== register) throw new Error('The drawing set changed during publishing. Try again.');
+      await writeBinaryFile(path, bytes);
+      setMessage(`${register.sheets.length} current sheet${register.sheets.length === 1 ? '' : 's'} published in one PDF.`);
+    } catch (error) { setMessage(`Could not publish current sheets: ${error.message}`); }
+    finally { setPublishingSet(false); }
+  }
+
+  async function importManifest() {
+    try {
+      const path = await openFileDialog(['json']);
+      if (!path) return;
+      const bytes = await readBinaryFile(Array.isArray(path) ? path[0] : path);
+      const register = parseSheetRegister(new TextDecoder().decode(bytes));
+      if (sheetRegister().sheets.length && !confirm('Replace the current drawing set with this manifest?')) return;
+      commit(register);
+      setSelectedId(null);
+      setSourceCandidate(null);
+      setQuery('');
+      setRevisionFilter('');
+      setHistoryAvailability({});
+    } catch (error) { setMessage(`Could not import drawing set: ${error.message}`); }
+  }
+
+  return (
+    <div class={`left-panel-content${activeTab() === 'sheets' ? ' active' : ''}`} id="sheets-panel">
+      <div class="left-panel-header"><span>Drawing set</span></div>
+      <div class="sheets-panel-scroll">
+        <label class="sheets-field">Set name
+          <input aria-label="Set name" value={sheetRegister().name}
+            onChange={(event) => { try { commit({ ...sheetRegister(), name: event.currentTarget.value.trim() }); } catch (error) { setMessage(error.message); } }} />
+        </label>
+        <div class="sheets-actions">
+          <button onClick={addPdfs} disabled={importing()}>{importing() ? 'Reading PDFs…' : 'Add PDFs'}</button>
+          <button onClick={refreshAvailability} disabled={!isTauri()}>Check files</button>
+        </div>
+        <button class="sheets-wide-action" onClick={slipSheet} disabled={slipReading() || !sheetRegister().sheets.length}
+          title={t('slipSheet.buttonHint')}>{slipReading() ? t('slipSheet.reading') : t('slipSheet.button')}</button>
+        <Show when={message()}><div class="sheets-message" role="status">{message()}</div></Show>
+        <div class="sheets-search">
+          <input type="search" aria-label="Search sheets" placeholder="Search sheet ID, title, revision" value={query()}
+            onInput={(event) => { setQuery(event.currentTarget.value); setSourceCandidate(null); }} />
+          <select aria-label="Filter current revision" value={revisionFilter()}
+            onChange={(event) => { setRevisionFilter(event.currentTarget.value); setSourceCandidate(null); }}>
+            <option value="">All current revisions</option>
+            <For each={currentRevisions()}>{(revision) => <option value={revision}>Revision {revision}</option>}</For>
+          </select>
+          <div class="sheets-count">Showing {visibleSheets().length} of {sheetRegister().sheets.length} sheets</div>
+        </div>
+        <div class="sheets-navigation" role="group" aria-label="Drawing set navigation" aria-busy={openingSheet()}>
+          <button type="button" onClick={() => navigateSheet('previous')}
+            disabled={openingSheet() || selectedIndex() <= 0}>Previous sheet</button>
+          <span>{selectedIndex() < 0 ? 'Select a sheet' : `${selectedIndex() + 1} of ${visibleSheets().length}`}</span>
+          <button type="button" onClick={() => navigateSheet('next')}
+            disabled={openingSheet() || selectedIndex() >= visibleSheets().length - 1}>Next sheet</button>
+        </div>
+        <div class="sheets-list" role="group" aria-label="Registered sheets" onKeyDown={onSheetListKeyDown}>
+          <For each={visibleSheets()} fallback={<p class="sheets-empty">{sheetRegister().sheets.length
+            ? 'No sheets match this search or revision filter.'
+            : 'Add PDFs to register every page in the drawing set. Edit sheet IDs and revisions below.'}</p>}>
+            {(sheet) => <button type="button" class={`sheets-row${selectedId() === sheet.id ? ' selected' : ''}`}
+              aria-pressed={selectedId() === sheet.id}
+              onClick={() => { setSelectedId(sheet.id); setNextRevision(''); setSourceCandidate(null); }}
+              onDblClick={() => openSheet(sheet)} title={sheet.filePath}>
+              <strong>{sheet.label}</strong><span>{sheet.revision || '—'}</span>
+              <small>{sheet.title || `${extractFileName(sheet.filePath)} · Page ${sheet.page}`}{availability()[sheet.id] === 'Missing' ? ' · Missing file' : availability()[sheet.id] === 'Unavailable' ? ' · Access unavailable' : ''}</small>
+            </button>}
+          </For>
+        </div>
+        <Show when={selected()}>
+          {(sheet) => <div class="sheets-detail">
+            <div class="sheets-detail-title">Sheet details</div>
+            <label class="sheets-field">Sheet ID<input aria-label="Sheet ID" value={sheet().label} onChange={(event) => edit(sheet().id, { label: event.currentTarget.value })} /></label>
+            <label class="sheets-field">Title<input aria-label="Sheet title" value={sheet().title} onChange={(event) => edit(sheet().id, { title: event.currentTarget.value })} /></label>
+            <label class="sheets-field">Revision<input aria-label="Revision" value={sheet().revision} onChange={(event) => edit(sheet().id, { revision: event.currentTarget.value })} /></label>
+            <div class="sheets-history-title">Current source</div>
+            <div class="sheets-source">{extractFileName(sheet().filePath)} · Page {sheet().page} · Revision {sheet().revision || 'Unnumbered'}</div>
+            <div class="sheets-path" title={sheet().filePath}>{sheet().filePath}</div>
+            <div class="sheets-actions"><button onClick={() => openSheet(sheet())}>Open sheet</button><button onClick={() => chooseSource('relink')}>Relink</button><button onClick={removeSelected}>Remove</button></div>
+            <label class="sheets-field">Next revision<input aria-label="Next revision" value={nextRevision()} onInput={(event) => setNextRevision(event.currentTarget.value)} /></label>
+            <button class="sheets-wide-action" onClick={() => chooseSource('replace')}>Choose revised PDF</button>
+            <Show when={sourceCandidate()?.sheetId === sheet().id}>
+              <div class="sheets-candidate">
+                <div class="sheets-history-title">{sourceCandidate().mode === 'replace' ? 'New revision source'
+                  : sourceCandidate().mode === 'history' ? 'Relink earlier revision' : 'Relink current source'}</div>
+                <div class="sheets-path" title={sourceCandidate().path}>{sourceCandidate().path}</div>
+                <Show when={sourceCandidate().mode === 'history'} fallback={
+                  <label class="sheets-field">PDF page
+                    <select aria-label="New source page" value={sourceCandidate().page}
+                      onChange={(event) => setSourceCandidate(current => ({ ...current, page: Number(event.currentTarget.value) }))}>
+                      <For each={Array.from({ length: sourceCandidate().pageCount }, (_, index) => index + 1)}>
+                        {(page) => <option value={page}>Page {page}{sourceCandidate().pageLabels?.[page - 1] ? ` · ${sourceCandidate().pageLabels[page - 1]}` : ''}</option>}
+                      </For>
+                    </select>
+                  </label>}>
+                  <div class="sheets-source">Exact PDF match · Recorded page {sourceCandidate().page} of {sourceCandidate().pageCount}</div>
+                </Show>
+                <div class="sheets-actions"><button onClick={applySource} disabled={applyingSource()}>{sourceCandidate().mode === 'replace' ? 'Record revision'
+                  : sourceCandidate().mode === 'history' ? 'Confirm earlier relink' : 'Confirm relink'}</button><button onClick={() => setSourceCandidate(null)}>Cancel</button></div>
+              </div>
+            </Show>
+            <Show when={sheet().history.length}><div class="sheets-history-title">Earlier revisions</div>
+              <For each={[...sheet().history].reverse()}>{(item, reverseIndex) => <div class="sheets-history-item" title={item.filePath}>
+                <div><strong>Revision {item.revision || 'Unnumbered'}</strong> · {extractFileName(item.filePath)} · Page {item.page}
+                  <small>Replaced {item.replacedAt}{historyAvailability()[item.filePath] === 'Missing' ? ' · Missing file' : historyAvailability()[item.filePath] === 'Unavailable' ? ' · Access unavailable' : ''}</small>
+                </div>
+                <button type="button" aria-label={`Open ${sheet().label} earlier revision ${item.revision || 'Unnumbered'}`}
+                  onClick={() => openSource(sheet(), item, true)} disabled={openingSheet()}>Open</button>
+                <button type="button" aria-label={`Relink ${sheet().label} earlier revision ${item.revision || 'Unnumbered'}`}
+                  onClick={() => chooseHistoricalSource(sheet().id, sheet().history.length - reverseIndex() - 1)}>Relink</button>
+              </div>}</For>
+            </Show>
+          </div>}
+        </Show>
+        <div class="sheets-export">
+          <button onClick={publishCurrentSet} disabled={publishingSet() || !sheetRegister().sheets.length}>{publishingSet() ? 'Preparing current sheets…' : 'Publish current sheets PDF'}</button>
+          <button onClick={() => exportFile('csv', drawingLogCsv(sheetRegister(), availability()))}>Export drawing log</button>
+          <button onClick={exportDrawingLogPdf} disabled={exportingPdf()}>{exportingPdf() ? 'Preparing drawing log PDF…' : 'Export drawing log PDF'}</button>
+          <button onClick={() => exportFile('json', JSON.stringify(sheetRegister(), null, 2))}>Export set manifest</button>
+          <button onClick={importManifest}>Import set manifest</button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,150 @@
+import { createSignal } from 'solid-js';
+import { state, getActiveDocument } from '../../core/state.js';
+import { recordPropertyChange, recordBulkModify } from '../../core/undo-manager.js';
+import { cloneAnnotation } from '../../annotations/factory.js';
+import { redrawAnnotations, redrawContinuous } from '../../annotations/rendering.js';
+import { showProperties, showMultiSelectionProperties } from '../../ui/panels/properties-panel.js';
+import { applyStampLineWidth, applyStampColor } from '../../annotations/stamp-line-width.js';
+import { stampAppearanceSnapshot, syncStampAppearance } from '../../annotations/stamp-appearance-sync.js';
+
+// Een symbool (SVG-stempel) wordt als raster getekend: kleur en lijndikte
+// moeten na de wijziging de SVG in, anders heeft de werkbalk geen effect (#398).
+const STAMP_HOOKS = { applyStampLineWidth, applyStampColor };
+
+function applyFnToAnnotation(ann, applyFn) {
+  const before = stampAppearanceSnapshot(ann);
+  applyFn(ann);
+  syncStampAppearance(ann, before, STAMP_HOOKS);
+}
+
+// Format property signals
+const [fillColor, setFillColor] = createSignal('#ffffff');
+const [strokeColor, setStrokeColor] = createSignal('#000000');
+const [fmtLineWidth, setFmtLineWidth] = createSignal(1);
+const [opacity, setOpacity] = createSignal(100);
+const [borderStyle, setBorderStyle] = createSignal('solid');
+const [blendMode, setBlendMode] = createSignal('normal');
+const [arrowStart, setArrowStart] = createSignal('none');
+const [arrowEnd, setArrowEnd] = createSignal('open');
+const [hasFill, setHasFill] = createSignal(false);
+const [hasSelection, setHasSelection] = createSignal(false);
+const [isLocked, setIsLocked] = createSignal(false);
+const [annotationType, setAnnotationType] = createSignal('');
+// True when exactly one editable symbol-stamp (carries stampSvg) is selected —
+// drives the contextual "Edit Type" affordance in the Format tab.
+const [isSingleSymbolStamp, setIsSingleSymbolStamp] = createSignal(false);
+
+// Style gallery definitions
+export const STYLE_DEFS = {
+  'red':            { strokeColor: '#ff0000', color: '#ff0000', fillColor: null, borderStyle: 'solid' },
+  'purple':         { strokeColor: '#800080', color: '#800080', fillColor: null, borderStyle: 'solid' },
+  'indigo':         { strokeColor: '#4b0082', color: '#4b0082', fillColor: null, borderStyle: 'solid' },
+  'blue':           { strokeColor: '#0066cc', color: '#0066cc', fillColor: null, borderStyle: 'solid' },
+  'green':          { strokeColor: '#008000', color: '#008000', fillColor: null, borderStyle: 'solid' },
+  'yellow':         { strokeColor: '#e6a817', color: '#e6a817', fillColor: null, borderStyle: 'solid' },
+  'black':          { strokeColor: '#000000', color: '#000000', fillColor: null, borderStyle: 'solid' },
+  'red-cloudy':     { strokeColor: '#ff0000', color: '#ff0000', fillColor: 'rgba(255,0,0,0.08)', borderStyle: 'solid' },
+  'purple-cloudy':  { strokeColor: '#800080', color: '#800080', fillColor: 'rgba(128,0,128,0.08)', borderStyle: 'solid' },
+  'indigo-cloudy':  { strokeColor: '#7b68ee', color: '#7b68ee', fillColor: 'rgba(123,104,238,0.15)', borderStyle: 'solid' },
+};
+
+export const PALETTE_COLUMNS = [
+  ['#ffffff', '#d9d9d9', '#999999', '#666666', '#333333', '#000000'],
+  ['#f4cccc', '#ea9999', '#e06666', '#ff0000', '#cc0000', '#660000'],
+  ['#fce5cd', '#f9cb9c', '#ffff00', '#ffd966', '#f1c232', '#bf9000'],
+  ['#d9ead3', '#b6d7a8', '#93c47d', '#00ff00', '#38761d', '#274e13'],
+  ['#d0e0e3', '#a2c4c9', '#76a5af', '#00ffff', '#45818e', '#134f5c'],
+  ['#c9daf8', '#6d9eeb', '#4a86e8', '#0000ff', '#1155cc', '#073763'],
+  ['#d9d2e9', '#b4a7d6', '#9900ff', '#ff00ff', '#a64d79', '#741b47'],
+];
+
+function redraw() {
+  if (getActiveDocument()?.viewMode === 'continuous') {
+    redrawContinuous();
+  } else {
+    redrawAnnotations();
+  }
+}
+
+// Apply a property change to all selected annotations with single undo
+export function applyToSelected(applyFn) {
+  const _fmtDoc = getActiveDocument();
+  const selected = _fmtDoc ? _fmtDoc.selectedAnnotations : [];
+  if (!selected || selected.length === 0) return;
+
+  if (selected.length === 1) {
+    const ann = selected[0];
+    if (ann.locked) return;
+    recordPropertyChange(ann);
+    applyFnToAnnotation(ann, applyFn);
+    ann.modifiedAt = new Date().toISOString();
+    showProperties(ann);
+  } else {
+    const originals = selected.map(a => cloneAnnotation(a));
+    for (const ann of selected) {
+      if (ann.locked) continue;
+      applyFnToAnnotation(ann, applyFn);
+      ann.modifiedAt = new Date().toISOString();
+    }
+    recordBulkModify(selected, originals);
+    showMultiSelectionProperties();
+  }
+  redraw();
+}
+
+// Sync format store from selected annotations
+export function syncFormatStore(selectedAnnotations) {
+  if (!selectedAnnotations || selectedAnnotations.length === 0) {
+    setHasSelection(false);
+    setIsSingleSymbolStamp(false);
+    return;
+  }
+
+  setHasSelection(true);
+  const ann = selectedAnnotations[0];
+  setIsSingleSymbolStamp(
+    selectedAnnotations.length === 1 &&
+    ann.type === 'stamp' &&
+    !!(ann.stampSvg || ann.stampBaseSvg)
+  );
+  const locked = selectedAnnotations.some(a => a.locked);
+  setIsLocked(locked);
+  setAnnotationType(ann.type || '');
+
+  const fc = ann.fillColor || '#ffffff';
+  setFillColor(fc);
+  setHasFill(!!ann.fillColor);
+
+  const sc = ann.strokeColor || ann.color || '#000000';
+  setStrokeColor(sc);
+
+  const lw = ann.lineWidth !== undefined ? ann.lineWidth : 1;
+  setFmtLineWidth(lw);
+
+  const op = ann.opacity !== undefined ? Math.round(ann.opacity * 100) : 100;
+  setOpacity(op);
+
+  setBorderStyle(ann.borderStyle || 'solid');
+  setBlendMode(ann.blendMode || 'normal');
+
+  if (ann.type === 'arrow') {
+    setArrowStart(ann.startHead || 'none');
+    setArrowEnd(ann.endHead || 'open');
+  }
+}
+
+export {
+  fillColor, setFillColor,
+  strokeColor, setStrokeColor,
+  fmtLineWidth, setFmtLineWidth,
+  opacity, setOpacity,
+  borderStyle, setBorderStyle,
+  blendMode, setBlendMode,
+  arrowStart, setArrowStart,
+  arrowEnd, setArrowEnd,
+  hasFill, setHasFill,
+  hasSelection, setHasSelection,
+  isLocked, setIsLocked,
+  annotationType, setAnnotationType,
+  isSingleSymbolStamp, setIsSingleSymbolStamp
+};

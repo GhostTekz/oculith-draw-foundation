@@ -1,0 +1,882 @@
+// Unit-test voor de stavenreeks-geometrie en de hoeveelheden-afleiding.
+//
+// Dekt de harde eisen uit docs/superpowers/specs/2026-07-22-stavenreeks-design.md:
+//  * staafposities gelijkmatig verdeeld (count=1 → midden, count>=2 → incl. uiteinden)
+//  * puntstraal per diameter, begrensd op [2, 9]
+//  * labeltekst "N ⌀ D" met de doorstreepte-⌀ glyph
+//  * hoeveelheden: totale staaflengte = count × barLengthMm (mm → m)
+//  * rotatie-veiligheid: geometrie volgt UITSLUITEND uit de vier coördinaten
+//  * AABB omvat poten, punten én label — en de AP-primitieven zijn er relatief aan
+//
+// Draaien: node scripts/test-stavenreeks.mjs
+
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const appRoot = join(here, '..');
+
+// ESM-bron via temp-.mjs (het package zelf is CJS) — zelfde patroon als
+// scripts/test-steel-catalog.mjs. De module is dependency-vrij.
+const tmp = mkdtempSync(join(tmpdir(), 'opds-stavenreeks-'));
+function stageMjs(relPath) {
+  const src = readFileSync(join(appRoot, relPath), 'utf8')
+    .replace(/(from\s*['"])(\.{1,2}\/[^'"]+)\.js(['"])/g, '$1$2.mjs$3');
+  const target = join(tmp, relPath).replace(/\.js$/, '.mjs');
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, src);
+  return target;
+}
+stageMjs('js/annotations/stavenreeks.js');
+const S = await import(pathToFileURL(join(tmp, 'js/annotations/stavenreeks.mjs')).href);
+// categories.js is puur en importeert alleen stavenreeks.js → direct testbaar.
+const Q = await import(pathToFileURL(stageMjs('js/quantities/categories.js')).href);
+
+let failures = 0;
+let checks = 0;
+function check(name, cond, extra) {
+  checks++;
+  if (cond) {
+    console.log(`  ok  ${name}`);
+  } else {
+    failures++;
+    console.error(`  FAIL ${name}${extra !== undefined ? ` — ${extra}` : ''}`);
+  }
+}
+const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+
+// ── 1. Staafposities gelijkmatig verdeeld ────────────────────────────────
+console.log('\n1. Staafposities');
+{
+  const pos = S.barPositions(0, 0, 100, 0, 5);
+  check('count=5 levert 5 posities', pos.length === 5, pos.length);
+  check('eerste positie = startpunt', near(pos[0].x, 0) && near(pos[0].y, 0));
+  check('laatste positie = eindpunt', near(pos[4].x, 100) && near(pos[4].y, 0));
+  const gaps = [];
+  for (let i = 1; i < pos.length; i++) gaps.push(pos[i].x - pos[i - 1].x);
+  check('tussenafstanden gelijk (25)', gaps.every(g => near(g, 25)), gaps.join(','));
+
+  const one = S.barPositions(0, 0, 100, 40, 1);
+  check('count=1 → precies het midden',
+    one.length === 1 && near(one[0].x, 50) && near(one[0].y, 20));
+
+  // Schuine lijn: posities blijven gelijkmatig langs de lijn.
+  const diag = S.barPositions(10, 10, 40, 50, 3);
+  check('schuine lijn: middelste positie is het midden',
+    near(diag[1].x, 25) && near(diag[1].y, 30));
+  const d01 = Math.hypot(diag[1].x - diag[0].x, diag[1].y - diag[0].y);
+  const d12 = Math.hypot(diag[2].x - diag[1].x, diag[2].y - diag[1].y);
+  check('schuine lijn: gelijke onderlinge afstand', near(d01, d12), `${d01} vs ${d12}`);
+}
+
+// ── 2. Puntstraal per diameter ───────────────────────────────────────────
+console.log('\n2. Puntstraal');
+{
+  check('⌀12 → 3.44', near(S.pointRadius(12), 3.44, 1e-9), S.pointRadius(12));
+  check('⌀40 → 6.8', near(S.pointRadius(40), 6.8, 1e-9), S.pointRadius(40));
+  check('⌀6 → 2.72', near(S.pointRadius(6), 2.72, 1e-9), S.pointRadius(6));
+  check('ondergrens 2 (⌀0)', near(S.pointRadius(0), 2));
+  check('bovengrens 9 (⌀200)', near(S.pointRadius(200), 9));
+  check('monotoon stijgend over de standaardlijst',
+    S.STAVENREEKS_DIAMETERS.every((d, i, arr) =>
+      i === 0 || S.pointRadius(d) >= S.pointRadius(arr[i - 1])));
+  check('standaarddiameters = 6..40',
+    S.STAVENREEKS_DIAMETERS.join(',') === '6,8,10,12,16,20,25,32,40',
+    S.STAVENREEKS_DIAMETERS.join(','));
+}
+
+// ── 3. Labeltekst "N ⌀ D" ────────────────────────────────────────────────
+console.log('\n3. Labeltekst');
+{
+  check('5 ⌀ 16', S.labelText(5, 16) === '5 ⌀ 16', JSON.stringify(S.labelText(5, 16)));
+  check('gebruikt U+2300 (doorstreepte ⌀)', S.labelText(3, 12).includes('⌀'));
+  check('default-parameters → "3 ⌀ 12"', S.labelText(undefined, undefined) === '3 ⌀ 12',
+    S.labelText(undefined, undefined));
+  const built = S.buildStavenreeks({ startX: 0, startY: 0, endX: 100, endY: 0, count: 7, diameter: 25 });
+  check('label in de opgebouwde geometrie', built.label.text === '7 ⌀ 25', built.label.text);
+}
+
+// ── 4. Hoeveelheden-afleiding ────────────────────────────────────────────
+console.log('\n4. Hoeveelheden');
+{
+  check('5 × 2000 mm → 10 m', near(S.totalBarLengthM({ count: 5, barLengthMm: 2000 }), 10),
+    S.totalBarLengthM({ count: 5, barLengthMm: 2000 }));
+  check('12 × 6000 mm → 72 m', near(S.totalBarLengthM({ count: 12, barLengthMm: 6000 }), 72));
+  check('onbekende staaflengte (0) → null', S.totalBarLengthM({ count: 5, barLengthMm: 0 }) === null);
+  check('ontbrekende staaflengte → null', S.totalBarLengthM({ count: 5 }) === null);
+  check('1 × 850 mm → 0.85 m', near(S.totalBarLengthM({ count: 1, barLengthMm: 850 }), 0.85));
+}
+
+// ── 5. Pootrichting spiegelbaar ──────────────────────────────────────────
+console.log('\n5. Pootrichting');
+{
+  const base = { startX: 0, startY: 0, endX: 100, endY: 0, count: 3, legLength: 20 };
+  const dl = S.buildStavenreeks({ ...base, legDir: 'down-left' });
+  const dr = S.buildStavenreeks({ ...base, legDir: 'down-right' });
+  const ul = S.buildStavenreeks({ ...base, legDir: 'up-left' });
+  const ur = S.buildStavenreeks({ ...base, legDir: 'up-right' });
+
+  // Horizontale lijn naar rechts: 'down' = +y (scherm), 'up' = -y.
+  check('down-left: punt onder en naar links', dl.dots[1].y > 0 && dl.dots[1].x < 50);
+  check('down-right: punt onder en naar rechts', dr.dots[1].y > 0 && dr.dots[1].x > 50);
+  check('up-left: punt boven en naar links', ul.dots[1].y < 0 && ul.dots[1].x < 50);
+  check('up-right: punt boven en naar rechts', ur.dots[1].y < 0 && ur.dots[1].x > 50);
+  // Hoek poot ↔ reekslijn: exact STAVENREEKS_LEG_ANGLE_DEG, voor alle vier
+  // de richtingen. De reekslijn is hier horizontaal (u = (1,0)).
+  const angleToLine = (b, i) => {
+    const l = b.legs[i];
+    const vx = l.x2 - l.x1, vy = l.y2 - l.y1;
+    const m = Math.hypot(vx, vy);
+    // |cos| t.o.v. de lijnrichting → hoek in [0, 90°].
+    return Math.acos(Math.min(1, Math.abs(vx / m))) * 180 / Math.PI;
+  };
+  for (const [name, b] of [['down-left', dl], ['down-right', dr], ['up-left', ul], ['up-right', ur]]) {
+    for (const i of [0, 1, 2]) {
+      check(`${name}: poot ${i} staat onder ${S.STAVENREEKS_LEG_ANGLE_DEG}° t.o.v. de reekslijn`,
+        near(angleToLine(b, i), S.STAVENREEKS_LEG_ANGLE_DEG, 1e-9), angleToLine(b, i));
+    }
+  }
+  check('standaard poothoek ligt tussen 65° en 70° (steiler dan de oude 45°)',
+    S.STAVENREEKS_LEG_ANGLE_DEG >= 65 && S.STAVENREEKS_LEG_ANGLE_DEG <= 70,
+    S.STAVENREEKS_LEG_ANGLE_DEG);
+  check('steiler dan 45°: loodrechte component groter dan de tangentiële',
+    Math.abs(dl.dots[1].y) > Math.abs(dl.dots[1].x - 50),
+    `${Math.abs(dl.dots[1].y)} vs ${Math.abs(dl.dots[1].x - 50)}`);
+  check('tangentiële fractie = cos(hoek)',
+    near(S.legTangentFraction(), Math.cos(S.STAVENREEKS_LEG_ANGLE_DEG * Math.PI / 180), 1e-12),
+    S.legTangentFraction());
+  // Spiegelsymmetrie: de vier richtingen zijn elkaars spiegelbeeld.
+  check('down/up spiegelen loodrecht', near(dl.dots[1].y, -ul.dots[1].y, 1e-9) &&
+    near(dl.dots[1].x, ul.dots[1].x, 1e-9));
+  check('left/right spiegelen langs de lijn', near(dl.dots[1].x - 50, -(dr.dots[1].x - 50), 1e-9) &&
+    near(dl.dots[1].y, dr.dots[1].y, 1e-9));
+  // Een expliciete hoek moet doorwerken in legUnitVector.
+  {
+    const frame = { ux: 1, uy: 0, nx: 0, ny: 1, len: 100 };
+    const v90 = S.legUnitVector(frame, 'down-left', 90);
+    check('90° → poot exact loodrecht op de reekslijn',
+      near(v90.x, 0, 1e-12) && near(v90.y, 1, 1e-12), `${v90.x},${v90.y}`);
+    const v45 = S.legUnitVector(frame, 'down-left', 45);
+    check('45° → gelijke x/y-component (oud gedrag blijft opvraagbaar)',
+      near(Math.abs(v45.x), Math.abs(v45.y), 1e-12));
+  }
+  check('pootlengte gerespecteerd',
+    near(Math.hypot(dl.legs[1].x2 - dl.legs[1].x1, dl.legs[1].y2 - dl.legs[1].y1), 20));
+  check('alle 4 richtingen geldig', S.STAVENREEKS_LEG_DIRS.length === 4);
+  check('onbekende richting valt terug op default',
+    S.buildStavenreeks({ ...base, legDir: 'zijwaarts' }).params.legDir === 'down-left');
+}
+
+// ── 6. Rotatie-veiligheid: geometrie volgt uit de coördinaten ────────────
+console.log('\n6. Rotatie-veiligheid');
+{
+  const ann = { startX: 0, startY: 0, endX: 100, endY: 0, count: 4, diameter: 16, legLength: 20 };
+  const flat = S.buildStavenreeks(ann);
+  // Dezelfde reeks, 90° gedraaid door ALLEEN de coördinaten te draaien.
+  const rot = S.buildStavenreeks({ ...ann, endX: 0, endY: 100 });
+
+  check('geen rotation-veld in de geometrie', !('rotation' in flat) && !('rotation' in flat.params));
+  check('gedraaide reeks heeft evenveel punten', rot.dots.length === flat.dots.length);
+  // Afstanden poot-tip ↔ bijbehorende staafpositie blijven identiek.
+  const legLenFlat = flat.legs.map(l => Math.hypot(l.x2 - l.x1, l.y2 - l.y1));
+  const legLenRot = rot.legs.map(l => Math.hypot(l.x2 - l.x1, l.y2 - l.y1));
+  check('pootlengtes invariant onder rotatie',
+    legLenFlat.every((v, i) => near(v, legLenRot[i])));
+  // De AABB draait mee (breedte/hoogte wisselen ongeveer om).
+  check('AABB draait mee met de coördinaten',
+    rot.aabb.height > rot.aabb.width && flat.aabb.width > flat.aabb.height,
+    `flat ${flat.aabb.width}x${flat.aabb.height} / rot ${rot.aabb.width}x${rot.aabb.height}`);
+  // Determinisme: tweemaal bouwen geeft exact hetzelfde.
+  const again = S.buildStavenreeks(ann);
+  check('deterministisch', JSON.stringify(again) === JSON.stringify(flat));
+}
+
+// ── 7. AABB + AP-primitieven (persistentie-voorbereiding) ────────────────
+console.log('\n7. AABB en AP-primitieven');
+{
+  const b = S.buildStavenreeks(
+    { startX: 20, startY: 60, endX: 140, endY: 60, count: 4, diameter: 20, legLength: 24 },
+    { measureText: (t, fs) => t.length * fs * 0.55 },
+  );
+  const { aabb } = b;
+  check('AABB heeft positieve afmetingen', aabb.width > 0 && aabb.height > 0,
+    `${aabb.width}x${aabb.height}`);
+
+  // Elke punt-cirkel moet volledig binnen de AABB vallen.
+  const dotsInside = b.dots.every(d =>
+    d.x - d.r >= aabb.x - 1e-9 && d.x + d.r <= aabb.x + aabb.width + 1e-9 &&
+    d.y - d.r >= aabb.y - 1e-9 && d.y + d.r <= aabb.y + aabb.height + 1e-9);
+  check('punten (incl. straal) liggen binnen de AABB', dotsInside);
+
+  // Poot-tips binnen de AABB.
+  const legsInside = b.legs.every(l =>
+    l.x2 >= aabb.x - 1e-9 && l.x2 <= aabb.x + aabb.width + 1e-9 &&
+    l.y2 >= aabb.y - 1e-9 && l.y2 <= aabb.y + aabb.height + 1e-9);
+  check('poot-tips liggen binnen de AABB', legsInside);
+
+  // Het label steekt aan de labelSide buiten de reekslijn uit.
+  check('AABB omvat het label (breder dan de reekslijn)',
+    aabb.x + aabb.width > 140, aabb.x + aabb.width);
+
+  // Zonder label zou de AABB smaller zijn — bewijst dat de labelbreedte meetelt.
+  const wide = S.buildStavenreeks(
+    { startX: 20, startY: 60, endX: 140, endY: 60, count: 4, diameter: 20, legLength: 24 },
+    { measureText: () => 400 },
+  );
+  check('bredere labeltekst → bredere AABB', wide.aabb.width > aabb.width,
+    `${wide.aabb.width} vs ${aabb.width}`);
+
+  // AP-primitieven relatief aan de AABB: alles binnen [0..w] × [0..h].
+  const local = S.toLocalPrimitives(b.primitives, aabb);
+  const linesOk = local.filter(p => p.kind === 'line').every(p =>
+    p.x1 >= -1e-9 && p.x1 <= aabb.width + 1e-9 && p.y1 >= -1e-9 && p.y1 <= aabb.height + 1e-9 &&
+    p.x2 >= -1e-9 && p.x2 <= aabb.width + 1e-9 && p.y2 >= -1e-9 && p.y2 <= aabb.height + 1e-9);
+  check('lokale lijn-primitieven vallen binnen /BBox [0 0 w h]', linesOk);
+  const dotsOk = local.filter(p => p.kind === 'dot').every(p =>
+    p.x >= -1e-9 && p.x <= aabb.width + 1e-9 && p.y >= -1e-9 && p.y <= aabb.height + 1e-9);
+  check('lokale punt-primitieven vallen binnen /BBox', dotsOk);
+  check('primitieven bevatten lijn, punten en tekst',
+    local.some(p => p.kind === 'line') && local.some(p => p.kind === 'dot') &&
+    local.some(p => p.kind === 'text'));
+  check('aantal punt-primitieven == count',
+    local.filter(p => p.kind === 'dot').length === 4);
+  check('aantal lijn-primitieven == 1 reekslijn + count poten',
+    local.filter(p => p.kind === 'line').length === 5);
+
+  // flipY (PDF-assen, y omhoog) blijft eveneens binnen de BBox.
+  const flipped = S.toLocalPrimitives(b.primitives, aabb, { flipY: true });
+  const flipOk = flipped.filter(p => p.kind === 'dot').every(p =>
+    p.y >= -1e-9 && p.y <= aabb.height + 1e-9);
+  check('flipY-variant blijft binnen /BBox', flipOk);
+}
+
+// ── 8. Labelzijde ────────────────────────────────────────────────────────
+console.log('\n8. Labelzijde');
+{
+  const g = { startX: 0, startY: 0, endX: 100, endY: 0, count: 3 };
+  const atEnd = S.buildStavenreeks({ ...g, labelSide: 'end' });
+  const atStart = S.buildStavenreeks({ ...g, labelSide: 'start' });
+  check('labelSide=end → label voorbij het eindpunt', atEnd.label.x > 100, atEnd.label.x);
+  check('labelSide=start → label voorbij het beginpunt', atStart.label.x < 0, atStart.label.x);
+  check('label aan de startzijde wordt niet ondersteboven getekend',
+    Math.abs(atStart.label.angle) <= Math.PI / 2 + 1e-9, atStart.label.angle);
+  check('label aan de startzijde loopt fysiek naar links', atStart.label.dirX < 0);
+}
+
+// ── 9. Hoeveelheden-register (quantities/categories.js) ──────────────────
+console.log('\n9. Hoeveelheden-register');
+{
+  const el = {
+    type: 'stavenreeks', page: 2, count: 5, diameter: 16, barLengthMm: 2400,
+    ifcCategory: 'IfcReinforcingBar',
+    startX: 0, startY: 0, endX: 100, endY: 0, __pxPerUnit: 1,
+  };
+  check('stavenreeks valt in categorie line-based', Q.categoryOf(el) === 'line-based', Q.categoryOf(el));
+  // Basistekst (Engels); de UI vertaalt via quantities.type.stavenreeks.
+  check('type-naam = Bar series', Q.typeName('stavenreeks') === 'Bar series', Q.typeName('stavenreeks'));
+
+  const fields = Q.fieldsForCategories(['line-based']);
+  const byKey = (k) => fields.find(f => f.key === k);
+  check('veld barCount bestaat', !!byKey('barCount'));
+  check('veld barDiameter bestaat', !!byKey('barDiameter'));
+  check('veld barLength bestaat', !!byKey('barLength'));
+  check('veld totalBarLength bestaat', !!byKey('totalBarLength'));
+
+  check('barCount leest 5', byKey('barCount').get(el) === 5, byKey('barCount').get(el));
+  check('barDiameter leest 16', byKey('barDiameter').get(el) === 16);
+  check('barLength leest 2400 mm', byKey('barLength').get(el) === 2400);
+  check('totale staaflengte = 5 × 2400 mm = 12 m',
+    near(byKey('totalBarLength').get(el), 12), byKey('totalBarLength').get(el));
+  check('totale staaflengte in meter', byKey('totalBarLength').unit === 'm');
+  check('IFC-categorie uitleesbaar',
+    fields.find(f => f.key === 'ifcCategory').get(el) === 'IfcReinforcingBar');
+
+  // Gewone lijn in dezelfde categorie → wapening-velden blijven leeg.
+  const plainLine = { type: 'line', startX: 0, startY: 0, endX: 50, endY: 0, __pxPerUnit: 1 };
+  check('gewone lijn: barCount leeg', byKey('barCount').get(plainLine) === null);
+  check('gewone lijn: totale staaflengte leeg', byKey('totalBarLength').get(plainLine) === null);
+  check('gewone lijn: lengte blijft werken', near(byKey('length').get(plainLine), 50));
+  check('stavenreeks: reekslijn-lengte blijft ook beschikbaar',
+    near(byKey('length').get(el), 100));
+}
+
+// ── 10. Labelindeling (gedeeld door canvas én PDF-appearance) ────────────
+console.log('\n10. Labelindeling');
+{
+  // Gebruik de standaard-tekstgrootte, zodat de vergelijking met de opgebouwde
+  // geometrie (die dezelfde default hanteert) klopt.
+  const defFs = S.STAVENREEKS_DEFAULTS.fontSize;
+  const lay = S.labelLayout(5, 16, defFs);
+  check('drie onderdelen: tekst, ⌀-vector, tekst', lay.parts.length === 3, lay.parts.length);
+  check('eerste deel is het aantal', lay.parts[0].kind === 'text' && lay.parts[0].text === '5');
+  check('middendeel is de ⌀-vector (geen glyph)', lay.parts[1].kind === 'dia');
+  check('laatste deel is de diameter', lay.parts[2].kind === 'text' && lay.parts[2].text === '16');
+  check('onderdelen staan in oplopende volgorde',
+    lay.parts[0].dx < lay.parts[1].dx && lay.parts[1].dx < lay.parts[2].dx);
+  check('totale breedte omvat het laatste deel',
+    near(lay.width, lay.parts[2].dx + lay.parts[2].w), `${lay.width}`);
+  check('⌀-straal positief en past in zijn vak',
+    lay.signRadius > 0 && lay.signRadius * 2 <= lay.parts[1].w + 1e-9);
+  check('grotere fontgrootte → breder label', S.labelLayout(5, 16, defFs + 8).width > lay.width);
+
+  // De opgebouwde geometrie gebruikt exact deze indeling.
+  const b = S.buildStavenreeks({ startX: 0, startY: 0, endX: 100, endY: 0, count: 5, diameter: 16 });
+  check('geometrie gebruikt dezelfde labelbreedte', near(b.label.width, lay.width));
+  check('label-onderdelen aanwezig in de geometrie', b.label.parts.length === 3);
+  const txtPrim = b.primitives.find(p => p.kind === 'text');
+  check('tekst-primitief draagt de onderdelen mee', Array.isArray(txtPrim.parts));
+  check('startOffset 0 bij links uitgelijnd label', txtPrim.startOffset === 0);
+
+  // Bij een label aan de startzijde (align 'right') schuift het label naar links.
+  const bs = S.buildStavenreeks({ startX: 0, startY: 0, endX: 100, endY: 0, count: 5, diameter: 16, labelSide: 'start' });
+  const txtS = bs.primitives.find(p => p.kind === 'text');
+  check('startOffset negatief bij rechts uitgelijnd label',
+    near(txtS.startOffset, -bs.label.width), txtS.startOffset);
+}
+
+// ── 11. Wapenings-diameterteken (2 vlaggetjes) ───────────────────────────
+console.log('\n11. Wapeningssymbool');
+{
+  // Standaard-tekstgrootte, zodat de segmenten overeenkomen met wat de
+  // opgebouwde geometrie (met dezelfde default) meedraagt.
+  const fontSize = S.STAVENREEKS_DEFAULTS.fontSize;
+  const r = S.labelLayout(3, 12, fontSize).signRadius;
+  const sign = S.diameterSignSegments(r);
+  check('straal wordt doorgegeven', near(sign.r, r));
+  check('drie lijnstukken: streep + 2 vlaggetjes', sign.segments.length === 3, sign.segments.length);
+
+  const [slash, f1, f2] = sign.segments;
+  const dirOf = (s) => {
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1, m = Math.hypot(dx, dy);
+    return { x: dx / m, y: dy / m, len: m };
+  };
+  const midOf = (s) => ({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 });
+
+  const ds = dirOf(slash);
+  const M = S.DIAMETER_SIGN_METRICS;
+  const th = (M.slashAngleDeg * Math.PI) / 180;
+  check('schuine streep staat steil (70°, linksonder → rechtsboven)',
+    near(ds.x, Math.cos(th), 1e-9) && near(ds.y, Math.sin(th), 1e-9), `${ds.x},${ds.y}`);
+  check('streep steekt VER boven de cirkel uit en kort eronder',
+    near(ds.len, (M.slashUp + M.slashDown) * r, 1e-9) && M.slashUp > M.slashDown, ds.len);
+  check('streep loopt door het cirkelmidden',
+    near(slash.x1 * ds.y - slash.y1 * ds.x, 0, 1e-9));
+
+  for (const [i, fl] of [f1, f2].entries()) {
+    const d = dirOf(fl);
+    check(`vlaggetje ${i + 1} staat HORIZONTAAL (evenwijdig aan de tekstregel)`,
+      near(d.y, 0, 1e-9), d.y);
+    check(`vlaggetje ${i + 1} heeft de referentielengte (1,6 r)`,
+      near(d.len, 2 * M.flagHalfLength * r, 1e-9), d.len);
+    const m = midOf(fl);
+    check(`vlaggetje ${i + 1} zit BOVEN de cirkel`, m.y > r, m.y / r);
+    check(`vlaggetje ${i + 1} is gecentreerd op de schuine streep`,
+      near(m.x * ds.y - m.y * ds.x, 0, 1e-9));
+    check(`vlaggetje ${i + 1} valt binnen het bovenstuk van de streep`,
+      Math.hypot(m.x, m.y) <= M.slashUp * r + 1e-9, Math.hypot(m.x, m.y) / r);
+  }
+  const m1 = midOf(f1), m2 = midOf(f2);
+  check('beide vlaggetjes zitten aan DEZELFDE kant (boven), op verschillende hoogte',
+    m1.y > 0 && m2.y > 0 && !near(m1.y, m2.y, 1e-9), `${m1.y} vs ${m2.y}`);
+  check('vlaggetjes zijn even lang', near(dirOf(f1).len, dirOf(f2).len, 1e-9));
+  check('symbool schaalt mee met de tekengrootte',
+    near(S.diameterSignSegments(2 * r).segments[1].x1, 2 * sign.segments[1].x1, 1e-9));
+
+  // Gedeeld: dezelfde segmenten belanden in de labelindeling, de geometrie én
+  // de AP-primitieven — canvas en PDF-appearance kunnen dus niet uiteenlopen.
+  const lay = S.labelLayout(3, 12, fontSize);
+  check('labelindeling levert de segmenten mee', Array.isArray(lay.signSegments) &&
+    lay.signSegments.length === 3);
+  check('labelindeling gebruikt dezelfde geometrie',
+    JSON.stringify(lay.signSegments) === JSON.stringify(sign.segments));
+  const bb = S.buildStavenreeks({ startX: 0, startY: 0, endX: 100, endY: 0 });
+  check('geometrie draagt de segmenten mee',
+    JSON.stringify(bb.label.signSegments) === JSON.stringify(sign.segments));
+  const tp = bb.primitives.find(p => p.kind === 'text');
+  check('tekst-primitief (AP-bron) draagt de segmenten mee',
+    JSON.stringify(tp.signSegments) === JSON.stringify(sign.segments));
+  const lp = S.toLocalPrimitives(bb.primitives, bb.aabb, { flipY: true })
+    .find(p => p.kind === 'text');
+  check('lokale AP-primitief behoudt de segmenten',
+    JSON.stringify(lp.signSegments) === JSON.stringify(sign.segments));
+}
+
+// ── 12. Standaardwaarden ─────────────────────────────────────────────────
+console.log('\n12. Standaardwaarden');
+{
+  check('standaard pootlengte = 36', S.STAVENREEKS_DEFAULTS.legLength === 36,
+    S.STAVENREEKS_DEFAULTS.legLength);
+  check('standaard pootlengte valt binnen het paneelbereik 1–200',
+    S.STAVENREEKS_DEFAULTS.legLength >= 1 && S.STAVENREEKS_DEFAULTS.legLength <= 200);
+  const d = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0 });
+  check('verse tekening gebruikt pootlengte 36',
+    near(Math.hypot(d.legs[0].x2 - d.legs[0].x1, d.legs[0].y2 - d.legs[0].y1), 36),
+    Math.hypot(d.legs[0].x2 - d.legs[0].x1, d.legs[0].y2 - d.legs[0].y1));
+  check('poot is duidelijk langer dan de punt (zichtbaar segment)',
+    36 > 4 * S.pointRadius(d.params.diameter));
+  // AABB moet de (steilere) poot-tippen omvatten: de loodrechte reikwijdte is
+  // legLength·sin θ, en die bepaalt bij een horizontale reeks de hoogte.
+  const th = S.STAVENREEKS_LEG_ANGLE_DEG * Math.PI / 180;
+  const perpReach = 36 * Math.sin(th);
+  const tipsInside = d.legs.every(l =>
+    l.x2 >= d.aabb.x - 1e-9 && l.x2 <= d.aabb.x + d.aabb.width + 1e-9 &&
+    l.y2 >= d.aabb.y - 1e-9 && l.y2 <= d.aabb.y + d.aabb.height + 1e-9);
+  check('AABB omvat de poot-tippen bij de nieuwe hoek', tipsInside);
+  check('AABB-hoogte dekt de loodrechte reikwijdte legLength·sin θ',
+    d.aabb.height >= perpReach - 1e-9, `${d.aabb.height} >= ${perpReach}`);
+  check('poot-tip ligt legLength·sin θ onder de reekslijn',
+    near(d.legs[0].y2 - d.legs[0].y1, perpReach, 1e-9), d.legs[0].y2 - d.legs[0].y1);
+  check('poot-tip ligt legLength·cos θ terug langs de lijn',
+    near(d.legs[0].x1 - d.legs[0].x2, 36 * Math.cos(th), 1e-9), d.legs[0].x1 - d.legs[0].x2);
+  check('standaard labelzijde = end', S.STAVENREEKS_DEFAULTS.labelSide === 'end');
+  check('standaard pootrichting = down-left', S.STAVENREEKS_DEFAULTS.legDir === 'down-left');
+  check('standaard tekstgrootte = 16 (groter dan de oude 12)',
+    S.STAVENREEKS_DEFAULTS.fontSize === 16, S.STAVENREEKS_DEFAULTS.fontSize);
+}
+
+// ── 13. Labelvrijloop t.o.v. de poten ────────────────────────────────────
+console.log('\n13. Labelvrijloop');
+{
+  // Referentie-opstelling: poten hellen WEG van het label (down-left + end).
+  const ref = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0 },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  // Het label begint na de UITLOOP van de aanhaallijn (lineTail) plus de
+  // vrijloop; bij de standaardwaarden is dat 200 + 20 + 6 = 226.
+  const refTail = S.STAVENREEKS_DEFAULTS.lineTail;
+  check('label staat net voorbij de uitloop',
+    ref.label.x > 200 + refTail && ref.label.x < 200 + refTail + 10, ref.label.x);
+  check('label staat rechtop (niet op zijn kop)', near(ref.label.angle, 0));
+
+  // Het labelvak mag geen enkele poot snijden.
+  const boxClearOfLegs = (b) => {
+    const half = b.label.fontSize * 0.6;
+    const px = -b.label.dirY, py = b.label.dirX;
+    // Het labelvak loopt FYSIEK vanaf het ankerpunt `width` ver in dirX/dirY
+    // (ook bij align 'right': daar is de tekenrichting 180° gedraaid, zodat de
+    // tekst vanaf het anker dezelfde kant op vult). Bemonster dat vak en meet
+    // de afstand tot elk pootsegment.
+    let minD = Infinity;
+    for (let t = 0; t <= b.label.width; t += 1) {
+      for (const s of [-half, 0, half]) {
+        const X = b.label.x + b.label.dirX * t + px * s;
+        const Y = b.label.y + b.label.dirY * t + py * s;
+        for (const l of b.legs) {
+          const vx = l.x2 - l.x1, vy = l.y2 - l.y1;
+          const L2 = vx * vx + vy * vy;
+          let u = L2 > 0 ? ((X - l.x1) * vx + (Y - l.y1) * vy) / L2 : 0;
+          u = u < 0 ? 0 : (u > 1 ? 1 : u);
+          minD = Math.min(minD, Math.hypot(X - (l.x1 + vx * u), Y - (l.y1 + vy * u)));
+        }
+      }
+    }
+    return minD;
+  };
+  check('referentie-opstelling: labelvak raakt geen poot', boxClearOfLegs(ref) > 0,
+    boxClearOfLegs(ref));
+
+  // Alle 4 pootrichtingen × beide labelzijden: nooit overlap, nooit op de kop.
+  for (const legDir of S.STAVENREEKS_LEG_DIRS) {
+    for (const labelSide of ['start', 'end']) {
+      const b = S.buildStavenreeks(
+        { startX: 0, startY: 0, endX: 200, endY: 0, legDir, labelSide },
+        { measureText: (t, fs) => t.length * fs * 0.55 });
+      check(`${legDir}/${labelSide}: labelvak vrij van de poten`, boxClearOfLegs(b) > 0.5,
+        boxClearOfLegs(b));
+      check(`${legDir}/${labelSide}: tekst niet op zijn kop`,
+        Math.abs(b.label.angle) <= Math.PI / 2 + 1e-9, b.label.angle);
+      check(`${legDir}/${labelSide}: label ligt in de AABB`,
+        b.label.x >= b.aabb.x - 1e-6 && b.label.x <= b.aabb.x + b.aabb.width + 1e-6);
+    }
+  }
+
+  // Ook bij een naar links getekende reeks blijft de tekst leesbaar.
+  const back = S.buildStavenreeks({ startX: 200, startY: 0, endX: 0, endY: 0 });
+  check('rechts-naar-links getekend: tekst niet op zijn kop',
+    Math.abs(back.label.angle) <= Math.PI / 2 + 1e-9, back.label.angle);
+  check('rechts-naar-links getekend: label loopt fysiek naar links', back.label.dirX < 0);
+  check('rechts-naar-links getekend: label steekt voorbij het eindpunt uit',
+    back.aabb.x < 0, back.aabb.x);
+}
+
+// ── 14. Uitloop van de aanhaallijn ───────────────────────────────────────
+console.log('\n14. Uitloop aanhaallijn');
+{
+  const T = S.STAVENREEKS_DEFAULTS.lineTail;
+  check('standaard uitloop = 20', T === 20, T);
+  check('uitloop ≈ 0,55 × pootlengte',
+    Math.abs(T - 0.55 * S.STAVENREEKS_DEFAULTS.legLength) <= 1,
+    `${T} vs ${0.55 * S.STAVENREEKS_DEFAULTS.legLength}`);
+  check('standaard uitloop valt binnen het paneelbereik 0–200', T >= 0 && T <= 200);
+
+  const g = { startX: 0, startY: 0, endX: 200, endY: 0, count: 3 };
+  const b = S.buildStavenreeks(g, { measureText: (t, fs) => t.length * fs * 0.55 });
+  check('lijn loopt voorbij het eindpunt door', near(b.line.x2, 200 + T), b.line.x2);
+  check('lijn begint nog steeds op het startpunt', near(b.line.x1, 0) && near(b.line.y1, 0));
+  check('uitlooppunt uitleesbaar via .tail', near(b.tail.x, 200 + T) && near(b.tail.y, 0));
+
+  // De staafposities blijven over start..eind verdeeld — NIET over de uitloop.
+  check('laatste punt hoort bij het eindpunt, niet bij de uitloop',
+    near(b.legs[b.legs.length - 1].x1, 200), b.legs[b.legs.length - 1].x1);
+  check('eerste poot hangt aan het startpunt', near(b.legs[0].x1, 0));
+  check('aantal poten ongewijzigd door de uitloop', b.legs.length === 3);
+
+  // Label begint NA de uitloop (huidige vrijloop komt daar bovenop).
+  const noTail = S.buildStavenreeks({ ...g, lineTail: 0 },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  check('lineTail 0 → lijn stopt op de laatste poot', near(noTail.line.x2, 200));
+  check('label schuift precies de uitloop op', near(b.label.x - noTail.label.x, T),
+    b.label.x - noTail.label.x);
+  check('label begint voorbij het uitlooppunt', b.label.x > b.tail.x, `${b.label.x} > ${b.tail.x}`);
+
+  // AABB neemt de uitloop mee.
+  check('AABB groeit mee met de uitloop', b.aabb.width > noTail.aabb.width,
+    `${b.aabb.width} vs ${noTail.aabb.width}`);
+  check('AABB omvat het uitlooppunt',
+    b.tail.x <= b.aabb.x + b.aabb.width + 1e-9 && b.tail.x >= b.aabb.x - 1e-9);
+
+  // AP-primitieven: de reekslijn-primitief draagt de uitloop.
+  const localP = S.toLocalPrimitives(b.primitives, b.aabb, { flipY: true });
+  const lineP = localP.find(p => p.kind === 'line');
+  check('AP-lijnprimitief is de reekslijn INCLUSIEF uitloop',
+    near(lineP.x2 - lineP.x1, 200 + T, 1e-9), lineP.x2 - lineP.x1);
+  check('AP-lijnprimitief valt binnen /BBox',
+    lineP.x2 >= -1e-9 && lineP.x2 <= b.aabb.width + 1e-9);
+
+  // labelSide 'start': de uitloop wisselt mee naar de andere kant.
+  const st = S.buildStavenreeks({ ...g, labelSide: 'start' },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  check('labelSide=start → uitloop vóór het startpunt', near(st.line.x1, -T), st.line.x1);
+  check('labelSide=start → lijn eindigt op het eindpunt', near(st.line.x2, 200));
+  check('labelSide=start → eerste poot blijft op het startpunt', near(st.legs[0].x1, 0));
+
+  // Schuine reeks: de uitloop volgt de lijnrichting (rotatie-veilig).
+  const diag = S.buildStavenreeks({ startX: 0, startY: 0, endX: 60, endY: 80, count: 2 });
+  check('schuine reeks: uitloop ligt in het verlengde van de lijn',
+    near(diag.tail.x, 60 + 0.6 * T, 1e-9) && near(diag.tail.y, 80 + 0.8 * T, 1e-9),
+    `${diag.tail.x},${diag.tail.y}`);
+  check('schuine reeks: uitlooplengte = lineTail',
+    near(Math.hypot(diag.tail.x - 60, diag.tail.y - 80), T, 1e-9));
+
+  // Parameter-validatie.
+  check('negatieve uitloop valt terug op de standaard',
+    S.resolveParams({ lineTail: -5 }).lineTail === T);
+  check('onzin-uitloop valt terug op de standaard',
+    S.resolveParams({ lineTail: 'abc' }).lineTail === T);
+  check('uitloop 0 wordt gerespecteerd (niet als "leeg" gelezen)',
+    S.resolveParams({ lineTail: 0 }).lineTail === 0);
+  check('expliciete uitloop wordt overgenomen',
+    S.resolveParams({ lineTail: 42 }).lineTail === 42);
+}
+
+// ── 15. Grijppunten op de wapeningspunten + sleep-omrekening ─────────────
+console.log('\n15. Grijppunten en slepen');
+{
+  const base = { startX: 40, startY: 120, endX: 240, endY: 120, count: 4, legLength: 36 };
+
+  // (a) De handles liggen op de PUNTEN, niet op de lijn-uiteinden.
+  for (const legDir of S.STAVENREEKS_LEG_DIRS) {
+    const b = S.buildStavenreeks({ ...base, legDir });
+    const h = S.handleAnchors({ ...base, legDir });
+    check(`${legDir}: LINE_START-handle ligt op het EERSTE punt`,
+      near(h.start.x, b.dots[0].x, 1e-9) && near(h.start.y, b.dots[0].y, 1e-9),
+      `${h.start.x},${h.start.y} vs ${b.dots[0].x},${b.dots[0].y}`);
+    const last = b.dots[b.dots.length - 1];
+    check(`${legDir}: LINE_END-handle ligt op het LAATSTE punt`,
+      near(h.end.x, last.x, 1e-9) && near(h.end.y, last.y, 1e-9));
+    check(`${legDir}: midden-grip ligt tussen beide punten`,
+      near(h.mid.x, (h.start.x + h.end.x) / 2, 1e-9) &&
+      near(h.mid.y, (h.start.y + h.end.y) / 2, 1e-9));
+    check(`${legDir}: handles liggen NIET op de lijn-uiteinden`,
+      Math.hypot(h.start.x - base.startX, h.start.y - base.startY) > 1);
+  }
+
+  // (b) count === 1: het enige punt ligt in het midden. De handles mogen niet
+  // samenvallen; ze staan op de virtuele punten bij beide lijn-uiteinden en
+  // het echte punt ligt precies op de midden-grip.
+  {
+    const one = { ...base, count: 1 };
+    const h = S.handleAnchors(one);
+    const b = S.buildStavenreeks(one);
+    check('count=1: start- en eind-handle vallen NIET samen',
+      Math.hypot(h.start.x - h.end.x, h.start.y - h.end.y) > 1,
+      Math.hypot(h.start.x - h.end.x, h.start.y - h.end.y));
+    check('count=1: het enige punt ligt op de midden-grip',
+      near(b.dots[0].x, h.mid.x, 1e-9) && near(b.dots[0].y, h.mid.y, 1e-9));
+  }
+
+  // (c) Sleep-omrekening: het PUNT komt exact onder de cursor.
+  const dropsOnTarget = (ann, which, tx, ty) => {
+    const p = S.resolveParams(ann);
+    const fixed = which === 'start'
+      ? { x: ann.endX, y: ann.endY } : { x: ann.startX, y: ann.startY };
+    const solved = S.lineEndForDotTarget(fixed, { x: tx, y: ty }, which, p.legDir, p.legLength);
+    if (!solved) return null;
+    const moved = which === 'start'
+      ? { ...ann, startX: solved.x, startY: solved.y }
+      : { ...ann, endX: solved.x, endY: solved.y };
+    const h = S.handleAnchors(moved);
+    const got = which === 'start' ? h.start : h.end;
+    return Math.hypot(got.x - tx, got.y - ty);
+  };
+
+  for (const legDir of S.STAVENREEKS_LEG_DIRS) {
+    const ann = { ...base, legDir };
+    for (const [tx, ty] of [[300, 200], [300, 60], [90, 260], [-40, 40], [240, 400]]) {
+      const eEnd = dropsOnTarget(ann, 'end', tx, ty);
+      check(`${legDir}: eind-punt landt exact op (${tx},${ty})`, eEnd !== null && eEnd < 1e-6, eEnd);
+      const eStart = dropsOnTarget(ann, 'start', tx, ty);
+      check(`${legDir}: start-punt landt exact op (${tx},${ty})`, eStart !== null && eStart < 1e-6, eStart);
+    }
+  }
+  // Ook bij count === 1 (virtuele punten) klopt de omrekening.
+  {
+    const one = { ...base, count: 1 };
+    const e = dropsOnTarget(one, 'end', 320, 240);
+    check('count=1: sleep-omrekening blijft kloppen (geen deling door nul)',
+      e !== null && e < 1e-6, e);
+  }
+
+  // (d) Het VASTE uiteinde blijft staan; de reeks draait dus om dat punt.
+  {
+    const p = S.resolveParams(base);
+    const solved = S.lineEndForDotTarget({ x: base.startX, y: base.startY },
+      { x: 300, y: 300 }, 'end', p.legDir, p.legLength);
+    check('slepen laat het vaste uiteinde ongemoeid', solved !== null);
+    const moved = { ...base, endX: solved.x, endY: solved.y };
+    check('startpunt van de lijn onveranderd',
+      moved.startX === base.startX && moved.startY === base.startY);
+    check('pootlengte blijft gerespecteerd na het slepen',
+      near(Math.hypot(
+        S.buildStavenreeks(moved).legs[0].x2 - S.buildStavenreeks(moved).legs[0].x1,
+        S.buildStavenreeks(moved).legs[0].y2 - S.buildStavenreeks(moved).legs[0].y1), 36, 1e-9));
+  }
+
+  // (e) Degeneratie: doel te dicht op het vaste uiteinde → null (aanroeper
+  // valt terug op het directe gedrag, geen sprong).
+  {
+    const p = S.resolveParams(base);
+    const none = S.lineEndForDotTarget({ x: base.startX, y: base.startY },
+      { x: base.startX, y: base.startY }, 'end', p.legDir, p.legLength);
+    check('doel op het vaste uiteinde → null (geen sprong)', none === null, JSON.stringify(none));
+  }
+
+  // (f) De pootrotor is een zuivere rotatie en stemt overeen met legUnitVector.
+  {
+    const frame = { ux: 1, uy: 0, nx: 0, ny: 1, len: 100 };
+    for (const legDir of S.STAVENREEKS_LEG_DIRS) {
+      const c = S.legRotor(legDir);
+      check(`${legDir}: rotor is een eenheidsgetal`,
+        near(Math.hypot(c.re, c.im), 1, 1e-12), Math.hypot(c.re, c.im));
+      const v = S.legUnitVector(frame, legDir);
+      // u = (1,0) → v = u·c = (c.re, c.im)
+      check(`${legDir}: rotor komt overeen met legUnitVector`,
+        near(v.x, c.re, 1e-12) && near(v.y, c.im, 1e-12), `${v.x},${v.y} vs ${c.re},${c.im}`);
+    }
+  }
+
+  // (g) Verplaatsen van het HELE object (LINE_MID / gewone move) verandert de
+  // vorm niet: alle handles schuiven mee met dezelfde verplaatsing.
+  {
+    const h0 = S.handleAnchors(base);
+    const moved = { ...base, startX: base.startX + 37, startY: base.startY - 19,
+      endX: base.endX + 37, endY: base.endY - 19 };
+    const h1 = S.handleAnchors(moved);
+    check('hele object verplaatsen: start-handle schuift 1-op-1 mee',
+      near(h1.start.x - h0.start.x, 37, 1e-9) && near(h1.start.y - h0.start.y, -19, 1e-9));
+    check('hele object verplaatsen: eind-handle schuift 1-op-1 mee',
+      near(h1.end.x - h0.end.x, 37, 1e-9) && near(h1.end.y - h0.end.y, -19, 1e-9));
+    check('hele object verplaatsen: midden-grip schuift 1-op-1 mee',
+      near(h1.mid.x - h0.mid.x, 37, 1e-9) && near(h1.mid.y - h0.mid.y, -19, 1e-9));
+    const g0 = S.buildStavenreeks(base), g1 = S.buildStavenreeks(moved);
+    check('hele object verplaatsen: AABB behoudt zijn afmetingen',
+      near(g0.aabb.width, g1.aabb.width, 1e-9) && near(g0.aabb.height, g1.aabb.height, 1e-9));
+  }
+
+  // (h) De uitloop heeft GEEN invloed op de grijppunten (die hangen aan de
+  // staafposities, niet aan de getekende lijn).
+  {
+    const a = S.handleAnchors({ ...base, lineTail: 0 });
+    const b = S.handleAnchors({ ...base, lineTail: 60 });
+    check('uitloop verplaatst de grijppunten niet',
+      near(a.start.x, b.start.x, 1e-9) && near(a.end.x, b.end.x, 1e-9));
+  }
+}
+
+// ── 16. Validatie van de inline invoer (aantal + diameter) ───────────────
+console.log('\n16. Inline invoer');
+{
+  const R = S.STAVENREEKS_COUNT_RANGE;
+  check('bereik van de inline invoer = 1..100', R.min === 1 && R.max === 100,
+    `${R.min}..${R.max}`);
+
+  // Aantal.
+  check('gewoon getal wordt overgenomen', S.sanitizeCountInput('7', 3) === 7);
+  check('getal als number werkt ook', S.sanitizeCountInput(12, 3) === 12);
+  check('spaties worden genegeerd', S.sanitizeCountInput('  9 ', 3) === 9);
+  check('komma als decimaalteken wordt gelezen', S.sanitizeCountInput('4,6', 3) === 5);
+  check('afronding op hele staven', S.sanitizeCountInput('4.2', 3) === 4);
+  check('boven het bereik klemt op 100', S.sanitizeCountInput('250', 3) === 100);
+  check('onder het bereik klemt op 1', S.sanitizeCountInput('0', 3) === 1);
+  check('negatief klemt op 1', S.sanitizeCountInput('-8', 3) === 1);
+  check('lege invoer valt terug op de huidige waarde', S.sanitizeCountInput('', 6) === 6);
+  check('onzin valt terug op de huidige waarde', S.sanitizeCountInput('abc', 6) === 6);
+  check('null valt terug op de huidige waarde', S.sanitizeCountInput(null, 6) === 6);
+  check('ongeldige terugval valt terug op de standaard',
+    S.sanitizeCountInput('', 'x') === S.STAVENREEKS_DEFAULTS.count);
+  check('terugval buiten het bereik wordt zelf ook geklemd',
+    S.sanitizeCountInput('', 5000) === 100);
+  check('uitkomst is altijd geldig voor buildStavenreeks', (() => {
+    for (const v of ['', 'abc', '-3', '9999', '2.4', null, undefined, '1']) {
+      const n = S.sanitizeCountInput(v, 3);
+      if (!Number.isInteger(n) || n < R.min || n > R.max) return false;
+      if (S.buildStavenreeks({ startX: 0, startY: 0, endX: 100, endY: 0, count: n }).dots.length !== n) return false;
+    }
+    return true;
+  })());
+
+  // Diameter.
+  check('standaarddiameter wordt overgenomen', S.sanitizeDiameterInput('16', 12) === 16);
+  check('diameter als number werkt ook', S.sanitizeDiameterInput(25, 12) === 25);
+  check('afwijkende maat gaat naar de dichtstbijzijnde standaard',
+    S.sanitizeDiameterInput('14', 12) === 12 || S.sanitizeDiameterInput('14', 12) === 16,
+    S.sanitizeDiameterInput('14', 12));
+  // 18 ligt precies tussen 16 en 20; bij gelijke afstand wint de kleinste.
+  check('18 → 16 (gelijkspel: kleinste wint)', S.sanitizeDiameterInput('18', 12) === 16,
+    S.sanitizeDiameterInput('18', 12));
+  check('22 → 20 (dichtstbijzijnde omlaag)', S.sanitizeDiameterInput('22', 12) === 20,
+    S.sanitizeDiameterInput('22', 12));
+  check('30 → 32 (dichtstbijzijnde omhoog)', S.sanitizeDiameterInput('30', 12) === 32,
+    S.sanitizeDiameterInput('30', 12));
+  check('1000 → 40 (bovenste standaard)', S.sanitizeDiameterInput('1000', 12) === 40);
+  check('1 → 6 (onderste standaard)', S.sanitizeDiameterInput('1', 12) === 6);
+  check('lege invoer valt terug op de huidige diameter', S.sanitizeDiameterInput('', 20) === 20);
+  check('onzin valt terug op de huidige diameter', S.sanitizeDiameterInput('n.v.t.', 20) === 20);
+  check('nul of negatief valt terug op de huidige diameter',
+    S.sanitizeDiameterInput('0', 20) === 20 && S.sanitizeDiameterInput('-6', 20) === 20);
+  check('afwijkende terugval wordt zelf ook op de lijst gezet',
+    S.STAVENREEKS_DIAMETERS.includes(S.sanitizeDiameterInput('', 18)),
+    S.sanitizeDiameterInput('', 18));
+  check('uitkomst zit altijd in STAVENREEKS_DIAMETERS',
+    ['', 'x', '0', '7', '33', '99', null, 16]
+      .every(v => S.STAVENREEKS_DIAMETERS.includes(S.sanitizeDiameterInput(v, 12))));
+
+  // De ingevoerde waarden komen 1-op-1 in het label terug.
+  {
+    const n = S.sanitizeCountInput('12', 3);
+    const d = S.sanitizeDiameterInput('25', 12);
+    check('label toont de bevestigde waarden', S.labelText(n, d) === '12 ⌀ 25', S.labelText(n, d));
+  }
+}
+
+// ── 17. Tekstgrootte: default, meeschalen en validatie ───────────────────
+console.log('\n17. Tekstgrootte');
+{
+  const R = S.STAVENREEKS_FONT_SIZE_RANGE;
+  check('bereik tekstgrootte = 6..72', R.min === 6 && R.max === 72, `${R.min}..${R.max}`);
+
+  const small = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, fontSize: 10 },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  const big = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, fontSize: 28 },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  check('label draagt de ingestelde tekstgrootte', small.label.fontSize === 10 && big.label.fontSize === 28);
+  check('grotere tekst → breder label', big.label.width > small.label.width,
+    `${big.label.width} vs ${small.label.width}`);
+  check('wapeningsteken schaalt mee (signRadius = 0,22 × fontSize)',
+    near(small.label.signRadius, 10 * 0.22, 1e-9) && near(big.label.signRadius, 28 * 0.22, 1e-9),
+    `${small.label.signRadius} / ${big.label.signRadius}`);
+  check('grotere tekst → grotere AABB', big.aabb.width > small.aabb.width && big.aabb.height >= small.aabb.height);
+  // Labelvrijloop blijft kloppen: label mag geen poot snijden, ook bij grote tekst.
+  {
+    const b = big;
+    const half = b.label.fontSize * 0.6;
+    const px = -b.label.dirY, py = b.label.dirX;
+    let minD = Infinity;
+    for (let t = 0; t <= b.label.width; t += 1) {
+      for (const s of [-half, 0, half]) {
+        const X = b.label.x + b.label.dirX * t + px * s;
+        const Y = b.label.y + b.label.dirY * t + py * s;
+        for (const l of b.legs) {
+          const vx = l.x2 - l.x1, vy = l.y2 - l.y1;
+          const L2 = vx * vx + vy * vy;
+          let u = L2 > 0 ? ((X - l.x1) * vx + (Y - l.y1) * vy) / L2 : 0;
+          u = u < 0 ? 0 : (u > 1 ? 1 : u);
+          minD = Math.min(minD, Math.hypot(X - (l.x1 + vx * u), Y - (l.y1 + vy * u)));
+        }
+      }
+    }
+    check('grote tekst: labelvak raakt geen poot', minD > 0.5, minD);
+  }
+
+  // Validatie / klem.
+  check('gewone tekstgrootte overgenomen', S.sanitizeFontSizeInput('20', 16) === 20);
+  check('boven het bereik klemt op 72', S.sanitizeFontSizeInput('200', 16) === 72);
+  check('onder het bereik klemt op 6', S.sanitizeFontSizeInput('3', 16) === 6);
+  check('afronding op hele punten', S.sanitizeFontSizeInput('14.6', 16) === 15);
+  check('komma-decimaal werkt', S.sanitizeFontSizeInput('11,2', 16) === 11);
+  check('lege invoer valt terug op de huidige waarde', S.sanitizeFontSizeInput('', 18) === 18);
+  check('onzin valt terug op de huidige waarde', S.sanitizeFontSizeInput('abc', 18) === 18);
+  check('nul/negatief valt terug op de huidige waarde',
+    S.sanitizeFontSizeInput('0', 18) === 18 && S.sanitizeFontSizeInput('-5', 18) === 18);
+  check('terugval buiten het bereik wordt zelf ook geklemd', S.sanitizeFontSizeInput('', 500) === 72);
+  check('uitkomst zit altijd binnen 6..72',
+    ['', 'x', '0', '4', '500', '30', null].every(v => {
+      const n = S.sanitizeFontSizeInput(v, 16);
+      return n >= 6 && n <= 72 && Number.isInteger(n);
+    }));
+}
+
+// ── 18. Schaal-bewuste puntstraal (staaf in doorsnede) ───────────────────
+console.log('\n18. Schaal-bewuste puntstraal');
+{
+  const L = S.POINT_RADIUS_LIMITS;
+  check('puntstraal-grenzen = 1,5 .. 30', L.min === 1.5 && L.max === 30, `${L.min}..${L.max}`);
+
+  // Fallback: zonder px-per-mm de oude, papier-constante formule.
+  check('geen schaal → oude formule (⌀12 = 3.44)', near(S.pointRadius(12), 3.44, 1e-9), S.pointRadius(12));
+  check('px-per-mm 0 → fallback', near(S.pointRadius(12, 0), 3.44, 1e-9));
+  check('px-per-mm negatief → fallback', near(S.pointRadius(12, -2), 3.44, 1e-9));
+  check('px-per-mm NaN → fallback', near(S.pointRadius(12, NaN), 3.44, 1e-9));
+
+  // Schaal-bewust: straal = (diameter/2) × pxPerMm.
+  // Bij 1:20 en mm is pxPerMm = (72/25.4)/20 ≈ 0.1417; ⌀32 → 16·0.1417 ≈ 2.27.
+  const k20 = (72 / 25.4) / 20;
+  check('⌀32 @ 1:20 volgt de werkelijke maat', near(S.pointRadius(32, k20), (32 / 2) * k20, 1e-9),
+    S.pointRadius(32, k20));
+  const k100 = (72 / 25.4) / 100;
+  check('⌀32 @ 1:100 is dunner dan @ 1:20', S.pointRadius(32, k100) < S.pointRadius(32, k20));
+
+  // Klemming: heel kleine schaal → ondergrens, heel grote schaal → bovengrens.
+  check('minuscule schaal klemt op 1,5', near(S.pointRadius(6, 0.0001), L.min));
+  check('enorme schaal klemt op 30', near(S.pointRadius(40, 100), L.max));
+
+  // Doorwerking in buildStavenreeks via opts.pxPerMm — ALLEEN de punten.
+  const plain = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, diameter: 32 },
+    { measureText: (t, fs) => t.length * fs * 0.55 });
+  const scaled = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, diameter: 32 },
+    { measureText: (t, fs) => t.length * fs * 0.55, pxPerMm: 0.6 });
+  check('opts.pxPerMm verandert de puntstraal',
+    !near(plain.dots[0].r, scaled.dots[0].r), `${plain.dots[0].r} vs ${scaled.dots[0].r}`);
+  check('puntstraal = (diameter/2) × pxPerMm', near(scaled.dots[0].r, 16 * 0.6, 1e-9), scaled.dots[0].r);
+
+  // BEPERKING (harde eis): ALLEEN de puntstraal is schaal-bewust. Pootlengte,
+  // uitloop, labelgrootte en lijndikte blijven papier-constant.
+  const measure = (t, fs) => t.length * fs * 0.55;
+  const a = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, diameter: 32 },
+    { measureText: measure });
+  const b = S.buildStavenreeks({ startX: 0, startY: 0, endX: 200, endY: 0, diameter: 32 },
+    { measureText: measure, pxPerMm: 0.6 });
+  const legLen = (g, i) => Math.hypot(g.legs[i].x2 - g.legs[i].x1, g.legs[i].y2 - g.legs[i].y1);
+  check('pootlengte blijft papier-constant', near(legLen(a, 0), legLen(b, 0), 1e-9),
+    `${legLen(a, 0)} vs ${legLen(b, 0)}`);
+  check('uitloop blijft papier-constant', near(a.tail.x, b.tail.x, 1e-9) && near(a.tail.y, b.tail.y, 1e-9));
+  check('labelgrootte blijft papier-constant', a.label.fontSize === b.label.fontSize);
+  check('labelbreedte blijft papier-constant', near(a.label.width, b.label.width, 1e-9));
+  check('wapenings-signRadius blijft papier-constant', near(a.label.signRadius, b.label.signRadius, 1e-9));
+  check('staafposities (poot-ankers) blijven papier-constant',
+    near(a.legs[0].x1, b.legs[0].x1, 1e-9) && near(a.legs[1].x1, b.legs[1].x1, 1e-9));
+}
+
+console.log(`\n${failures === 0 ? 'GESLAAGD' : 'GEFAALD'}: ${checks - failures}/${checks} controles`);
+process.exit(failures === 0 ? 0 : 1);

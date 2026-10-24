@@ -1,0 +1,109 @@
+import { createSignal } from 'solid-js';
+
+const [visible, setVisible] = createSignal(false);
+const [menuType, setMenuType] = createSignal('annotation');
+const [position, setPosition] = createSignal({ x: 0, y: 0 });
+const [targetAnnotation, setTargetAnnotation] = createSignal(null);
+const [multiSelectCount, setMultiSelectCount] = createSignal(0);
+const [targetPage, setTargetPage] = createSignal(null);
+// For edit-contour mode: when right-clicking on a vertex handle, this holds
+// { handleType, holeIndex|null, nodeIndex } so the context menu can offer
+// vertex-specific actions (delete, insert before/after).
+const [vertexContext, setVertexContext] = createSignal(null);
+// Document tab menu: the tab's document index. Panel tab menu: the panel id
+// and an optional title resolver ({ titleOf(id) }) from the panel host.
+const [targetTab, setTargetTab] = createSignal(-1);
+const [targetPanel, setTargetPanel] = createSignal(null);
+// Markups List Group row menu: the group (its id) the row stands for, so
+// Remove Selected from Group and Remove Group Nesting act on that level.
+const [targetMarkupGroup, setTargetMarkupGroup] = createSignal(null);
+
+export function showAnnotationMenu(x, y, annotation, vertex = null) {
+  setTargetMarkupGroup(null);
+  setTargetAnnotation(annotation);
+  setVertexContext(vertex);
+  setMenuType('annotation');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function showMultiAnnotationMenu(x, y, count, { markupGroupId = null, annotation = null } = {}) {
+  setTargetMarkupGroup(markupGroupId);
+  // The right-clicked markup: the dominant one when the menu groups (the external editor).
+  setTargetAnnotation(annotation);
+  setMultiSelectCount(count);
+  setMenuType('annotationMulti');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function showPageMenu(x, y) {
+  setMenuType('page');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function showTextSelectionMenu(x, y) {
+  setMenuType('textSelection');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function showBookmarkMenu(x, y) {
+  setMenuType('bookmark');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function showThumbnailMenu(x, y, pageNum) {
+  setTargetPage(pageNum);
+  setMenuType('thumbnail');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+// Properties toolbar: the document ▾ (Document menu commands).
+export function showDocumentMenu(x, y) {
+  setMenuType('document');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+// Properties toolbar: the markup type ▾ (style tools for the selection).
+export function showMarkupStyleMenu(x, y) {
+  setMenuType('markupStyle');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+// Right-click on a document tab.
+export function showDocTabMenu(x, y, index) {
+  setTargetTab(index);
+  setMenuType('docTab');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+// The ▾ at the right end of the tab strip: the open documents.
+export function showDocListMenu(x, y) {
+  setMenuType('docList');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+// Right-click on a panel tab (access bar): Show ▸, Hide, Attach ▸.
+export function showPanelTabMenu(x, y, panelId, { titleOf } = {}) {
+  setTargetPanel({ id: panelId, titleOf: typeof titleOf === 'function' ? titleOf : null });
+  setMenuType('panelTab');
+  setPosition({ x, y });
+  setVisible(true);
+}
+
+export function hideMenu() {
+  setVisible(false);
+}
+
+export {
+  visible, menuType, position, targetAnnotation, multiSelectCount, targetPage, vertexContext,
+  targetTab, targetPanel, targetMarkupGroup,
+};

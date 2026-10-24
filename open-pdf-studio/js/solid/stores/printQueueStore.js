@@ -1,0 +1,110 @@
+// Print-queue for the "Open PDF Printer" virtual printer.
+//
+// The printer's collection port writes every print job to
+// %LOCALAPPDATA%/OpenPDFPrinter/spool/latest.pdf; the Rust side sweeps that
+// into unique job_<epoch>.pdf files (virtual_printer_collect) and lists them
+// (virtual_printer_jobs). This store polls the sweep while the app runs and
+// pops the queue dialog whenever a NEW job arrives — so printing from any
+// application opens the STANDALONE catch window (a separate Tauri window,
+// not an in-app dialog).
+
+import { createSignal } from 'solid-js';
+import { isTauri } from '../../core/platform.js';
+import { edition } from '../../editions/active.js';
+
+const [jobs, setJobs] = createSignal([]);
+const [busy, setBusy] = createSignal(false);
+export { jobs as printQueueJobs, busy as printQueueBusy };
+
+const POLL_MS = 2500;
+let _timer = null;
+let _knownFiles = new Set();
+
+function _invoke(cmd, args) {
+  const inv = window.__TAURI__?.core?.invoke;
+  if (!inv) return Promise.reject(new Error('desktop only'));
+  return inv(cmd, args);
+}
+
+/** Sweep the spool and refresh the job list. Returns the fresh jobs. */
+export async function refreshPrintQueue() {
+  try {
+    await _invoke('virtual_printer_collect');
+    const list = await _invoke('virtual_printer_jobs');
+    setJobs(Array.isArray(list) ? list : []);
+    return jobs();
+  } catch (_) {
+    return jobs();
+  }
+}
+
+export async function deletePrintJob(file) {
+  try { await _invoke('virtual_printer_delete_job', { file }); } catch (_) {}
+  await refreshPrintQueue();
+}
+
+/** Open (or focus) the STANDALONE print-queue window — a separate Tauri
+ *  window beside the main app, NOT an in-app dialog. Loads the frontend in
+ *  print-queue mode (?view=printqueue → main.js renders only PrintQueueWindow). */
+export async function openPrintQueueWindow() {
+  const wv = window.__TAURI__?.webviewWindow;
+  if (!wv?.WebviewWindow) return;
+  const W = wv.WebviewWindow;
+  const label = 'print-queue';
+  // Reuse an already-open window: just show + focus it.
+  try {
+    const existing = await W.getByLabel(label);
+    if (existing) { try { await existing.show(); await existing.setFocus(); } catch (_) {} return; }
+  } catch (_) {}
+  try {
+    const win = new W(label, {
+      url: 'index.html?view=printqueue',
+      title: `${edition.productName} — Print jobs`,
+      width: 640,
+      height: 540,
+      minWidth: 420,
+      minHeight: 320,
+      resizable: true,
+      decorations: true,
+    });
+    win.once('tauri://error', (e) => console.warn('[printqueue] window error:', e));
+  } catch (e) {
+    console.warn('[printqueue] could not open window:', e);
+  }
+}
+
+async function _tick() {
+  const list = await refreshPrintQueue();
+  const files = new Set(list.map(j => j.file));
+  let hasNew = false;
+  for (const f of files) {
+    if (!_knownFiles.has(f)) hasNew = true;
+  }
+  _knownFiles = files;
+  // A new captured print opens the standalone catch window (beside the app).
+  if (hasNew) {
+    openPrintQueueWindow();
+  }
+}
+
+/** Start the background watcher (call once at app start). No-ops when the
+ *  virtual printer isn't installed; re-checks after the user installs it
+ *  via startPrintQueueWatcher() from the preferences tab. */
+export async function startPrintQueueWatcher() {
+  if (!isTauri() || _timer) return;
+  try {
+    const installed = await _invoke('is_virtual_printer_installed');
+    if (!installed) return;
+  } catch (_) {
+    return;
+  }
+  // Seed the known set WITHOUT popping the dialog for jobs that were already
+  // sitting in the spool from a previous session.
+  const initial = await refreshPrintQueue();
+  _knownFiles = new Set(initial.map(j => j.file));
+  _timer = setInterval(() => { _tick(); }, POLL_MS);
+}
+
+export function stopPrintQueueWatcher() {
+  if (_timer) { clearInterval(_timer); _timer = null; }
+}

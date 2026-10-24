@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS entitlements voor Open PDF Studio.
+
+  Alleen gelezen door de macOS-bundler (bundle.macOS.entitlements in
+  tauri.conf.json). Heeft GEEN effect op de Windows- (nsis) of Linux-
+  (deb/appimage) builds.
+
+  Waarom deze keys:
+  - allow-jit / allow-unsigned-executable-memory: WKWebView draait
+    JavaScriptCore met JIT. Onder hardened runtime (vereist voor
+    Apple-notarisatie) crasht de WebView zonder deze twee entitlements.
+  - disable-library-validation: de app laadt de PDFium-dynamische
+    bibliotheek en start de `pdfium-worker`-sidecar. Onder hardened
+    runtime weigert library validation elke dylib/executable die niet
+    met hetzelfde Team-ID is gesigneerd -> directe start-crash. Deze
+    key staat het laden toe.
+  - network.client: updater en reqwest-uploads.
+  - files.user-selected.read-write: de systeem-bestandsdialoog voor
+    openen/opslaan van PDF's.
+
+  Onder ad-hoc signing (signingIdentity "-", zonder hardened runtime)
+  zijn de cs.*-keys onschadelijke no-ops; ze worden pas actief zodra de
+  release-pipeline met een echte Apple Developer ID + hardened runtime +
+  notarisatie signeert.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>

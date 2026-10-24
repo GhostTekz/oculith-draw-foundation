@@ -1,0 +1,80 @@
+/* Line Styles manager and the Properties line-style picker (docs/LINE-STYLES.md).
+   Oculith tokens only; small radii. */
+
+.ls-preview { display: block; color: var(--ox-text); }
+
+.ls-picker { flex-wrap: wrap; }
+.ls-picker-row { display: flex; flex: 1; gap: 4px; min-width: 0; }
+.ls-picker-row select { flex: 1; min-width: 0; }
+.ls-picker-preview { margin-left: 74px; margin-top: 2px; }
+.ls-manage-btn { flex: 0 0 auto; }
+
+.ls-dialog { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+.ls-body { display: flex; flex-direction: column; gap: var(--ox-sp-2); padding: var(--ox-sp-3); overflow: auto; }
+.ls-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--ox-sp-2); }
+.ls-footer-msg { font-size: var(--ox-fs-sm); color: var(--ox-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ls-error { color: var(--ox-danger-ink); }
+
+.ls-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--ox-line-2); }
+.ls-tab {
+  background: transparent; color: var(--ox-text-2); border: 1px solid transparent; border-bottom: none;
+  border-radius: var(--ox-r-xs) var(--ox-r-xs) 0 0; padding: var(--ox-sp-1) var(--ox-sp-3);
+  font: inherit; font-size: var(--ox-fs-sm); cursor: default;
+}
+.ls-tab.active { color: var(--ox-text); background: var(--ox-surface-2); border-color: var(--ox-line-2); }
+
+.ls-layout { display: grid; grid-template-columns: 230px 1fr; gap: var(--ox-sp-3); min-height: 380px; }
+.ls-list {
+  border: 1px solid var(--ox-line-2); border-radius: var(--ox-r-sm); background: var(--ox-surface-0);
+  overflow-y: auto; max-height: 520px;
+}
+.ls-list-row { padding: var(--ox-sp-1) var(--ox-sp-2); border-bottom: 1px solid var(--ox-line); cursor: default; }
+.ls-list-row:hover { background: var(--ox-surface-3); }
+.ls-list-row.active { background: var(--ox-accent-soft); box-shadow: inset 2px 0 0 var(--ox-accent); }
+.ls-list-name { display: flex; align-items: center; gap: var(--ox-sp-1); font-size: var(--ox-fs-sm); color: var(--ox-text); }
+.ls-badge {
+  font-size: var(--ox-fs-2xs); color: var(--ox-text-3); border: 1px solid var(--ox-line-2);
+  border-radius: var(--ox-r-xs); padding: 0 4px;
+}
+
+.ls-editor { display: flex; flex-direction: column; gap: var(--ox-sp-2); min-width: 0; }
+.ls-actions { display: flex; align-items: center; gap: var(--ox-sp-1); flex-wrap: wrap; font-size: var(--ox-fs-sm); }
+.ls-spacer { flex: 1; }
+.ls-save-row { justify-content: flex-end; }
+.ls-preview-box {
+  background: #ffffff; border: 1px solid var(--ox-line-2); border-radius: var(--ox-r-sm);
+  padding: var(--ox-sp-1); align-self: flex-start;
+}
+.ls-preview-box .ls-preview { color: #1d1d1f; }
+.ls-hint { margin: 0; font-size: var(--ox-fs-xs); color: var(--ox-text-3); }
+.ls-fields { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ox-sp-2); min-width: 0; }
+.ls-row { display: flex; align-items: center; gap: var(--ox-sp-2); font-size: var(--ox-fs-sm); }
+.ls-row input[type="text"] { flex: 1; min-width: 0; }
+.ls-check { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: var(--ox-fs-sm); }
+.ls-section-head {
+  display: flex; align-items: center; gap: var(--ox-sp-1); font-size: var(--ox-fs-xs);
+  font-weight: var(--ox-fw-medium); color: var(--ox-text-2); text-transform: uppercase; letter-spacing: var(--ox-tracking-caps);
+}
+.ls-section-head span { flex: 1; }
+.ls-small { padding: 1px 8px; min-height: 0; min-width: 0; height: auto; font-size: var(--ox-fs-xs); }
+.ls-table td:last-child { width: 1%; white-space: nowrap; }
+.ls-table { width: 100%; border-collapse: collapse; font-size: var(--ox-fs-sm); }
+.ls-table th { text-align: left; font-weight: var(--ox-fw-medium); color: var(--ox-text-3); font-size: var(--ox-fs-xs); padding: 2px 4px; }
+.ls-table td { padding: 2px 4px; }
+.ls-table input, .ls-table select, .ls-row input, .ls-actions select {
+  background: var(--ox-surface-2); color: var(--ox-text); border: 1px solid var(--ox-line-3);
+  border-radius: var(--ox-r-xs); padding: 2px 4px; font: inherit; font-size: var(--ox-fs-sm); box-sizing: border-box;
+}
+.ls-table input[type="number"] { width: 64px; }
+.ls-table input.ls-dash { width: 100%; min-width: 120px; }
+.ls-table input.ls-mark-text { width: 90px; }
+.ls-symbol-cell { display: inline-flex; align-items: center; gap: 4px; }
+.ls-fields:disabled { opacity: 0.75; }
+
+.ls-hatch { display: flex; flex-direction: column; gap: var(--ox-sp-2); min-height: 300px; }
+.ls-hatch-list { border: 1px solid var(--ox-line-2); border-radius: var(--ox-r-sm); background: var(--ox-surface-0); max-height: 420px; overflow-y: auto; }
+.ls-hatch-row { display: flex; align-items: center; gap: var(--ox-sp-2); padding: var(--ox-sp-1) var(--ox-sp-2); border-bottom: 1px solid var(--ox-line); }
+.ls-hatch-row img { border-radius: var(--ox-r-xs); flex: 0 0 auto; }
+.ls-hatch-row .ls-list-name { flex: 1; flex-direction: column; align-items: flex-start; gap: 0; }
+.ls-hatch-desc { font-size: var(--ox-fs-xs); color: var(--ox-text-3); }
+.ls-empty { padding: var(--ox-sp-3); color: var(--ox-text-3); font-size: var(--ox-fs-sm); }

@@ -1,0 +1,14 @@
+/* Tool Chest: symbol count tool form (SymbolCountPresetForm.jsx), opened from
+   a tool set's ⚙ menu (New Symbol Count…) inside the section (tc-inline-form). */
+.scp-form { flex-direction: row; align-items: flex-end; margin-top: 0; }
+.scp-heading { flex: 1 0 100%; color: var(--theme-text); font-size: var(--ox-fs-xs); font-weight: 600; }
+.scp-grid { flex: 1 0 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 3px; }
+.scp-form .scp-symbol { display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 !important;
+  background: #ffffff !important; border: 1px solid var(--theme-panel-border) !important; border-radius: var(--ox-r-xs); }
+.scp-form .scp-symbol.active { border-color: var(--theme-accent) !important; box-shadow: 0 0 0 1px var(--theme-accent); }
+.scp-field { display: flex; flex: 1 0 100%; flex-direction: column; gap: 2px; color: var(--theme-panel-tab-text); font-size: var(--ox-fs-2xs); }
+.scp-field.scp-narrow { flex: 1 0 40%; }
+.scp-form .scp-field input:not([type="checkbox"]) { flex: 0 0 auto; width: 100%; }
+.scp-form .scp-field input[type="color"] { height: 22px; padding: 1px 2px; cursor: pointer; }
+.scp-hint { flex: 1 0 100%; margin: 0; color: var(--theme-panel-tab-text); font-size: var(--ox-fs-2xs); }
+.tc-tool-icon-count .scp-preview { flex: 0 0 auto; background: #ffffff; border-radius: var(--ox-r-xs); }

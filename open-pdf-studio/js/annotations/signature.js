@@ -1,0 +1,8 @@
+import { openDialog } from '../bridge.js';
+
+export function showSignatureDialog(x, y) {
+  openDialog('signature', { x, y });
+}
+
+// No-op init (kept for backward compatibility during transition)
+export function initSignatureDialog() {}

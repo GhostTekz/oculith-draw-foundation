@@ -1,0 +1,212 @@
+/* Document tabs (external plan-review files): a 34px strip in the chrome colour. The active tab
+   takes the canvas colour and joins the canvas below it (no bottom border);
+   inactive tabs stay chrome. No "+" button: a ▾ at the far right lists the
+   open documents. The #document-tabs selectors outrank the older sizing in
+   oculith-workspace.css (loaded later). */
+#document-tabs.document-tabs {
+  display: flex;
+  align-items: stretch;
+  position: relative; /* anchor for the .drag-dock-target drop-zone label */
+  height: 34px;
+  min-height: 34px;
+  padding-left: 0;
+  background: var(--theme-panel-bg);
+  box-shadow: inset 0 -1px 0 var(--theme-panel-border, var(--theme-tab-border));
+  overflow: hidden;
+  user-select: none;
+}
+
+.document-tabs-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.document-tabs-strip::-webkit-scrollbar {
+  display: none;
+}
+
+#document-tabs .document-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 4px;
+  min-width: 120px;
+  max-width: 240px;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  background: var(--theme-panel-bg);
+  border-right: 1px solid var(--theme-panel-border, var(--theme-tab-border));
+  border-bottom: 1px solid var(--theme-panel-border, var(--theme-tab-border));
+  user-select: none;
+}
+
+#document-tabs .document-tab:hover {
+  background: var(--theme-hover, var(--theme-tab-hover));
+}
+
+/* The active tab is the canvas: same colour and no bottom line, so the two
+   read as one surface. */
+#document-tabs .document-tab.active {
+  background: var(--theme-content-bg);
+  border-bottom-color: var(--theme-content-bg);
+  box-shadow: inset 0 2px 0 var(--theme-tab-active-accent, var(--ox-accent));
+}
+
+.document-tab-select {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.document-tab-select:focus-visible,
+.document-tab-close:focus-visible,
+.document-tabs-list:focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: -2px;
+}
+
+#document-tabs .document-tab-title {
+  flex: 1;
+  overflow: hidden;
+  padding-right: 4px;
+  color: var(--theme-tab-text);
+  font-size: var(--ox-fs-sm, 12px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#document-tabs .document-tab.active .document-tab-title {
+  color: var(--theme-tab-active-text);
+}
+
+.document-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: var(--theme-tab-close-color);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+}
+
+/* × on the active tab, and on hover. */
+.document-tab:hover .document-tab-close,
+.document-tab.active .document-tab-close,
+.document-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.document-tab-close:hover {
+  background: var(--ox-danger-soft, var(--theme-app-menu-item-hover));
+  color: var(--ox-danger-ink, var(--theme-app-menu-item-hover-text));
+}
+
+/* Unsaved changes: '*' before the name, in the accent colour. */
+.document-tab-modified {
+  color: var(--theme-tab-modified);
+  font-weight: bold;
+}
+
+.document-tab-modified:not(:empty) {
+  margin-right: 3px;
+}
+
+.document-tab-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  margin-right: 8px;
+  padding: 0 4px;
+  border: 1px solid var(--theme-tab-active-accent);
+  border-radius: var(--ox-r-xs, 3px);
+  outline: none;
+  background: var(--theme-surface);
+  color: var(--theme-tab-active-text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.document-tab.dragging {
+  opacity: 0.4;
+}
+
+.document-tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--theme-tab-active-accent);
+}
+
+/* The open-documents ▾ at the far right. */
+.document-tabs-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--theme-panel-border, var(--theme-tab-border));
+  border-bottom: 1px solid var(--theme-panel-border, var(--theme-tab-border));
+  background: transparent;
+  color: var(--theme-text-secondary);
+}
+
+.document-tabs-list svg {
+  width: 16px;
+  height: 16px;
+}
+
+.document-tabs-list:hover {
+  background: var(--theme-hover, var(--theme-tab-hover));
+  color: var(--theme-text);
+}
+
+/* Cross-instance re-dock drop zone: when a PDF is dragged from another app
+   instance over this window's tab bar, the bar lights up to preview where the
+   tab will land. Flat accent: inset outline. */
+#document-tabs.document-tabs.drag-dock-target {
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  box-shadow: inset 0 0 0 2px var(--theme-tab-active-accent, var(--theme-accent));
+}
+
+.document-tabs.drag-dock-target::after {
+  content: 'Sleep hier om te koppelen';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 4px;
+  padding: 2px 10px;
+  background: var(--theme-tab-active-accent, var(--theme-accent));
+  color: var(--theme-app-menu-on-accent, var(--theme-file-tab-text));
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.document-tabs-empty {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--theme-tab-empty-text);
+  font-size: 12px;
+}

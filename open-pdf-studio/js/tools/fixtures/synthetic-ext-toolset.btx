@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<BluebeamRevuToolSet Version="1">
+  <Title>789c0baecc2bc9482dc94c5608ce2c4955084e2d0100423e06bd</Title>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000000</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationSquare</Type>
+    <Raw>789c1d8cb10ac23010407fe5c664f12e8a4e2150d3c5d5141c4a87361c5a9144e315eddf4b1c1ebcb73c6bb15b9f8c4d4a59302c93d40aaf652c8c678ed21b22f87320303b1ad0f7060868c0533553ed18acc50b6c3160eb1cfa0668b3afb7bb6a732e30e5af469f937092b70a9f395d213e782c1a3b15d6243796396ae77ebf1a2a9a</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>0</Index>
+    <Mode>drawing</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000001</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationLine</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d5f7c9cc4bd50f4a4d2e8936503050303400e1587d1f380fc4718dd6f7cbcf4bd5f72f48cd732c2aca2f8fd577862888d5770ab6b1d10f5730d433b5b303199aa50156a169670700c2001cb1</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>1</Index>
+    <Mode>drawing</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000002</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationCircle</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d577ce2c4ace49d50f4a4d2e89365030503001a1587d671047cf54c12056dfd3393a56df29bf2825b508acc23816a4394b2328332f5dd3ce0e006410161a</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>2</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000003</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationFreeText</Type>
+    <Raw>789c3d8dc10a824014457fe52e6736be1975a08508321105d1a266a72e2a9e418813fa8cfafb30a2c5857336e716059de68bbc1f4c9b9139f04b6817feeccf7d1f67a1235fa53630b0a9416e5a5a57eaab186fa02df74fd814a1d3e46b0b0bdb92dfd72e7158961b640e2e4b56c85cbb1cded5afacc9c7417890491da2301a3531371a952ecb0f282f2cea</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>3</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000004</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationPolygon</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d50fc8cfa94ccfcfd37772b5b1d10fd677d6f75430b4b3d30f4b2d2ac94c4e2d8e36503050308512c620dad82056df39da50c140c12016644a9646506a596671667e9e42724e7e698aa69d1d0033921b7f</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>4</Index>
+    <Mode>drawing</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000005</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationPolyLine</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d50fc8cfa9f4c9cc4bd50f4b2d2ac94c4e2d8e3634503034503081912606b1faced1366eae6e6e760a060a609e819e910214c7ea3b05dbd8e8872b18d9d9810ccdd2082acdd3b4b3030095611ad4</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>5</Index>
+    <Mode>drawing</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000006</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationInk</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d5f7cccb06619fcce292e868030503055305530543030583d8587d67b080412c48719646406a9ea69d1d00164310ea</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>6</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000007</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationHighlight</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d5f7c84ccfc8c94ccf28d10f2c4d4c09c8cfcc2b298e365030345030059320686aa06010abef1c6da86008620497266569c0f569dad90100d89c179a</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>7</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000008</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationText</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d50f49ad28d1f74bcc4dd577cecfcd4dcd2bd1778e3654305430880529c9d2f0cb2f49d5b4b30300ac7c103c</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>8</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000009</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationLine</Type>
+    <Raw>789cb3b1d10f2e4d2aa92c48d5f7c9cc4bd5f70c01d32e99b9a979c599f979fa3ed1060a060aa6060a06b1fabea989c5a545a93636fa21200d50ae9d1dc8882c0d9fd4bcf4920c4d3b3b009ad61bb5</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>9</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000010</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationSquare</Type>
+    <Raw>&lt;&lt;/Subtype/Square/Rect[0 0 20 20]/C[0 0 0]/Subj(Plain raw)&gt;&gt;</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>10</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+  <ToolChestItem Version="1">
+    <Name>SYNTH00000000011</Name>
+    <Type>Bluebeam.PDF.Annotations.AnnotationSquare</Type>
+    <Raw>789cdeadbeef</Raw>
+    <X>5.5</X>
+    <Y>5.5</Y>
+    <Index>11</Index>
+    <Mode>properties</Mode>
+  </ToolChestItem>
+</BluebeamRevuToolSet>

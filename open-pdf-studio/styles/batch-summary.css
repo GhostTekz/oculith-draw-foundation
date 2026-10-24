@@ -1,0 +1,127 @@
+/* Batch ▸ Summary dialog (js/solid/components/dialogs/BatchSummaryDialog.jsx) */
+.batch-summary-dialog { width: 560px; max-width: calc(100vw - 32px); }
+
+.batch-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ox-sp-2, 8px);
+  font-size: var(--ox-fs-sm, 12px);
+  color: var(--ox-text, var(--theme-text));
+}
+
+.batch-summary-section-title {
+  font-weight: var(--ox-fw-medium, 500);
+  color: var(--ox-text-2, var(--theme-text-secondary));
+}
+
+.batch-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ox-sp-1, 4px);
+}
+
+.batch-summary-spacer { flex: 1; }
+
+.batch-summary-list {
+  height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-surface-1, var(--theme-surface));
+}
+
+.batch-summary-empty {
+  padding: var(--ox-sp-3, 12px);
+  color: var(--ox-text-3, var(--theme-text-secondary));
+}
+
+.batch-summary-file {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ox-sp-2, 8px);
+  padding: 3px var(--ox-sp-2, 8px);
+  border-bottom: 1px solid var(--ox-line, transparent);
+}
+
+.batch-summary-file.selected { background: var(--ox-selection, var(--theme-accent-soft)); }
+
+.batch-summary-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-summary-file-status {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ox-text-3, var(--theme-text-secondary));
+}
+
+.batch-summary-file-status.ok { color: var(--ox-ok, #2e7d32); }
+.batch-summary-file-status.error { color: var(--ox-danger, #c62828); }
+.batch-summary-file-status.busy { color: var(--ox-accent, var(--theme-accent)); }
+
+.batch-summary-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ox-sp-2, 8px) var(--ox-sp-5, 20px);
+  align-items: center;
+}
+
+.batch-summary-option {
+  display: flex;
+  align-items: center;
+  gap: var(--ox-sp-2, 8px);
+}
+
+.batch-summary-label { color: var(--ox-text-2, var(--theme-text-secondary)); }
+
+.batch-summary-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.batch-summary-check input { accent-color: var(--ox-accent, var(--theme-accent)); }
+
+.batch-summary-select {
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-control, var(--theme-surface));
+  color: inherit;
+  font: inherit;
+}
+
+.batch-summary-progress {
+  height: 6px;
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-surface-3, var(--theme-border));
+  overflow: hidden;
+}
+
+.batch-summary-progress-bar {
+  height: 100%;
+  background: var(--ox-accent, var(--theme-accent));
+}
+
+.batch-summary-progress-text,
+.batch-summary-footer-left {
+  color: var(--ox-text-3, var(--theme-text-secondary));
+  font-size: var(--ox-fs-xs, 11px);
+}
+
+.batch-summary-message {
+  padding: var(--ox-sp-2, 8px);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-surface-2, var(--theme-bg));
+}
+
+.batch-summary-footer-right {
+  display: flex;
+  gap: 6px;
+}

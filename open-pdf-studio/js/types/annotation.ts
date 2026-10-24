@@ -1,0 +1,258 @@
+export type AnnotationType =
+  | 'highlight' | 'textHighlight' | 'textStrikethrough' | 'textUnderline' | 'textSquiggly'
+  | 'caret'
+  | 'draw' | 'line' | 'arrow' | 'box' | 'circle'
+  | 'textbox' | 'callout' | 'comment' | 'count' | 'stamp' | 'image' | 'signature'
+  | 'polygon' | 'cloud' | 'cloudPolyline' | 'polyline' | 'text'
+  | 'arc' | 'spline' | 'splineArrow' | 'redaction'
+  | 'measureDistance' | 'measureArea' | 'measurePerimeter' | 'measureAngle'
+  | 'filledArea'
+  | 'mask' | 'viewport' | 'scheduleTable' | 'scaleBar'
+  | 'scaleRegion'
+  | 'parametricSymbol'
+  | 'stavenreeks'
+  | 'betonbalk'
+  | 'systeemraster';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface AnnotationBase {
+  id: string;
+  type: AnnotationType;
+  page: number;
+  author: string;
+  subject: string;
+  createdAt: string;
+  modifiedAt: string;
+  opacity: number;
+  locked: boolean;
+  printable: boolean;
+  readOnly: boolean;
+  marked: boolean;
+  icon?: string;
+  color?: string;
+  lineWidth?: number;
+  borderStyle?: string;
+  replies?: AnnotationReply[];
+  status?: string;
+  rotation?: number;
+  /** Annotatielaag (#468): id uit doc.annotationLayers; ontbreekt = standaardlaag. */
+  layer?: string;
+}
+
+export interface RectAnnotation extends AnnotationBase {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fillColor?: string;
+  fillNone?: boolean;
+  strokeColor?: string;
+}
+
+export interface LineAnnotation extends AnnotationBase {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  startHead?: string;
+  endHead?: string;
+  headSize?: number;
+}
+
+export interface DrawAnnotation extends AnnotationBase {
+  path: Point[];
+}
+
+export interface PolylineAnnotation extends AnnotationBase {
+  points: Point[];
+}
+
+export interface TextAnnotation extends AnnotationBase {
+  x: number;
+  y: number;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  textAlign?: string;
+}
+
+export interface Leader {
+  id: string;
+  tipX: number;
+  tipY: number;
+  kneeX: number;
+  kneeY: number;
+  endStyle?: 'arrow' | 'circle';
+}
+
+export interface TextboxAnnotation extends RectAnnotation {
+  /** Inline opmaak per regel: delen van de tekst vet/cursief (zie textbox-layout.js). */
+  textRuns?: Array<Array<{ text: string; bold?: boolean; italic?: boolean; color?: string }>>;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  leaders?: Leader[];
+}
+
+export interface CalloutAnnotation extends RectAnnotation {
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  arrowX?: number;
+  arrowY?: number;
+  kneeX?: number;
+  kneeY?: number;
+}
+
+export interface CommentAnnotation extends AnnotationBase {
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  text?: string;
+}
+
+export interface ImageAnnotation extends AnnotationBase {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  imageData?: string;
+}
+
+export interface MeasureAnnotation extends AnnotationBase {
+  measureValue?: number;
+  measureUnit?: string;
+}
+
+export interface AnnotationReply {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+}
+
+/** Union of all annotation shapes */
+export type Annotation = AnnotationBase & {
+  // Geometry — present depending on type
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
+  path?: Point[];
+  points?: Point[];
+  controlPoints?: Point[];  // Spline control points
+  holes?: Point[][];  // Cutout polygons for measureArea
+  // Text
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  textAlign?: string;
+  // Appearance
+  color?: string;
+  fillColor?: string;
+  fillNone?: boolean;
+  strokeColor?: string;
+  lineWidth?: number;
+  borderStyle?: string;
+  borderWidth?: number;
+  // Hatch pattern
+  hatchPattern?: string;
+  /** Rechthoek: beide diagonalen tekenen (kruis). */
+  cross?: boolean;
+  hatchColor?: string;
+  hatchScale?: number;
+  hatchAngle?: number;
+  // Arrow/line
+  startHead?: string;
+  endHead?: string;
+  headSize?: number;
+  // Callout
+  arrowX?: number;
+  arrowY?: number;
+  kneeX?: number;
+  kneeY?: number;
+  // Textbox leaders (multi-leader generalisation)
+  leaders?: Leader[];
+  // Image/stamp
+  imageData?: string;
+  // Measurement
+  measureValue?: number;
+  measureUnit?: string;
+  measureText?: string;
+  measurePixels?: number;
+  measureScale?: number;
+  measurePrecision?: number;
+  measureName?: string;
+  // Label position override (absolute coords; defaults to centroid if unset)
+  labelX?: number;
+  labelY?: number;
+  // Angle measurement
+  point1?: Point;
+  vertex?: Point;
+  point2?: Point;
+  arcRadius?: number;
+  // Scale bar
+  pixelsPerUnit?: number;
+  divisions?: number;
+  totalUnits?: number;
+
+  // Arc
+  centerX?: number;
+  centerY?: number;
+  radius?: number;
+  startAngle?: number;
+  endAngle?: number;
+
+  // Viewport
+  name?: string;
+  scaleRatio?: string;
+
+  // Stavenreeks (wapeningsstaven-reeks). Alle geometrie volgt uit
+  // startX/startY/endX/endY — er is bewust GEEN rotation-veld.
+  count?: number;              // aantal staven (= poten/punten)
+  diameter?: number;           // staafdiameter in mm (6..40)
+  barLengthMm?: number;        // staaflengte in mm (0 = onbekend)
+  legDir?: 'down-left' | 'down-right' | 'up-left' | 'up-right';
+  legLength?: number;          // pootlengte in px (canvas)
+  lineTail?: number;           // uitloop van de aanhaallijn voorbij de laatste poot (px)
+  // fontSize (label-tekstgrootte) staat al bij de gedeelde tekst-props hierboven
+  labelSide?: 'start' | 'end'; // uiteinde waar het label "N ⌀ D" staat
+  ifcCategory?: string;        // IFC-categorie (mapping-laag → hoeveelheden)
+
+  // Scale Region (per-region calibration)
+  scaleString?: string;  // e.g. "1:100"
+  units?: string;        // 'mm' | 'cm' | 'm' | 'in' | 'ft'
+  label?: string;        // optional user label drawn in badge
+
+  // Verzameling en proefleescorrecties (#508)
+  groupId?: string | null;     // gedeeld door de leden van een verzameling of vervanging
+  /** Leesrichting met de klok mee in de paginaruimte: 0/90/180/270 (ontbreekt = 0). */
+  textDir?: number;
+  intent?: string;             // /IT, bijv. 'StrikeOutTextEdit' of 'Replace'
+  inReplyTo?: string;          // id van de ouder (bij een vervanging: het invoegteken)
+  replyType?: string;          // 'group' voor de doorhaling van een vervanging
+  symbol?: string;             // /Sy van een invoegteken: 'None' of 'P'
+  markedText?: string;         // doorgehaalde tekst (niet in /Contents)
+  nm?: string;                 // /NM uit het bestand
+  pdfSubject?: string;         // /Subj uit het bestand, ongewijzigd
+};
+
+export interface AnnotationBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}

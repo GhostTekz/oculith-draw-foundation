@@ -1,0 +1,221 @@
+{
+  "source": "open-pdf-studio/package-lock.json",
+  "packages": [
+    {
+      "name": "@babel/runtime",
+      "version": "7.28.6",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/@babel/runtime/LICENSE"
+    },
+    {
+      "name": "@crabnebula/tauri-plugin-drag",
+      "version": "2.1.0",
+      "licenseFromLockfile": null,
+      "noticeFile": null
+    },
+    {
+      "name": "@embedpdf/pdfium",
+      "version": "2.15.1",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/@embedpdf/pdfium/LICENSE"
+    },
+    {
+      "name": "@napi-rs/canvas",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/@napi-rs/canvas/LICENSE"
+    },
+    {
+      "name": "@napi-rs/canvas-android-arm64",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-darwin-arm64",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-darwin-x64",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-arm-gnueabihf",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-arm64-gnu",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-arm64-musl",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-riscv64-gnu",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-x64-gnu",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-linux-x64-musl",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-win32-arm64-msvc",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@napi-rs/canvas-win32-x64-msvc",
+      "version": "1.0.9",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@pdf-lib/fontkit",
+      "version": "1.1.1",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@pdf-lib/standard-fonts",
+      "version": "1.0.0",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/@pdf-lib/standard-fonts/LICENSE.md"
+    },
+    {
+      "name": "@pdf-lib/upng",
+      "version": "1.0.1",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/@pdf-lib/upng/LICENSE"
+    },
+    {
+      "name": "@tauri-apps/api",
+      "version": "2.11.0",
+      "licenseFromLockfile": "Apache-2.0 OR MIT",
+      "noticeFile": null
+    },
+    {
+      "name": "@tauri-apps/plugin-dialog",
+      "version": "2.7.1",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-dialog/LICENSE.spdx"
+    },
+    {
+      "name": "@tauri-apps/plugin-fs",
+      "version": "2.5.1",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-fs/LICENSE.spdx"
+    },
+    {
+      "name": "@tauri-apps/plugin-os",
+      "version": "2.3.2",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-os/LICENSE.spdx"
+    },
+    {
+      "name": "@tauri-apps/plugin-process",
+      "version": "2.3.1",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-process/LICENSE.spdx"
+    },
+    {
+      "name": "@tauri-apps/plugin-shell",
+      "version": "2.3.5",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-shell/LICENSE.spdx"
+    },
+    {
+      "name": "@tauri-apps/plugin-updater",
+      "version": "2.10.0",
+      "licenseFromLockfile": "MIT OR Apache-2.0",
+      "noticeFile": "npm/@tauri-apps/plugin-updater/LICENSE.spdx"
+    },
+    {
+      "name": "csstype",
+      "version": "3.2.3",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/csstype/LICENSE"
+    },
+    {
+      "name": "i18next",
+      "version": "25.8.13",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/i18next/LICENSE"
+    },
+    {
+      "name": "i18next-browser-languagedetector",
+      "version": "8.2.1",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/i18next-browser-languagedetector/LICENSE"
+    },
+    {
+      "name": "pako",
+      "version": "1.0.11",
+      "licenseFromLockfile": "(MIT AND Zlib)",
+      "noticeFile": "npm/pako/LICENSE"
+    },
+    {
+      "name": "pdf-lib",
+      "version": "1.17.1",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/pdf-lib/LICENSE.md"
+    },
+    {
+      "name": "pdfjs-dist",
+      "version": "6.3.289",
+      "licenseFromLockfile": "Apache-2.0",
+      "noticeFile": "npm/pdfjs-dist/LICENSE"
+    },
+    {
+      "name": "seroval",
+      "version": "1.5.0",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/seroval/LICENSE"
+    },
+    {
+      "name": "seroval-plugins",
+      "version": "1.5.0",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/seroval-plugins/LICENSE"
+    },
+    {
+      "name": "solid-js",
+      "version": "1.9.11",
+      "licenseFromLockfile": "MIT",
+      "noticeFile": "npm/solid-js/LICENSE"
+    },
+    {
+      "name": "tslib",
+      "version": "1.14.1",
+      "licenseFromLockfile": "0BSD",
+      "noticeFile": "npm/tslib/LICENSE.txt"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "licenseFromLockfile": "Apache-2.0",
+      "noticeFile": "npm/typescript/LICENSE.txt"
+    }
+  ]
+}

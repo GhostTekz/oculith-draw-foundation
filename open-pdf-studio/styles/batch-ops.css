@@ -1,0 +1,66 @@
+/* Batch menu operations dialog (js/solid/components/dialogs/BatchOpsDialog.jsx).
+   File list, progress and footer reuse the Batch Summary classes. */
+.batch-ops-dialog { width: 600px; }
+.batch-ops-dialog .batch-summary-list { height: 150px; }
+
+.batch-ops-input,
+.batch-ops-number {
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-control, var(--theme-surface));
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+
+.batch-ops-input { width: 160px; }
+.batch-ops-number { width: 64px; }
+
+.batch-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ox-sp-1, 4px) var(--ox-sp-2, 8px);
+  width: 100%;
+}
+
+.batch-ops-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.batch-ops-field .batch-ops-input { width: 100%; }
+
+.batch-ops-note {
+  width: 100%;
+  color: var(--ox-text-3, var(--theme-text-secondary));
+  font-size: var(--ox-fs-xs, 11px);
+}
+
+.batch-ops-suffix .batch-ops-note { width: auto; }
+
+.batch-ops-output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ox-sp-1, 4px);
+}
+
+.batch-ops-suffix { padding-left: 20px; }
+
+.batch-ops-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ox-sp-2, 8px);
+  padding: var(--ox-sp-2, 8px);
+  border: 1px solid var(--ox-danger, #c62828);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--ox-surface-2, var(--theme-bg));
+}
+
+.batch-ops-danger.pref-btn-primary {
+  background: var(--ox-danger, #c62828);
+  border-color: var(--ox-danger, #c62828);
+}

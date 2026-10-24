@@ -1,0 +1,269 @@
+/* Navigation bar (the external editor F4): 34 px along the bottom of the canvas column
+   (.main-view), so it never runs under the side panels. Spec §1.6 / R8. */
+.nav-bar {
+  flex-shrink: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 6px;
+  background: var(--theme-status-bg);
+  border-top: 1px solid var(--theme-status-border);
+  color: var(--theme-status-nav-text);
+  font-size: var(--ox-fs-xs, 11px);
+  user-select: none;
+  cursor: default;
+  min-width: 0;
+  overflow: hidden;
+  container: navbar / inline-size;
+}
+
+.nav-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Auto basis: the sides share the spare room, so the page navigation sits
+   near the centre without the right side being clipped first. */
+.nav-bar-left,
+.nav-bar-right {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.nav-bar-right {
+  justify-content: flex-end;
+}
+
+.nav-bar-center {
+  flex: 0 0 auto;
+}
+
+.nav-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--theme-status-separator);
+  flex-shrink: 0;
+}
+
+.nav-btn,
+.nav-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: var(--theme-status-nav-text);
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.nav-caret {
+  width: 14px;
+}
+
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.nav-caret svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+}
+
+.nav-btn:hover:not(:disabled),
+.nav-caret:hover:not(:disabled) {
+  background: var(--theme-status-nav-hover);
+  color: var(--theme-status-text-value);
+}
+
+.nav-btn.active {
+  border-color: var(--ox-accent-line, var(--theme-status-separator));
+  background: var(--ox-accent-soft, var(--theme-status-active));
+  color: var(--theme-status-accent-ink, var(--theme-accent));
+}
+
+.nav-btn:disabled,
+.nav-caret:disabled {
+  opacity: 0.35;
+}
+
+.nav-bar button:focus-visible,
+.nav-bar input:focus-visible {
+  outline: 2px solid var(--theme-focus, var(--theme-accent));
+  outline-offset: 1px;
+}
+
+/* Page field: "A-101 (1 of 3)", about the external editor's 245 px. */
+.nav-page-input,
+.nav-zoom-input {
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 1px solid var(--theme-status-input-border, var(--theme-status-separator));
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-status-input-bg, var(--theme-status-nav-hover));
+  color: var(--theme-status-text-value);
+  font-family: var(--ox-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  outline: none;
+}
+
+.nav-page-input {
+  width: 200px;
+  margin: 0 4px;
+}
+
+.nav-zoom-input {
+  width: 54px;
+}
+
+.nav-page-input:focus,
+.nav-zoom-input:focus {
+  background: var(--theme-status-input-focus-bg, var(--theme-status-nav-hover));
+  border-color: var(--theme-focus, var(--theme-accent));
+}
+
+.nav-page-input.invalid {
+  border-color: var(--ox-danger, #d14);
+}
+
+.nav-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-readout {
+  padding: 0 6px;
+  font-family: var(--ox-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-status-text-value);
+  white-space: nowrap;
+}
+
+/* Page scale; a click opens Set Scale. Unset / only detected uses the
+   accent ink, never the "ok" look (same rule as the status bar). */
+.nav-scale {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: var(--theme-status-text-value);
+  font-family: var(--ox-font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nav-scale:hover {
+  background: var(--theme-status-nav-hover);
+  border-color: var(--theme-status-separator);
+}
+
+.nav-scale--unset {
+  color: var(--theme-status-accent-ink, var(--theme-status-nav-text));
+  font-family: inherit;
+  font-size: 11px;
+}
+
+/* Dimmer ☀▾ and profile 👤▾: a button and its menu caret. */
+.nav-split-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-popover {
+  position: fixed;
+  z-index: var(--ox-z-popover, 50);
+  min-width: 210px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ox-surface-2, var(--theme-status-bg));
+  border: 1px solid var(--ox-line-2, var(--theme-status-separator));
+  border-radius: var(--ox-r-sm, 5px);
+  box-shadow: var(--ox-shadow-2);
+  color: var(--theme-status-text-value);
+}
+
+.nav-popover-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.nav-popover-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--ox-accent, var(--theme-accent));
+}
+
+.nav-popover-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-popover-check svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+/* The canvas column is narrower than the external editor's window-wide bar once the side
+   panels are open, so lower-priority controls drop out as the bar narrows
+   (the View menu, the status bar and the shortcuts keep them reachable).
+   Order: zoom steps, two-page layouts, split views, profile, page size,
+   zoom field, tools and layouts. */
+@container navbar (max-width: 1180px) {
+  #nav-zoom-out, #nav-zoom-in { display: none; }
+}
+@container navbar (max-width: 1080px) {
+  #nav-layout-book, #nav-layout-facing { display: none; }
+}
+@container navbar (max-width: 1000px) {
+  #nav-unsplit, #nav-splitVertical, #nav-splitHorizontal, .nav-sep-split { display: none; }
+  .nav-profile { display: none; }
+  .nav-page-input { width: 150px; }
+}
+@container navbar (max-width: 820px) {
+  #nav-page-size, .nav-zoom, .nav-sep-zoom, #nav-tool-select-text { display: none; }
+}
+@container navbar (max-width: 660px) {
+  .nav-bar-left { display: none; }
+  .nav-page-input { width: 110px; }
+}
+
+/* Dimmer and document Dark Mode: only the PDF raster layers, never the
+   annotation canvases, so markups keep full strength. The variable is set
+   by stores/contentDisplay.js. */
+#pdf-canvas,
+#pdf-detail-canvas,
+.continuous-container canvas.pdf-canvas,
+.continuous-container canvas.pdf-canvas-sharp,
+.continuous-container canvas.pdf-detail-canvas {
+  filter: var(--ocu-content-filter, none);
+}

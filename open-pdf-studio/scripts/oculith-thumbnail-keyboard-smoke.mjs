@@ -1,0 +1,140 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createServer as createNetServer } from 'node:net';
+import { chromium } from 'playwright';
+import { PDFDocument } from 'pdf-lib';
+import { createServer } from 'vite';
+
+const directory = await mkdtemp(join(tmpdir(), 'oculith-thumbnail-keyboard-'));
+const pdf = await PDFDocument.create();
+for (let index = 0; index < 3; index++) pdf.addPage([612, 792]);
+const path = join(directory, 'three-pages.pdf');
+await writeFile(path, await pdf.save());
+
+let server;
+let browser;
+try {
+  const probe = createNetServer();
+  await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+  const port = probe.address().port;
+  await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+  server = await createServer({ server: { host: '127.0.0.1', port, strictPort: true, hmr: false }, logLevel: 'error' });
+  await server.listen();
+  browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
+  await page.evaluate(() => import('/js/pdf/loader.js').then(() => true));
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('.draw-open-button').click();
+  await (await chooser).setFiles(path);
+  await page.locator('#pdf-container.visible').waitFor();
+  await page.locator('#left-panel .left-panel-tab[data-panel="thumbnails"]').click();
+  const items = page.locator('#thumbnails-panel .thumbnail-item[data-page]');
+  await items.nth(2).waitFor();
+  assert.equal(await page.locator('#thumbnails-panel [role="listbox"]').getAttribute('aria-multiselectable'), 'true');
+  assert.equal(await items.first().getAttribute('aria-label'), 'Page 1');
+  assert.equal(await items.first().getAttribute('aria-selected'), 'true');
+
+  await items.first().focus();
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => document.querySelector('.thumbnail-item[data-page="2"]')?.getAttribute('aria-current') === 'page');
+  assert.equal(await items.nth(1).evaluate(el => document.activeElement === el), true);
+  assert.equal(await items.nth(1).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.evaluate(async () => (await import('/js/core/state.ts')).state.documents[0].currentPage), 2);
+
+  await page.keyboard.press('Shift+ArrowDown');
+  assert.equal(await items.nth(2).evaluate(el => document.activeElement === el), true);
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [2, 3]);
+  await page.keyboard.press('Control+Space');
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [2]);
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => document.querySelector('.thumbnail-item[data-page="1"]')?.getAttribute('aria-current') === 'page');
+  assert.equal(await items.first().evaluate(el => document.activeElement === el), true);
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => document.querySelector('.thumbnail-item[data-page="3"]')?.getAttribute('aria-current') === 'page');
+  assert.equal(await items.nth(2).evaluate(el => document.activeElement === el), true);
+  assert.equal(await page.evaluate(async () => (await import('/js/core/state.ts')).state.documents[0].currentPage), 3);
+  await page.keyboard.press('Shift+F10');
+  const menu = page.locator('.context-menu.visible');
+  await menu.waitFor();
+  const menuItems = menu.locator(':scope > .context-menu-item:not(.disabled)');
+  assert.equal(await menuItems.first().evaluate(el => document.activeElement === el), true);
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await menuItems.nth(1).evaluate(el => document.activeElement === el), true);
+  const submenu = menu.locator('.context-menu-submenu').first();
+  await submenu.focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await submenu.locator('.context-menu-submenu-content > .context-menu-item:not(.disabled)').first()
+    .evaluate(el => document.activeElement === el), true);
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await submenu.evaluate(el => document.activeElement === el), true);
+  const darkMenu = await menu.evaluate(el => getComputedStyle(el).backgroundColor);
+  const lightMenu = await menu.evaluate(el => {
+    document.documentElement.dataset.theme = 'light';
+    return getComputedStyle(el).backgroundColor;
+  });
+  assert.equal(darkMenu, 'rgb(17, 17, 21)');
+  assert.equal(lightMenu, 'rgb(251, 250, 249)');
+  await page.keyboard.press('Escape');
+  assert.equal(await items.nth(2).evaluate(el => document.activeElement === el), true);
+  await page.keyboard.press('Shift+F10');
+  await menu.waitFor();
+  await menu.getByRole('menuitem', { name: 'Select All Pages', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [1, 2, 3]);
+  assert.equal(await page.locator('.context-menu.visible').count(), 0);
+  await page.waitForFunction(() => document.activeElement === document.querySelector('.thumbnail-item[data-page="3"]'));
+  await page.keyboard.press('Control+Space');
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [1, 2]);
+  const addPage = page.locator('#thumbnails-panel .thumbnail-add-page');
+  assert.equal(await addPage.getAttribute('type'), 'button');
+  await addPage.focus();
+  await page.keyboard.press('Control+a');
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [1, 2]);
+  await page.keyboard.press('Delete');
+  assert.equal(await page.evaluate(async () => (await import('/js/solid/stores/dialogStore.js')).getDialogs().some(dialog => dialog.name === 'delete-pages')), false);
+  await items.nth(2).focus();
+  await items.nth(2).click({ button: 'right' });
+  await menu.waitFor();
+  await menu.getByRole('menuitem', { name: 'Deselect All', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement === document.querySelector('.thumbnail-item[data-page="3"]'));
+  assert.deepEqual(await items.evaluateAll(nodes => nodes.filter(el => el.getAttribute('aria-selected') === 'true').map(el => Number(el.dataset.page))), [3]);
+  await items.nth(2).click({ button: 'right' });
+  await menu.waitFor();
+  await menu.getByRole('menuitem', { name: 'Delete Pages', exact: true }).click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Delete Pages' });
+  await deleteDialog.waitFor();
+  await page.waitForFunction(() => document.querySelector('[role="dialog"][aria-modal="true"]')?.contains(document.activeElement));
+  await deleteDialog.getByRole('button', { name: 'Cancel' }).click();
+  await page.evaluate(async () => (await import('/js/solid/stores/dialogStore.js')).openDialog('confirm', {
+    title: 'Focus check', message: 'Keep focus in the dialog',
+  }));
+  const confirmDialog = page.getByRole('dialog', { name: 'Focus check' });
+  await confirmDialog.waitFor();
+  assert.equal(await confirmDialog.evaluate(el => el.contains(document.activeElement)), true);
+  await confirmDialog.focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await confirmDialog.getByRole('button', { name: 'No' }).evaluate(el => document.activeElement === el), true);
+  await page.keyboard.press('Tab');
+  assert.equal(await confirmDialog.locator('.modal-close-btn').evaluate(el => document.activeElement === el), true);
+  await confirmDialog.getByRole('button', { name: 'No' }).click();
+  await addPage.focus();
+  await page.evaluate(async () => (await import('/js/solid/stores/dialogStore.js')).openDialog('confirm', {
+    title: 'Return focus', message: 'Return to the control that opened this dialog',
+  }));
+  const returnDialog = page.getByRole('dialog', { name: 'Return focus' });
+  await returnDialog.waitFor();
+  assert.equal(await returnDialog.evaluate(el => el.contains(document.activeElement)), true);
+  await returnDialog.getByRole('button', { name: 'No' }).click();
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#thumbnails-panel .thumbnail-add-page'));
+  assert.deepEqual(errors, []);
+  console.log('Thumbnail menu smoke passed: keyboard/pointer focus, modal handoff and return, submenu navigation, dark/light theme');
+} finally {
+  await browser?.close();
+  await server?.close();
+  await rm(directory, { recursive: true, force: true });
+}

@@ -1,0 +1,10 @@
+[package]
+name = "ocg-render-copy"
+version = "0.1.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1"
+lopdf = "0.34"
+serde = { version = "1", features = ["derive"] }

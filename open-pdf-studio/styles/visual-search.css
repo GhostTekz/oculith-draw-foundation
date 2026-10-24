@@ -1,0 +1,108 @@
+/* --- Search panel ▸ Visual Search (VisualSearchSection.jsx) ---------------- */
+/* The panel now holds two sections: the text hits keep up to 40 % of it. */
+.ws-search-panel .ws-search-results { flex: 0 1 auto; max-height: 40%; }
+.vs-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: 1px solid var(--theme-panel-border);
+  font-size: var(--ox-fs-sm);
+  color: var(--theme-text);
+}
+.vs-head {
+  padding: 6px 10px 2px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+.vs-pick { display: flex; align-items: center; gap: 8px; padding: 4px 10px; }
+.vs-pick-text { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.vs-template {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs);
+  background: #ffffff;
+  image-rendering: pixelated;
+}
+.vs-options { display: flex; flex-direction: column; gap: 4px; padding: 4px 10px 6px; }
+.vs-field { display: flex; align-items: center; gap: 6px; }
+.vs-field > span { flex: 0 0 auto; color: var(--theme-text-secondary); }
+.vs-field select {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--theme-input-border);
+  border-radius: var(--ox-r-xs);
+  background: var(--theme-input-bg);
+  color: var(--theme-text);
+}
+.vs-check { display: flex; align-items: center; gap: 6px; }
+.vs-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.vs-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs);
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  cursor: pointer;
+}
+.vs-btn.primary { border-color: var(--ox-accent); background: color-mix(in srgb, var(--ox-accent) 22%, transparent); }
+.vs-btn:disabled { opacity: 0.5; cursor: default; }
+.vs-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ox-accent);
+  cursor: pointer;
+  font-size: inherit;
+}
+.vs-status { padding: 2px 10px 6px; color: var(--theme-text-secondary); min-height: 18px; }
+.vs-slider { display: flex; align-items: center; gap: 6px; padding: 2px 10px; }
+.vs-slider input { flex: 1; min-width: 0; }
+.vs-slider-value { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+.vs-bulk { display: flex; align-items: center; gap: 10px; padding: 2px 10px 4px; color: var(--theme-text-secondary); }
+.vs-bulk > span { flex: 1; }
+.vs-results {
+  flex: 1 1 auto;
+  min-height: 90px;
+  overflow-y: auto;
+  border-top: 1px solid var(--theme-panel-border);
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+.vs-row { display: flex; align-items: center; gap: 4px; padding: 0 6px 0 10px; }
+.vs-row:hover { background: var(--theme-hover); }
+.vs-row.excluded { opacity: 0.55; }
+.vs-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.vs-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs);
+  background: #ffffff;
+}
+.vs-row-page { flex: 1; }
+.vs-row-rot { color: var(--theme-text-secondary); width: 34px; text-align: right; }
+.vs-row-score { width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+.vs-empty { padding: 8px 10px; color: var(--theme-text-secondary); }
+.vs-create { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 8px; }

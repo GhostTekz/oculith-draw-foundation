@@ -1,0 +1,318 @@
+/* RTL (Right-to-Left) Layout Overrides for Arabic and Farsi */
+
+/*
+ * HOW RTL WORKS IN THIS CODEBASE:
+ *
+ * The global [dir="rtl"] rule sets `direction: rtl` on the root element.
+ * This AUTOMATICALLY reverses all `flex-direction: row` containers —
+ * flex items flow right-to-left instead of left-to-right.
+ *
+ * DO NOT add `flex-direction: row-reverse` for RTL — that creates a
+ * double reversal (row-reverse + direction:rtl = back to LTR).
+ *
+ * Only physical property swaps (border-left/right, margin-left/right)
+ * are needed here, since those don't respond to `direction`.
+ *
+ * Use `direction: ltr` on specific containers that should NOT reverse
+ * (e.g., directional navigation buttons, window controls).
+ */
+
+/* Global text direction */
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* ===== Form fields (global) ===== */
+
+/* Numeric inputs: digits are inherently LTR, so keep the field LTR for a
+   normal caret/selection behavior. text-align: right keeps the value on the
+   label side of the row in the mirrored layout. */
+[dir="rtl"] input[type="number"] {
+  direction: ltr;
+  text-align: right;
+}
+
+/* Placeholders: let each placeholder derive its direction from its own
+   first strong character (bidi isolation). Hebrew/Arabic text renders RTL,
+   while LTR content (number ranges like "1-5, 8", URLs, untranslated
+   English) keeps its reading order instead of getting mirrored. */
+[dir="rtl"] input:not([type="number"])::placeholder,
+[dir="rtl"] textarea::placeholder {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* Layout: left panel swaps to right side automatically via direction: rtl */
+[dir="rtl"] .left-panel {
+  border-right: none;
+  border-left: none;
+}
+
+
+/* Properties panel: swap border to right side */
+[dir="rtl"] .properties-panel {
+  border-left: none;
+  border-right: 1px solid var(--theme-panel-border);
+}
+
+/* PDF viewer: must always render LTR — PDF content has its own text direction */
+[dir="rtl"] #pdf-container {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Titlebar: keep LTR layout so window controls stay on the right (Windows standard) */
+[dir="rtl"] .title-bar {
+  direction: ltr;
+}
+
+/* Ribbon: border swaps for group separators */
+[dir="rtl"] .ribbon-content {
+  direction: rtl;
+}
+
+[dir="rtl"] .ribbon-group {
+  border-right: none;
+  border-left: 1px solid var(--theme-ribbon-group-border);
+  margin-right: 0;
+  margin-left: 8px;
+}
+
+[dir="rtl"] .ribbon-group:last-child {
+  border-left: none;
+  margin-left: 0;
+}
+
+/* App Menu / File menu */
+[dir="rtl"] .app-menu-overlay {
+  direction: rtl;
+}
+
+[dir="rtl"] .app-menu-sidebar {
+  border-right: none;
+  border-left: 1px solid var(--theme-app-menu-sidebar-border);
+}
+
+[dir="rtl"] .app-menu-back svg {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .app-menu-item {
+  text-align: right;
+}
+
+[dir="rtl"] .app-menu-item.active {
+  border-left: none;
+  padding-left: 20px;
+  border-right: 3px solid var(--theme-app-menu-accent-ink, var(--theme-accent));
+  padding-right: 17px;
+}
+
+[dir="rtl"] .app-menu-item-shortcut {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] .app-menu-menu-item .shortcut {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Document tabs: swap close button margin */
+[dir="rtl"] .doc-tab .tab-close {
+  margin-left: 0;
+  margin-right: 6px;
+}
+
+/* Status bar: page navigation keeps LTR order (directional arrows) */
+[dir="rtl"] .status-bar-center {
+  direction: ltr;
+}
+
+/* Context menu */
+[dir="rtl"] .context-menu {
+  text-align: right;
+}
+
+[dir="rtl"] .context-menu .menu-item .shortcut {
+  margin-left: 0;
+  margin-right: auto;
+  padding-left: 0;
+  padding-right: 16px;
+}
+
+[dir="rtl"] .context-menu .submenu-arrow {
+  transform: scaleX(-1);
+}
+
+/* Left panel tabs: swap border */
+[dir="rtl"] .left-panel-tabs {
+  border-right: none;
+  border-left: 1px solid var(--theme-panel-border);
+}
+
+/* Left panel scrollable containers: keep scrollbar on right side in RTL */
+[dir="rtl"] .thumbnails-container,
+[dir="rtl"] .bookmarks-container,
+[dir="rtl"] .annotations-list-content,
+[dir="rtl"] .attachments-container,
+[dir="rtl"] .signatures-container,
+[dir="rtl"] .layers-container,
+[dir="rtl"] .form-fields-container,
+[dir="rtl"] .destinations-container,
+[dir="rtl"] .tags-container,
+[dir="rtl"] .links-container {
+  direction: ltr;
+}
+
+[dir="rtl"] .thumbnails-container > *,
+[dir="rtl"] .bookmarks-container > *,
+[dir="rtl"] .annotations-list-content > *,
+[dir="rtl"] .attachments-container > *,
+[dir="rtl"] .signatures-container > *,
+[dir="rtl"] .layers-container > *,
+[dir="rtl"] .form-fields-container > *,
+[dir="rtl"] .destinations-container > *,
+[dir="rtl"] .tags-container > *,
+[dir="rtl"] .links-container > * {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Find bar */
+[dir="rtl"] .find-bar input[type="text"] {
+  text-align: right;
+}
+
+/* Preferences: swap tab border */
+[dir="rtl"] .pref-tabs {
+  border-right: none;
+  border-left: 1px solid var(--theme-pref-border);
+}
+
+[dir="rtl"] .pref-row label {
+  text-align: right;
+}
+
+/* Editable numeric combo (zoom %, pt, px, °): value is always a number, so
+   force LTR and align it to the suffix side; mirror the physical paddings. */
+[dir="rtl"] .pref-combo input[type="text"].pref-combo-input {
+  direction: ltr;
+  text-align: right;
+  padding: 0 6px 0 2px;
+}
+
+[dir="rtl"] .pref-combo-suffix {
+  padding-right: 0;
+  padding-left: 2px;
+}
+
+[dir="rtl"] .pref-combo-arrow {
+  padding: 0 0 0 6px;
+}
+
+[dir="rtl"] .pref-combo-option {
+  text-align: right;
+}
+
+/* Properties panel sections */
+[dir="rtl"] .prop-row label {
+  text-align: right;
+}
+
+/* Navigation icons: mirror directional arrows for RTL */
+[dir="rtl"] #first-page .ribbon-btn-icon,
+[dir="rtl"] #prev-page-ribbon .ribbon-btn-icon,
+[dir="rtl"] #next-page-ribbon .ribbon-btn-icon,
+[dir="rtl"] #last-page .ribbon-btn-icon {
+  transform: scaleX(-1);
+}
+
+/* ===== Dialog / Modal RTL overrides ===== */
+
+/* Modal header: swap title padding */
+[dir="rtl"] .modal-header {
+  padding-left: 0;
+  padding-right: 10px;
+}
+
+/* Modal footer: keep symmetric but ensure proper alignment */
+[dir="rtl"] .modal-footer {
+  direction: rtl;
+}
+
+/* Preferences tabs: swap active border and text alignment */
+[dir="rtl"] .pref-tab {
+  text-align: right;
+  border-right: none;
+  border-left: 3px solid transparent;
+}
+[dir="rtl"] .pref-tab.active {
+  border-right: none;
+  border-left-color: var(--theme-accent);
+}
+
+/* Print dialog: swap directional margins/padding */
+[dir="rtl"] .print-custom-row {
+  margin-left: 0;
+  margin-right: 52px;
+}
+[dir="rtl"] .print-checkbox-row {
+  padding-left: 0;
+  padding-right: 58px;
+}
+[dir="rtl"] .print-collate-label {
+  margin-left: 0;
+  margin-right: 12px;
+}
+[dir="rtl"] .print-zoom-row {
+  margin-left: 0;
+  margin-right: 58px;
+}
+[dir="rtl"] .print-preview-panel {
+  border-left: none;
+  border-right: 1px solid #b0b0b0;
+}
+
+/* Doc properties: swap label alignment */
+[dir="rtl"] .doc-props-label {
+  text-align: right;
+}
+
+/* Scale dialog: scale notation ("1:100", "1/4in = 1ft") is LTR content */
+[dir="rtl"] .scale-input {
+  direction: ltr;
+  text-align: right;
+}
+
+/* Signature dialog: swap margins */
+[dir="rtl"] .signature-color-label {
+  margin-left: 0;
+  margin-right: 4px;
+}
+
+/* CAD-uitwisseling (#400): het blok in dialogs.css gebruikt logische
+   eigenschappen (margin-inline-start, padding-inline-end, text-align: end) en
+   keert dus vanzelf om. Alleen het afgekapte pad heeft een vaste richting. */
+[dir="rtl"] .cad-path {
+  text-align: right;
+}
+
+/* Stamp grid: keep LTR for visual layout */
+[dir="rtl"] .stamp-grid {
+  direction: ltr;
+}
+
+/* Message dialog */
+[dir="rtl"] .message-dialog-body {
+  text-align: right;
+}
+[dir="rtl"] .message-dialog-footer {
+  justify-content: flex-start;
+}
+
+/* Scrollbars - keep LTR direction for scroll behavior */
+[dir="rtl"] ::-webkit-scrollbar {
+  direction: ltr;
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 60 392 392" role="img" aria-label="Oculith Draw Foundation">
+  <!-- The Oculith logo. -->
+  <!-- Monolith with a vertical eye cut out (negative space) and a solid pupil.
+       One path, even-odd: slab = filled, eye = hole, pupil = filled island. -->
+  <path fill="#F26B1F" fill-rule="evenodd"
+        d="M168,90 H344 Q362,90 362,108 V404 Q362,422 344,422 H168 Q150,422 150,404 V108 Q150,90 168,90 Z
+           M256,146 Q348,256 256,366 Q164,256 256,146 Z
+           M236,256 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z"/>
+</svg>

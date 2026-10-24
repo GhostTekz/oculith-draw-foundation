@@ -1,0 +1,1163 @@
+/* Content Area */
+.content {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  background: var(--theme-content-bg);
+  min-height: 0; /* Important for flex child overflow */
+}
+
+/* Left Panel Root (Solid.js mount point) */
+#left-panel-root {
+  display: contents;
+}
+
+/* Zichtbaarheid Elementen — gedockt links, naast het navigatie-paneel.
+   Windows-Forms-stijl: vierkante hoeken, compacte functionele UI. */
+.element-visibility-panel {
+  width: 230px;
+  flex-shrink: 0;
+  background: var(--theme-panel-bg);
+  border-right: 1px solid var(--theme-panel-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  font-size: 11px;
+}
+
+.ev-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 6px;
+  font-weight: 600;
+  color: var(--theme-panel-header-text);
+  background: linear-gradient(to bottom, #ffffff, #f5f5f5);
+  border-bottom: 1px solid #d4d4d4;
+}
+
+.ev-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ev-panel-reset {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-toggle-bg, #f0f0f0);
+  color: var(--theme-panel-header-text);
+  cursor: pointer;
+}
+
+.ev-panel-reset:hover { background: var(--theme-panel-toggle-hover, #e5e5e5); }
+
+.ev-panel-close {
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  text-align: center;
+  border: none;
+  background: transparent;
+  color: var(--theme-panel-header-text);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.ev-panel-close:hover { background: #e81123; color: #fff; }
+
+.ev-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.ev-panel-empty {
+  padding: 12px 8px;
+  color: var(--theme-panel-tab-text);
+  opacity: 0.7;
+  text-align: center;
+}
+
+.ev-column-head {
+  display: grid;
+  grid-template-columns: 1fr 34px 28px 30px;
+  gap: 2px;
+  padding: 2px 4px 4px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--theme-panel-tab-text);
+  opacity: 0.75;
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+
+.ev-col-count, .ev-col-vis, .ev-col-half { text-align: center; }
+
+.ev-row {
+  border-bottom: 1px solid var(--theme-panel-border);
+  padding: 3px 2px;
+}
+
+.ev-row-hidden .ev-type-name { opacity: 0.5; text-decoration: line-through; }
+
+.ev-row-main {
+  display: grid;
+  grid-template-columns: 28px 1fr 34px 30px;
+  align-items: center;
+  gap: 2px;
+}
+
+.ev-vis-toggle, .ev-half-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.ev-type-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--theme-panel-header-text);
+}
+
+.ev-type-count { text-align: center; opacity: 0.8; }
+
+.ev-half-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 2px 2px 30px;
+}
+
+.ev-half-color, .ev-half-opacity {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ev-half-color > span, .ev-half-opacity > span {
+  width: 34px;
+  opacity: 0.8;
+}
+
+.ev-half-color input[type="color"] {
+  width: 26px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--theme-panel-border);
+  background: none;
+  cursor: pointer;
+}
+
+.ev-half-clear {
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  text-align: center;
+  border: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-toggle-bg, #f0f0f0);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ev-half-opacity input[type="range"] { flex: 1; min-width: 0; }
+.ev-half-opacity-val { width: 30px; text-align: right; opacity: 0.8; }
+
+/* Markeringslagen (#468) — de bovenste sectie van het paneel Lagen (links),
+   zoals in the external editor. Oculith-huisstijl: tokens, standaardcursor, geen animaties. */
+.layers-sections {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.layers-section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+
+.layers-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ox-tracking-caps, 0.3px);
+  color: var(--ox-text-2, var(--theme-panel-header-text));
+  background: var(--ox-surface-2, var(--theme-panel-tab-bg));
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+
+.layers-section-sub {
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ox-text-3, var(--theme-panel-tab-text));
+}
+
+.annotation-layers-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  cursor: default;
+  user-select: none;
+  font-size: 11px;
+}
+
+.al-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+
+.al-tool {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--theme-panel-header-text);
+  cursor: default;
+}
+
+.al-tool:hover:not(:disabled) {
+  border-color: var(--theme-panel-border);
+  background: var(--theme-panel-toggle-hover, #e5e5e5);
+}
+
+.al-tool:disabled { opacity: 0.4; }
+
+.al-tool.al-tool-text {
+  width: auto;
+  gap: 3px;
+  padding: 0 6px 0 3px;
+  border-color: var(--theme-panel-border);
+  white-space: nowrap;
+}
+
+.al-tool-icon { display: flex; }
+
+.al-tool-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--theme-panel-border);
+}
+
+.al-column-head,
+.al-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 22px 20px 20px 20px;
+  align-items: center;
+  gap: 2px;
+}
+
+.al-column-head {
+  padding: 3px 4px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--theme-panel-tab-text);
+  opacity: 0.75;
+  border-bottom: 1px solid var(--theme-panel-border);
+}
+
+.al-col-cur, .al-col-count, .al-col-flag { text-align: center; }
+.al-col-flag { display: flex; justify-content: center; }
+.al-col-flag svg { width: 12px; height: 12px; }
+
+.al-panel-body {
+  padding: 2px 0;
+}
+
+.al-row {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--theme-panel-border);
+  color: var(--theme-panel-header-text);
+}
+
+.al-row-selected { background: var(--ox-selection, var(--theme-panel-toggle-hover, #e5e5e5)); }
+.al-row-current .al-name { font-weight: 600; }
+.al-row-hidden .al-name { opacity: 0.5; }
+.al-row-locked .al-name { font-style: italic; }
+
+/* Zichtbaar / afdrukbaar / vergrendeld: een icoon dat aan of uit staat. */
+.al-flag {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ox-text, var(--theme-panel-header-text));
+  cursor: default;
+}
+
+.al-flag svg { width: 14px; height: 14px; }
+.al-flag:hover { border-color: var(--theme-panel-border); }
+.al-flag.al-flag-off { color: var(--ox-text-3, var(--theme-panel-tab-text)); opacity: 0.6; }
+.al-tool svg, .al-tool-icon svg { width: 14px; height: 14px; }
+
+/* Het rijmenu (rechtsklik op een laag). */
+.al-row-menu {
+  position: fixed;
+  z-index: var(--ox-z-popover, 1000);
+  min-width: 190px;
+  padding: 3px 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ox-surface-3, var(--theme-panel-bg));
+  border: 1px solid var(--ox-line-2, var(--theme-panel-border));
+  box-shadow: var(--ox-shadow-2, 0 4px 12px rgba(0, 0, 0, 0.2));
+  font-size: 12px;
+}
+
+.al-row-menu button {
+  padding: 4px 12px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ox-text, var(--theme-panel-header-text));
+  cursor: default;
+}
+
+.al-row-menu button:hover:not(:disabled) { background: var(--ox-accent-soft, var(--theme-panel-toggle-hover)); }
+.al-row-menu button:disabled { color: var(--ox-text-disabled, #999); }
+.al-row-menu-sep { height: 1px; margin: 3px 0; background: var(--ox-line, var(--theme-panel-border)); }
+
+.al-cell-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.al-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.al-swatch {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--theme-panel-border);
+  background: none;
+  cursor: default;
+}
+
+.al-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.al-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 3px;
+  font-size: 11px;
+  border: 1px solid var(--theme-panel-border);
+  background: var(--theme-bg, #fff);
+  color: inherit;
+}
+
+.al-count { text-align: center; opacity: 0.8; }
+
+.al-error {
+  padding: 4px 6px;
+  color: #c42b1c;
+}
+
+.al-delete-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+}
+
+.al-delete-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.al-delete-target { margin-left: 22px; }
+/* einde Markeringslagen */
+
+/* Left Panel */
+.left-panel {
+  width: 200px;
+  min-width: 0;
+  background: var(--theme-panel-bg);
+  border-right: none;
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  transition: width 0.15s ease;
+  cursor: default;
+  user-select: none;
+}
+
+.left-panel.collapsed {
+  width: 32px;
+}
+
+.left-panel-tabs {
+  display: flex;
+  flex-direction: column;
+  background: var(--theme-panel-tab-bg);
+  border-right: 1px solid var(--theme-panel-border);
+  flex-shrink: 0;
+  width: 32px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.left-panel-tabs::-webkit-scrollbar { display: none; }
+
+.left-panel-tab {
+  padding: 8px;
+  font-size: 11px;
+  color: var(--theme-panel-tab-text);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.left-panel-tab .tab-label {
+  display: none;
+}
+
+.left-panel-tab:hover {
+  background: var(--theme-panel-tab-hover);
+  color: var(--theme-panel-tab-hover-text);
+}
+
+.left-panel-tab.active {
+  background: var(--theme-panel-tab-active-bg);
+  color: var(--theme-panel-tab-active-text);
+  border-left: 2px solid var(--theme-panel-accent);
+}
+
+.left-panel-more {
+  border-top: 1px solid var(--theme-panel-border);
+  margin-top: 4px;
+}
+
+.left-panel-more[aria-expanded="true"] {
+  color: var(--theme-panel-accent);
+}
+
+.left-panel-tab svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.left-panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.left-panel.collapsed .left-panel-body {
+  display: none;
+}
+
+.left-panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: none;
+}
+
+.left-panel-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.left-panel.collapsed .left-panel-content {
+  display: none !important;
+}
+
+.left-panel-header {
+  padding: 6px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-panel-header-text);
+  letter-spacing: 0.2px;
+  background: var(--theme-panel-bg);
+  border-bottom: 1px solid var(--theme-panel-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.left-panel-toggle {
+  position: absolute;
+  bottom: 8px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  background: var(--theme-panel-toggle-bg);
+  border: none;
+  border-radius: 3px;
+  color: var(--theme-panel-toggle-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.left-panel-toggle:hover {
+  background: var(--theme-panel-toggle-hover);
+}
+
+.left-panel-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s;
+}
+
+.left-panel.collapsed .left-panel-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* Thumbnails Panel */
+.thumbnails-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  outline: none;
+}
+
+.thumbnail-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thumbnail-pages.virtual { gap: 0; }
+.thumbnail-pages.virtual .thumbnail-item { margin-bottom: 4px; }
+.thumbnail-spacer { flex: none; pointer-events: none; }
+
+.thumbnail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  background: var(--theme-thumbnail-bg);
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.thumbnail-item:hover {
+  background: var(--theme-thumbnail-hover);
+}
+
+.thumbnail-item:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
+}
+
+.thumbnail-item.selected {
+  background: var(--theme-thumbnail-selected-bg);
+  border-color: var(--theme-thumbnail-selected-border);
+}
+
+.thumbnail-item.selected .thumbnail-label {
+  color: var(--theme-thumbnail-selected-label);
+}
+
+.thumbnail-item.active {
+  border-color: var(--theme-thumbnail-active-border);
+  background: var(--theme-thumbnail-active-bg);
+}
+
+.thumbnail-item.active.selected {
+  border-color: var(--theme-thumbnail-active-border);
+}
+
+.thumbnail-canvas {
+  max-width: 100%;
+  height: auto;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.thumbnail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e0e0e0;
+}
+
+.thumbnail-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #ccc;
+  border-top: 3px solid #666;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.thumbnail-label {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--theme-thumbnail-label);
+}
+
+.thumbnail-item.active .thumbnail-label {
+  color: var(--theme-thumbnail-active-label);
+}
+
+/* Thumbnail drag-and-drop reorder */
+.thumbnail-item.dragging {
+  opacity: 0.4;
+}
+
+.thumbnail-item.drop-before {
+  border-top: 3px solid var(--theme-accent);
+}
+
+.thumbnail-item.drop-after {
+  border-bottom: 3px solid var(--theme-accent);
+}
+
+/* Bookmarks Panel */
+.bookmarks-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.bookmarks-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--theme-bookmarks-empty);
+  font-size: 12px;
+}
+
+.main-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.main-view > #form-fields-bar-root,
+.main-view > #pdfa-bar-root {
+  flex-shrink: 0;
+}
+
+.main-view > #pdf-container.visible,
+.mv-panes > #pdf-container.visible,
+.main-view > #placeholder {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Padding only for the empty-state placeholder. The PDF container itself
+   must NOT have padding — the canvas paints its own grey backdrop via
+   _render() and we need it to fill the entire viewport area, otherwise the
+   parent's dark page-chrome leaks through the padding gap as a visible
+   frame around the canvas. */
+.main-view > #placeholder {
+  padding: 20px;
+}
+
+.main-view > #pdf-container.visible,
+.mv-panes > #pdf-container.visible {
+  /* Free-pan UX: NO auto-centering. Canvas always top-left of the container.
+     Previously used `safe center` which centered the canvas when it fit the
+     viewport and fell back to start when it overflowed — the transition
+     between those two states caused a visible canvas-position JUMP at the
+     exact zoom level where the canvas first exceeds container width. The
+     cursor anchor couldn't compensate because `scrollLeft` cannot go
+     negative. Removing centering eliminates the transition jump entirely.
+     Initial fit-to-page positioning is done explicitly by JS (fitToViewport
+     in vector mode, or by leaving the canvas at 0,0 in bitmap mode). */
+  align-items: flex-start;
+  justify-content: flex-start;
+  position: relative;
+  /* De app ankert de scrollpositie zelf bij zoomen (continuous-zoom-anchor.js
+     voor doorlopend, _anchorAt voor enkelpagina). Chromium's scroll anchoring
+     corrigeert scrollTop dan een tweede keer zodra content boven het door de
+     browser gekozen ankerknooppunt van maat verandert — dubbele correctie =
+     verspringen bij snel zoomen. */
+  overflow-anchor: none;
+}
+
+/* Optional canvas scrollbars (toggled via preference `showScrollbars`).
+   Windows-style, squared corners, light-gray track, darker thumb. */
+.canvas-scrollbar {
+  position: absolute;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  z-index: 30;
+  user-select: none;
+  touch-action: none;
+}
+.canvas-scrollbar-h {
+  left: 0;
+  bottom: 0;
+  right: 0;
+  height: 14px;
+}
+.canvas-scrollbar-v {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+}
+.canvas-scrollbar-thumb {
+  position: absolute;
+  background: #c0c0c0;
+  border: 1px solid #a0a0a0;
+  cursor: default;
+}
+.canvas-scrollbar-h .canvas-scrollbar-thumb {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100%;
+}
+.canvas-scrollbar-v .canvas-scrollbar-thumb {
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+}
+.canvas-scrollbar-thumb:hover {
+  background: #a0a0a0;
+  border-color: #707070;
+}
+.canvas-scrollbar-thumb:active {
+  background: #707070;
+  border-color: #505050;
+}
+
+#placeholder {
+  text-align: center;
+  color: var(--theme-placeholder-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+#placeholder svg {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 20px;
+  opacity: 0.5;
+}
+
+#placeholder h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--theme-placeholder-heading);
+}
+
+#placeholder p {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+/* Uitleg die alleen de webversie toont: een herlaadbeurt begint daar leeg. */
+#placeholder p.placeholder-note {
+  font-size: 13px;
+  opacity: 0.65;
+  margin-top: 10px;
+  max-width: 420px;
+}
+
+/* Drawing-first landing surface. Keep the PDF viewport IDs and visibility
+   behavior untouched so the native renderer can take over after open. */
+#placeholder.draw-empty-state {
+  gap: 0;
+  padding: 42px 32px;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(235, 116, 30, 0.12), transparent 31%),
+    var(--theme-content-bg);
+}
+
+.draw-empty-state .draw-empty-mark {
+  width: 78px;
+  height: 78px;
+  margin-bottom: 22px;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+}
+
+.draw-empty-state .draw-empty-eyebrow {
+  color: #ec861f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  margin-bottom: 10px;
+}
+
+#placeholder.draw-empty-state h2 {
+  color: var(--theme-placeholder-heading);
+  font-size: clamp(24px, 2.5vw, 34px);
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+}
+
+#placeholder.draw-empty-state p {
+  max-width: 440px;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+.draw-open-button {
+  min-width: 176px;
+  padding: 11px 22px;
+  border: 1px solid #f49a43;
+  border-radius: 5px;
+  background: #e97b1d;
+  color: #17120e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.draw-open-button:hover { background: #f69a40; }
+.draw-open-button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.draw-empty-state .draw-empty-shortcut {
+  margin-top: 11px;
+  color: var(--theme-placeholder-text);
+  font-size: 11px;
+}
+
+#pdf-container {
+  display: none;
+}
+
+#pdf-container.visible {
+  display: flex;
+}
+
+#canvas-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 0;
+}
+
+#canvas-container {
+  position: relative;
+  margin: 0 auto;
+  display: inline-block;
+  /* Constrain mix-blend-mode of #text-highlight-canvas to this stacking
+     context so it only blends with #pdf-canvas, not page chrome below it.
+     html.pdf-text-live drops this. isolation plus that blend promotes
+     #pdf-canvas, and WebKitGTK then paints the canvas background (white)
+     for the whole time a text editor is focused or PDF text is selected.
+     Multiply blending returns when the class leaves. Do not promote these
+     canvases with translateZ or will-change. */
+  isolation: isolate;
+}
+
+/* Same interval as the comment above. A dimmer or dark-mode filter would
+   keep the page canvas composited, so it is suspended for the interval too. */
+html.pdf-text-live #canvas-container,
+html.pdf-text-live .canvas-container-cont,
+html.pdf-text-live .page-wrapper {
+  isolation: auto;
+}
+
+html.pdf-text-live #text-highlight-canvas,
+html.pdf-text-live .search-highlight {
+  mix-blend-mode: normal;
+}
+
+html.pdf-text-live #pdf-canvas,
+html.pdf-text-live #pdf-detail-canvas,
+html.pdf-text-live .continuous-container canvas.pdf-canvas,
+html.pdf-text-live .continuous-container canvas.pdf-canvas-sharp,
+html.pdf-text-live .continuous-container canvas.pdf-detail-canvas {
+  filter: none;
+  box-shadow: none;
+}
+
+/* A zoomed viewport writes an inline matrix on these layers every frame.
+   That transformed layer promotes #pdf-canvas on WebKitGTK for the whole
+   time an editor is focused, and the page paints its white background.
+   The editor is a fixed overlay, so the matrix can drop until it closes.
+   A text selection keeps the matrix, or the highlight jumps. !important
+   beats the inline matrix; removing the class restores it. */
+html.pdf-editor-open .textLayer,
+html.pdf-editor-open .linkLayer,
+html.pdf-editor-open .formLayer {
+  transform: none !important;
+}
+
+#canvas-container.hidden {
+  display: none;
+}
+
+.continuous-container {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+  padding-top: 20px;
+  /* Issue #336: bij gemengde paginaformaten moet de container meegroeien met
+     de BREEDSTE pagina i.p.v. vast op de viewportbreedte te blijven. Met een
+     vaste `width: 100%` centreerde flexbox een bredere pagina met overloop
+     naar BEIDE kanten — en het deel links van de scroll-oorsprong is met
+     scrollLeft onbereikbaar, dus de linkerrand viel definitief buiten beeld.
+     max-content laat de breedste pagina de containerbreedte bepalen (de
+     horizontale scrollbar van #pdf-container reikt dan tot beide randen);
+     min-width houdt smallere inhoud op viewportbreedte zodat het centreren
+     van smallere pagina's blijft werken. */
+  width: max-content;
+  min-width: 100%;
+}
+
+.continuous-container.active {
+  display: flex !important;
+}
+
+/* Zelfde verhaal één niveau hoger: #canvas-wrapper (width: 100%, centrerend)
+   zou anders de te brede continuous-container zelf weer gecentreerd laten
+   overlopen. De klasse wordt door renderer.js gezet zodra de doorlopende
+   weergave actief is (zie _setContinuousLayoutActive); de enkelpagina-
+   weergave behoudt zijn bestaande layout. flex-shrink: 0 voorkomt dat de
+   flex-parent (#pdf-container) de wrapper alsnog onder max-content
+   samendrukt. */
+#canvas-wrapper.continuous-mode {
+  width: max-content;
+  min-width: 100%;
+  flex-shrink: 0;
+}
+
+/* Boekweergave (issue #201): 2-koloms spread als layout-variant van de
+   continuous-weergave. display:grid wordt inline gezet door renderer.js
+   (setViewMode/renderContinuous); hier alleen de grid-inrichting.
+   Pagina 1 staat alleen rechts, zoals bij een echt boek; daarna vullen de
+   wrappers automatisch links-rechts per rij (2-3, 4-5, ...). Oneven
+   wrappers (pagina 1, 3, 5, ...) vormen de rechterhelft en schuiven tegen
+   de rug aan; even wrappers de linkerhelft. */
+.continuous-container.book-spread {
+  grid-template-columns: repeat(2, max-content);
+  grid-auto-flow: row;
+  justify-content: center;
+  align-items: start;
+}
+
+.continuous-container.book-spread .page-wrapper:first-child {
+  grid-column: 2;
+}
+
+.continuous-container.book-spread .page-wrapper:nth-child(odd) {
+  justify-self: start;
+}
+
+.continuous-container.book-spread .page-wrapper:nth-child(even) {
+  justify-self: end;
+}
+
+/* Facing (issue #164): twee pagina's naast elkaar als ÉÉN spread tegelijk,
+   niet-doorlopend. Zelfde 2-koloms grid als book-spread, maar renderContinuous
+   bouwt alleen de huidige spread en zet de grid-column per wrapper expliciet
+   (rechterpagina/oneven → kolom 2, linkerpagina/even → kolom 1). Geen
+   nth-child-regels dus, want er staan maar 1-2 wrappers in de DOM. */
+.continuous-container.facing-spread {
+  grid-template-columns: repeat(2, max-content);
+  grid-auto-flow: row;
+  justify-content: center;
+  align-items: start;
+}
+
+.page-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.page-number-label {
+  position: absolute;
+  top: -25px;
+  left: 0;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#pdf-canvas {
+  display: block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: white;
+  /* Do not promote this canvas (no translateZ, no will-change). On WebKit a
+     promoted page canvas shows its white background for as long as a text
+     editor is focused, then the bitmap flashes back when the editor closes.
+     The page and the markup overlay already repaint in the same frame.
+     html.pdf-text-live drops the isolation and highlight blend that still
+     promote this canvas while text is selected or an editor is open. */
+}
+
+/* Scherpe uitsnede van de pagina (PDF.js, enkelpagina): pdfjs-detail-layer.js
+   zet maat en positie. Ligt boven #pdf-canvas en onder de overlays. */
+#pdf-detail-canvas,
+.continuous-container canvas.pdf-detail-canvas {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+}
+
+#annotation-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Above the text layer (z-index 5). editText sets an inline z-index of 2
+     so PDF text stays clickable; the select tool keeps this. */
+  z-index: 6;
+}
+
+/* Text highlights live on a dedicated canvas with multiply blend so they
+   tint the page yellow but leave the underlying text fully readable.
+   Must sit between #pdf-canvas and #annotation-canvas in the DOM.
+   IMPORTANT: do NOT layer-promote this canvas (no translateZ/will-change).
+   mix-blend-mode requires the element to share a compositor layer with its
+   backdrop (#pdf-canvas) — promoting it isolates the layer and either breaks
+   the blend or forces a slow software composite. */
+#text-highlight-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* The reactive cursor module (js/ui/cursor.js) sets the cursor on
+   `.main-view`. Most descendant elements have `cursor: auto` and inherit
+   from `.main-view` for free. The PDF.js text layer spans, link layer items,
+   and form fields have their own explicit cursor though, and would shadow
+   the inherited one. When the cursor module enters an "override" mode
+   (panning, busy, snap-pick) it toggles `body.pdf-cursor-override` and this
+   rule forces those overlay elements to fall back to the parent (.main-view)
+   cursor — so the grabbing/wait/crosshair cursor wins everywhere it should.
+   !important is needed only because the overlay cursors are set inline. */
+body.pdf-cursor-override .main-view *,
+body.pdf-cursor-override #canvas-container * {
+  cursor: inherit !important;
+}
+
+.continuous-container canvas {
+  display: block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: white;
+}
+
+/* The page container already draws the page shadow (renderer.js). These
+   overlays cover a clipped part of the page: their own blurred shadow was
+   painted along the clip edges in the middle of the sheet, again on every
+   markup redraw. */
+.continuous-container canvas.annotation-canvas,
+.continuous-container canvas.annotation-canvas-sharp,
+.continuous-container canvas.pdf-canvas-sharp,
+.continuous-container canvas.pdf-detail-canvas {
+  box-shadow: none;
+}
+
+.continuous-container .annotation-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  /* The overlay must be transparent so the rendered page (the .pdf-canvas
+     below it) shows through. Without this it inherits `background: white`
+     from the broad `.continuous-container canvas` rule above and covers the
+     page — a full white screen in continuous/book view. */
+  background: transparent;
+}
+
+/* PDF Text Edit Tool */
+.edit-text-block-hover {
+  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
+}
+
+.pdf-text-editor {
+  box-sizing: border-box;
+  border: 0;
+  outline: 1px solid var(--theme-accent);
+  background: #ffffff;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
+  color: #000;
+  white-space: pre;
+  word-break: normal;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-accent) 30%, transparent);
+}
+
+/* Delete button shown in the properties panel while editing PDF text */
+.text-edit-delete-btn {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #d4d4d4;
+  background: #f5f5f5;
+  color: #b00020;
+  cursor: pointer;
+  font-size: 12px;
+}
+.text-edit-delete-btn:hover {
+  background: #e81123;
+  border-color: #e81123;
+  color: #ffffff;
+}

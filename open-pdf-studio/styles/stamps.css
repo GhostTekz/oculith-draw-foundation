@@ -1,0 +1,76 @@
+/* Stamp picker and stamp editor (docs/STAMPS.md). Oculith tokens, small radii. */
+.stamp-picker-dialog { width: 520px; max-width: calc(100vw - 32px); }
+.stamp-editor-overlay { z-index: 10002; }
+.stamp-editor-dialog { width: 560px; max-width: calc(100vw - 32px); }
+
+.stamp-picker { display: flex; flex-direction: column; gap: var(--ox-sp-2, 8px); max-height: 62vh; overflow: auto; }
+.stamp-picker-heading {
+  font-size: var(--ox-fs-xs, 11px); font-weight: var(--ox-fw-bold, 600); text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ox-text-2, var(--theme-text-secondary));
+}
+.stamp-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stamp-picker-standard { grid-template-columns: repeat(4, 1fr); }
+.stamp-pick {
+  display: flex; align-items: center; justify-content: center; min-height: 54px; padding: 4px;
+  background: #ffffff; border: 1px solid var(--ox-line-2, var(--theme-border));
+  border-radius: var(--ox-r-sm, 4px); cursor: pointer;
+}
+.stamp-pick:hover, .stamp-pick:focus-visible { border-color: var(--ox-accent, var(--theme-accent)); outline: none; }
+.stamp-pick-text {
+  min-height: 30px; font-weight: 700; font-size: 11px; letter-spacing: 0.04em;
+  border-width: 2px; background: transparent;
+}
+.stamp-pick-custom {
+  grid-column: span 4; min-height: 28px; border-style: dashed; background: transparent;
+  color: var(--ox-text-2, var(--theme-text-secondary)); font-size: var(--ox-fs-sm, 12px);
+}
+.stamp-pick-user { display: flex; flex-direction: column; gap: 2px; }
+.stamp-pick-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.stamp-muted { color: var(--ox-text-3, var(--theme-text-muted)); font-size: var(--ox-fs-sm, 12px); }
+.stamp-error { color: var(--ox-danger, var(--theme-error-text)); font-size: var(--ox-fs-sm, 12px); }
+
+.stamp-editor { display: flex; flex-direction: column; gap: var(--ox-sp-2, 8px); }
+.stamp-editor-row { display: flex; align-items: center; gap: 6px; }
+.stamp-editor-row > label { min-width: 48px; }
+.stamp-editor-group {
+  border: 1px solid var(--ox-line-2, var(--theme-border)); border-radius: var(--ox-r-sm, 4px);
+  padding: 6px 8px 8px; margin: 0; display: flex; flex-direction: column; gap: 6px;
+}
+.stamp-editor-group legend { padding: 0 4px; font-size: var(--ox-fs-xs, 11px); color: var(--ox-text-2, var(--theme-text-secondary)); }
+.stamp-editor-line { display: flex; align-items: center; gap: 6px; }
+.stamp-editor-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 10px; align-items: center; }
+.stamp-input {
+  height: var(--ox-control-sm, 26px); padding: 0 6px; min-width: 0;
+  background: var(--theme-input-bg); color: var(--theme-text);
+  border: 1px solid var(--theme-input-border, var(--theme-border)); border-radius: var(--ox-r-xs, 3px);
+  font: inherit; font-size: var(--ox-fs-sm, 12px);
+}
+#stamp-editor-name { flex: 1; }
+.stamp-editor-start { width: 170px; }
+.stamp-line-text { flex: 1; }
+.stamp-line-size { width: 56px; }
+.stamp-color { width: 44px; height: var(--ox-control-sm, 26px); padding: 0 2px; border-radius: var(--ox-r-xs, 3px); }
+.stamp-editor-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ox-fs-sm, 12px); }
+.stamp-btn {
+  height: var(--ox-control-sm, 26px); padding: 0 12px; cursor: pointer;
+  background: var(--ox-surface-2, var(--theme-surface)); color: var(--theme-text);
+  border: 1px solid var(--ox-line-2, var(--theme-border)); border-radius: var(--ox-r-xs, 3px);
+  font-size: var(--ox-fs-sm, 12px);
+}
+.stamp-btn:hover:not(:disabled) { border-color: var(--ox-accent, var(--theme-accent)); }
+.stamp-btn:disabled { opacity: 0.5; cursor: default; }
+.stamp-btn-primary { background: var(--ox-accent, var(--theme-accent)); color: var(--ox-on-accent, #fff); border-color: transparent; }
+.stamp-icon-btn {
+  width: 22px; height: 22px; padding: 0; cursor: pointer; line-height: 1;
+  background: transparent; color: var(--ox-text-2, var(--theme-text-secondary));
+  border: 1px solid transparent; border-radius: var(--ox-r-xs, 3px);
+}
+.stamp-icon-btn:hover:not(:disabled) { border-color: var(--ox-line-2, var(--theme-border)); color: var(--theme-text); }
+.stamp-icon-btn:disabled { opacity: 0.4; cursor: default; }
+.stamp-editor-preview-label { font-size: var(--ox-fs-xs, 11px); color: var(--ox-text-2, var(--theme-text-secondary)); }
+.stamp-editor-preview {
+  display: flex; align-items: center; justify-content: center; min-height: 128px; padding: 8px;
+  background: #ffffff; border: 1px solid var(--ox-line-2, var(--theme-border)); border-radius: var(--ox-r-sm, 4px);
+}
+.stamp-editor-footer { display: flex; align-items: center; gap: 6px; width: 100%; }
+.stamp-editor-spacer { flex: 1; }

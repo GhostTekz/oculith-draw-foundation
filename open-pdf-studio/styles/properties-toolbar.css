@@ -1,0 +1,251 @@
+/* Properties toolbar (external plan-review files): 36px, directly under the menu row, inline
+   labels, ~24px controls, no caption. Loaded after oculith-workspace.css. */
+.properties-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--theme-panel-bg);
+  border-bottom: 1px solid var(--theme-panel-border);
+  color: var(--theme-text);
+  font-size: var(--ox-fs-xs, 11px);
+  scrollbar-width: thin;
+  user-select: none;
+}
+
+.properties-toolbar-document {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ptb-label {
+  flex: none;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+}
+
+.ptb-doc-name {
+  max-width: 360px;
+  overflow: hidden;
+  margin-right: 8px;
+  color: var(--theme-text);
+  font-weight: var(--ox-fw-bold, 600);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptb-doc-pages {
+  margin-right: 4px;
+  font-weight: var(--ox-fw-bold, 600);
+  font-variant-numeric: tabular-nums;
+}
+
+.ptb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: 4px;
+}
+
+.ptb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.ptb-icon svg { width: 16px; height: 16px; }
+
+.ptb-caret {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.ptb-caret svg { width: 12px; height: 12px; }
+
+/* Icon buttons and the doc / type ▾ menu buttons. */
+.ptb-menu-btn,
+.ptb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: none;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: var(--theme-text);
+  cursor: default;
+}
+
+.ptb-menu-btn {
+  padding: 0 2px 0 4px;
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+}
+
+.ptb-menu-btn:hover,
+.ptb-icon-btn:hover:not(:disabled) {
+  background: var(--theme-hover);
+}
+
+.ptb-icon-btn[aria-pressed='true'] {
+  border-color: var(--ox-accent-line, var(--theme-accent));
+  background: var(--ox-accent-soft, var(--theme-hover));
+  color: var(--ox-accent-ink, var(--theme-text));
+}
+
+.ptb-menu-btn:focus-visible,
+.ptb-icon-btn:focus-visible,
+.ptb-select:focus-within,
+.ptb-swatch:focus-within {
+  outline: 2px solid var(--theme-focus, var(--theme-accent));
+  outline-offset: -1px;
+}
+
+.ptb-count {
+  min-width: 14px;
+  font-size: 10px;
+  font-weight: var(--ox-fw-bold, 600);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Colour swatch: a chip with the native colour input stretched over it. */
+.ptb-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-surface);
+}
+
+.ptb-swatch-chip {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--ox-line-2, rgba(0, 0, 0, 0.25));
+  border-radius: 2px;
+}
+
+.ptb-swatch.none .ptb-swatch-chip {
+  background: linear-gradient(135deg, transparent 44%, var(--ox-danger, #d33) 44%, var(--ox-danger, #d33) 56%, transparent 56%);
+}
+
+.ptb-swatch.mixed .ptb-swatch-chip {
+  background: conic-gradient(#e33, #ec3, #3c6, #39e, #c3e, #e33);
+}
+
+.ptb-swatch input,
+.ptb-select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: default;
+}
+
+/* A drawn preview (line style, heads, hatch, alignment) over a native list. */
+.ptb-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 24px;
+  padding: 0 3px 0 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.ptb-select-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+}
+
+.ptb-select-preview svg { display: block; }
+.ptb-align .ptb-select-preview svg { width: 16px; height: 16px; }
+.ptb-hatch .ptb-select-preview svg { width: 16px; height: 16px; }
+.ptb-hatch .ptb-select-preview img { display: block; border: 1px solid var(--theme-border); }
+.ptb-linestyle .ptb-select-preview { width: 100px; }
+
+.ptb-select.disabled,
+.ptb-swatch.disabled,
+.ptb-icon-btn:disabled,
+.properties-toolbar .pref-combo.disabled { opacity: 0.5; }
+
+/* Number combos (opacity %, width pt, font size): the shared PrefComboBox. */
+.ptb-combo { display: inline-flex; flex: none; }
+.ptb-combo .pref-combo { height: 24px; border-radius: var(--ox-r-xs, 3px); }
+.ptb-opacity .pref-combo { width: 64px; }
+.ptb-width .pref-combo { width: 70px; }
+.ptb-fontsize .pref-combo { width: 52px; }
+.ptb-combo .pref-combo-input { font-variant-numeric: tabular-nums; }
+
+.ptb-font,
+.properties-toolbar-layer select {
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-size: var(--ox-fs-xs, 11px);
+}
+
+.ptb-font { width: 160px; }
+.properties-toolbar-layer select { width: 128px; }
+
+.ptb-toggles { display: inline-flex; gap: 1px; flex: none; }
+
+/* Right end: Layer (Oculith addition) and the Σ of selected measurements. */
+.ptb-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.properties-toolbar-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--theme-text);
+  font-weight: var(--ox-fw-bold, 600);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .properties-toolbar { gap: 4px; padding: 0 6px; }
+  .ptb-font { width: 120px; }
+  .ptb-linestyle .ptb-select-preview { width: 64px; }
+}

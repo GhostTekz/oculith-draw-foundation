@@ -1,0 +1,669 @@
+import { getActiveDocument } from '../../core/state.js';
+import { paginaVectorNaarWeergave } from '../../pdf/weergave-ruimte.js';
+
+// Sleeprichting op het SCHERM: bij een gedraaide weergave (#200) is naar links
+// slepen op het scherm niet naar links op de pagina.
+function kruisSelectie(state, x, y) {
+  const opScherm = paginaVectorNaarWeergave(x - state.rubberBandStartX, y - state.rubberBandStartY);
+  return opScherm.x < 0 ? 'crossing' : 'window';
+}
+import { applyToolTransform, getEffectiveScale } from '../tool-context.js';
+import { HANDLE_TYPES } from '../../core/constants.js';
+import { recordModify } from '../../core/undo-manager.js';
+import { tryStartInlineNumberEdit } from '../inline-number-editing.js';
+import { buildSysteemraster, subElementAt } from '../../annotations/systeemraster.js';
+import { isAnnotationPickableInView } from '../../annotations/view-filters.js';
+import { expandToGroups } from '../../annotations/markup-groups.js';
+import { systeemrasterBuildOpts } from '../../annotations/systeemraster-scale.js';
+import { updateStatusMessage } from '../../ui/chrome/status-bar.js';
+import { gevelPreset } from '../../gevelelement/herkenning.js';
+import { onderdeelOnderPunt } from '../../gevelelement/element.js';
+import i18next from '../../i18n/config.js';
+import { findAnnotationsAt } from '../../annotations/geometry.js';
+import { typeName } from '../../quantities/categories.js';
+import { CYCLE_SPOT_PX, sameSpot, nextCycleId, cyclePosition } from '../selection-cycle.js';
+
+// Speling (schermpixels) om een dunne stijl van een gevelelement te raken.
+const GEVEL_RAAK_PX = 6;
+import { inSelectieVak } from '../../plattegrond/ruimte-koppeling.js';
+import { verwerkSlotKlik, slotTooltip } from '../../annotations/stramien-slot.js';
+import {
+  isTextAnchored, correctionKind, expandCorrectionGroups, replaceParentOf,
+} from '../../annotations/corrections/model.js';
+
+// Een proefleescorrectie (#508) zit aan haar tekst vast: een Ctrl-sleepkopie
+// zou een los teken naast de tekst opleveren, met koppelingen naar het
+// origineel. Daarom geen Ctrl-sleepkopie zodra de selectie er een bevat.
+function bevatCorrectie(lijst) {
+  return (lijst || []).some(a => correctionKind(a) !== null);
+}
+
+// ── Markup Selection Cycle (docs/EDIT-TOOLS.md) ──
+// The spot of the last click on a markup; a second plain click within
+// CYCLE_SPOT_PX screen pixels steps through findAnnotationsAt's stack.
+let _cycleSpot = null;
+
+function announceCycle(hits, ann) {
+  const pos = cyclePosition(hits, ann);
+  if (!pos) return;
+  try {
+    updateStatusMessage(i18next.t('common:editTools.cycle.status', {
+      index: pos.index, count: pos.count, type: typeName(ann.type),
+    }), 4000);
+  } catch (_) { /* statusbalk optioneel */ }
+}
+
+function cycleTargetOnClick(ctx, doc, x, y, e) {
+  const spot = { page: ctx.pageNum, x, y };
+  const prev = _cycleSpot;
+  _cycleSpot = spot;
+  if (ctx.state?.preferences?.markupSelectionCycle === false) return null;
+  const sel = doc ? doc.selectedAnnotations : [];
+  if (sel.length !== 1) return null;
+  if (!sameSpot(prev, spot, CYCLE_SPOT_PX / (ctx.scale || 1))) return null;
+  // A double-click on a text box still opens the editor.
+  if (e.detail === 2 && ['textbox', 'callout'].includes(sel[0].type)) return null;
+  const hits = findAnnotationsAt(x, y, ctx.pageNum);
+  const next = nextCycleId(hits, sel[0]);
+  if (next) announceCycle(hits, next);
+  return next;
+}
+
+/**
+ * Edit > Select Next Overlapping Markup (Shift+Space): the same step as a
+ * repeated click, at the spot of the last click. Returns the new selection.
+ */
+export function cycleSelectionAtLastSpot() {
+  const doc = getActiveDocument();
+  const spot = _cycleSpot;
+  if (!doc || !spot) return null;
+  const hits = findAnnotationsAt(spot.x, spot.y, spot.page);
+  if (hits.length === 0) return null;
+  const sel = doc.selectedAnnotations || [];
+  const next = (sel.length === 1 && nextCycleId(hits, sel[0])) || (sel.includes(hits[0]) ? null : hits[0]);
+  if (!next) return null;
+  doc.selectedAnnotations = [next];
+  doc.selectedAnnotation = next;
+  announceCycle(hits, next);
+  return next;
+}
+
+/**
+ * Select tool — click-select, rubber band, drag, resize, Ctrl+drag copy
+ * Unified select tool — handles both annotation selection and text selection
+ */
+export const selectTool = {
+  name: 'select',
+  cursor: 'default',
+
+  onPointerDown(ctx, e) {
+    const { x, y, state } = ctx;
+    const pdfaLocked = ctx.isPdfAReadOnly();
+    const doc = getActiveDocument();
+    const selAnns = doc ? doc.selectedAnnotations : [];
+
+    // Check resize handle on selected annotation.
+    // Cursor is driven by state.isResizing + state.activeHandle (see js/ui/cursor.js).
+    // A markup that cannot be picked on the canvas (hidden, or on a hidden or
+    // locked layer) has no grips there, even when the Markups List selected it.
+    const selAnn = selAnns.length === 1 && isAnnotationPickableInView(selAnns[0]) ? selAnns[0] : null;
+    if (!pdfaLocked && selAnn) {
+      const handleType = ctx.findHandleAt(x, y, selAnn);
+      // Ctrl op een verplaats-greep (midden van rechthoek/cirkel, midden van
+      // een lijn) is geen verplaatsing maar een kopie: doorvallen naar de
+      // Ctrl-tak bij de annotatie-klik. Op maat-grepen blijft Ctrl
+      // "afstand afronden" (zie applyResize).
+      // callout_move en label_move zijn eveneens pure verplaats-grepen (de
+      // greep midden in een aanhaal-tekstvak, en de labelgreep van de
+      // maatvoeringen); zonder die vermelding viel Ctrl+klik daar in de
+      // resize-tak en kreeg je een verplaatsing in plaats van een kopie.
+      const VERPLAATS_GREPEN = ['rect_center', 'circle_center', 'line_mid', 'callout_move', 'label_move'];
+      const ctrlKopieViaGreep = (e.ctrlKey || e.metaKey) && VERPLAATS_GREPEN.includes(handleType);
+      if (handleType && !ctrlKopieViaGreep) {
+        // Edit-contour mode: clicking an edge midpoint inserts a new vertex
+        // there and immediately enters drag mode for that new vertex.
+        if (state.editingContour === selAnn.id && typeof handleType === 'string' &&
+            handleType.startsWith('polyline_edge_')) {
+          const before = ctx.cloneAnnotation(selAnn);
+          const holeMatch = handleType.match(/^polyline_edge_hole_(\d+)_(\d+)$/);
+          if (holeMatch && Array.isArray(selAnn.holes)) {
+            const hi = parseInt(holeMatch[1], 10);
+            const ei = parseInt(holeMatch[2], 10);
+            const hole = selAnn.holes[hi];
+            if (hole && ei >= 0 && ei < hole.length) {
+              const a = hole[ei];
+              const b = hole[(ei + 1) % hole.length];
+              const newPt = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+              if (state._editArcMode) {
+                newPt.arc = true;
+                newPt.bulge = 0.5;
+                state._editArcMode = false;
+              }
+              hole.splice(ei + 1, 0, newPt);
+              const newNodeIdx = ei + 1;
+              state.isResizing = true;
+              state.activeHandle = `polyline_node_hole_${hi}_${newNodeIdx}`;
+              state.originalAnnotation = ctx.cloneAnnotation(selAnn);
+              state._editContourBefore = before;
+              ctx.redraw();
+              return;
+            }
+          } else {
+            const ei = parseInt(handleType.split('_').pop(), 10);
+            const pts = selAnn.points || [];
+            if (!isNaN(ei) && ei >= 0 && ei < pts.length) {
+              const a = pts[ei];
+              const b = pts[(ei + 1) % pts.length];
+              const newPt = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+              if (state._editArcMode) {
+                newPt.arc = true;
+                newPt.bulge = 0.5;
+                state._editArcMode = false;
+              }
+              pts.splice(ei + 1, 0, newPt);
+              const newNodeIdx = ei + 1;
+              state.isResizing = true;
+              state.activeHandle = `polyline_node_${newNodeIdx}`;
+              state.originalAnnotation = ctx.cloneAnnotation(selAnn);
+              state._editContourBefore = before;
+              ctx.redraw();
+              return;
+            }
+          }
+        }
+        // Stramienslotje (stramien_slot_begin / _einde): koppeling van dat
+        // uiteinde omzetten — één klik, één ongedaan-stap, geen sleep.
+        if (verwerkSlotKlik(selAnn, handleType)) {
+          ctx.redraw();
+          return;
+        }
+        // Textbox leader: + add button — append a new leader and commit undo
+        if (selAnn.type === 'textbox' && handleType === HANDLE_TYPES.LEADER_ADD) {
+          const before = ctx.cloneAnnotation(selAnn);
+          const bw = selAnn.width || 150;
+          const bh = selAnn.height || 50;
+          const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+          const tipX = selAnn.x + bw + 80;
+          const tipY = selAnn.y + bh / 2;
+          const kneeX = selAnn.x + bw + 40;
+          const kneeY = selAnn.y + bh / 2;
+          if (!Array.isArray(selAnn.leaders)) selAnn.leaders = [];
+          selAnn.leaders.push({ id, tipX, tipY, kneeX, kneeY, endStyle: 'arrow' });
+          selAnn.modifiedAt = new Date().toISOString();
+          recordModify(selAnn.id, before, ctx.cloneAnnotation(selAnn));
+          ctx.redraw();
+          return;
+        }
+        // Textbox leader: × delete button — splice that leader and commit undo
+        if (selAnn.type === 'textbox' && typeof handleType === 'string' &&
+            handleType.startsWith(HANDLE_TYPES.LEADER_DELETE + '_')) {
+          const leaderId = handleType.substring((HANDLE_TYPES.LEADER_DELETE + '_').length);
+          const before = ctx.cloneAnnotation(selAnn);
+          if (Array.isArray(selAnn.leaders)) {
+            selAnn.leaders = selAnn.leaders.filter(l => l.id !== leaderId);
+            selAnn.modifiedAt = new Date().toISOString();
+            recordModify(selAnn.id, before, ctx.cloneAnnotation(selAnn));
+          }
+          ctx.redraw();
+          return;
+        }
+        state.isResizing = true;
+        state.activeHandle = handleType;
+        state.originalAnnotation = ctx.cloneAnnotation(selAnn);
+        return;
+      }
+    }
+
+    // "Armed marquee": when the user clicked the Select button in the ribbon,
+    // the next pointerdown unconditionally starts a rubber-band selection,
+    // even if it lands on an annotation. The flag is consumed here.
+    const armedMarquee = !!state.armedMarquee;
+    if (armedMarquee) state.armedMarquee = false;
+
+    let clickedAnnotation = armedMarquee ? null : ctx.findAnnotationAt(x, y);
+    // Markup Selection Cycle (current plan-review releases): another plain click at the same
+    // spot selects the next markup of the stack under the pointer.
+    if (clickedAnnotation && !(e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      clickedAnnotation = cycleTargetOnClick(ctx, doc, x, y, e) || clickedAnnotation;
+    } else {
+      _cycleSpot = armedMarquee ? null : { page: ctx.pageNum, x, y };
+    }
+    // Auto-exit edit-contour mode when clicking outside the currently edited annotation
+    if (state.editingContour && (!clickedAnnotation || clickedAnnotation.id !== state.editingContour)) {
+      state.editingContour = null;
+    }
+    if (clickedAnnotation) {
+      // Double-click to edit textbox/callout
+      if (!pdfaLocked && e.detail === 2 && ['textbox', 'callout'].includes(clickedAnnotation.type)) {
+        ctx.startTextEditing(clickedAnnotation);
+        return;
+      }
+
+      // Click on comment: open popup. Mét Ctrl valt de klik door naar de
+      // kopieertak — anders is een notitie het enige type dat niet met
+      // Ctrl+klik te dupliceren is.
+      if (clickedAnnotation.type === 'comment' && !(e.ctrlKey || e.metaKey)) {
+        if (doc) { doc.selectedAnnotations = [clickedAnnotation]; doc.selectedAnnotation = clickedAnnotation; }
+        ctx.showProperties(clickedAnnotation);
+        ctx.openStickyPopup(clickedAnnotation);
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        // Re-read after potential addToSelection
+        const selAnns2 = () => doc ? doc.selectedAnnotations : [];
+        if (ctx.isSelected(clickedAnnotation)) {
+          // Ctrl+click on already selected: initiate Ctrl+drag copy. Blijft
+          // de muis staan (klik zonder sleep), dan maakt de dispatcher bij
+          // het loslaten alsnog een nieuwe instantie op dezelfde plek.
+          if (!pdfaLocked && !bevatCorrectie(selAnns2())) {
+            state.isDragging = true;
+            state._ctrlDragCopy = true;
+            state._ctrlCopiesCreated = false;
+            state._ctrlClickOpGeselecteerd = true;
+            state.originalAnnotations = selAnns2().map(a => ctx.cloneAnnotation(a));
+            if (selAnns2().length === 1) {
+              state.originalAnnotation = ctx.cloneAnnotation(selAnns2()[0]);
+            }
+            state.dragCursor = 'copy';
+          }
+        } else {
+          // Ctrl+click on unselected: add and allow drag
+          ctx.addToSelection(clickedAnnotation);
+          if (!pdfaLocked && !bevatCorrectie(selAnns2())) {
+            state.isDragging = true;
+            state._ctrlDragCopy = true;
+            state._ctrlCopiesCreated = false;
+            state.originalAnnotations = selAnns2().map(a => ctx.cloneAnnotation(a));
+            if (selAnns2().length === 1) {
+              state.originalAnnotation = ctx.cloneAnnotation(selAnns2()[0]);
+            }
+            state.dragCursor = 'copy';
+          }
+        }
+        if (selAnns2().length === 1) {
+          ctx.showProperties(selAnns2()[0]);
+        } else if (selAnns2().length > 1) {
+          ctx.showMultiSelectionProperties();
+        } else {
+          ctx.hideProperties();
+        }
+        ctx.redraw();
+      } else if (e.shiftKey) {
+        // Shift+click: additive selection (do not start drag)
+        if (ctx.isSelected(clickedAnnotation)) {
+          // Already selected — leave as is (additive doesn't remove)
+        } else {
+          ctx.addToSelection(clickedAnnotation);
+        }
+        const selAnnsNow = doc ? doc.selectedAnnotations : [];
+        if (selAnnsNow.length === 1) {
+          ctx.showProperties(selAnnsNow[0]);
+        } else if (selAnnsNow.length > 1) {
+          ctx.showMultiSelectionProperties();
+        } else {
+          ctx.hideProperties();
+        }
+        ctx.redraw();
+      } else {
+        // Inline getalbewerking: klik op een (blauw gemarkeerd) bewerkbaar
+        // getal van de reeds geselecteerde annotatie opent direct het
+        // invoerveld — géén sleep starten. Alleen bij een enkelvoudige
+        // selectie: dat is precies de situatie waarin rendering.js de
+        // getallen blauw kleurt (zie annotations/editable-numbers.js).
+        if (!pdfaLocked && ctx.isSelected(clickedAnnotation) && selAnns.length === 1) {
+          let inlineHandled = false;
+          try {
+            inlineHandled = tryStartInlineNumberEdit(clickedAnnotation, x, y);
+          } catch (err) {
+            console.error('[select] inline number edit error', err);
+          }
+          if (inlineHandled) {
+            ctx.redraw();
+            return;
+          }
+          // Systeemraster/-plafond: tweede klik binnen het geselecteerde
+          // component selecteert het SUB-ELEMENT onder de cursor — rand
+          // vóór rasterlijn vóór paneel (subElementAt). De selectie is
+          // transient (selectedSub wordt niet opgeslagen); de sleep start
+          // gewoon mee — klik-zonder-beweging selecteert, klik-en-sleep
+          // verplaatst het component zoals altijd.
+          if (clickedAnnotation.type === 'systeemraster') {
+            try {
+              const geom = buildSysteemraster(clickedAnnotation,
+                systeemrasterBuildOpts(clickedAnnotation));
+              const sub = geom
+                ? subElementAt(geom, x, y, 6 / (ctx.scale || 1)) : null;
+              const prev = clickedAnnotation.selectedSub || null;
+              if (JSON.stringify(sub) !== JSON.stringify(prev)) {
+                clickedAnnotation.selectedSub = sub;
+                ctx.showProperties(clickedAnnotation);
+              }
+            } catch (err) {
+              console.error('[select] sub-element-selectie', err);
+            }
+          }
+          // Gevelelement (vliesgevel/kozijn): idem — de tweede klik pakt de
+          // stijl of het paneel onder de cursor (Tab loopt ze af).
+          const _gvPreset = gevelPreset(clickedAnnotation);
+          if (_gvPreset) {
+            try {
+              const sub = onderdeelOnderPunt(clickedAnnotation, _gvPreset, { x, y },
+                GEVEL_RAAK_PX / (ctx.scale || 1));
+              const prev = clickedAnnotation.selectedSub || null;
+              if (JSON.stringify(sub) !== JSON.stringify(prev)) {
+                clickedAnnotation.selectedSub = sub;
+                clickedAnnotation._hoverSub = null;
+                ctx.showProperties(clickedAnnotation);
+              }
+            } catch (err) {
+              console.error('[select] gevelelement-onderdeel', err);
+            }
+          }
+        }
+        const isTextMarkup = isTextAnchored(clickedAnnotation);
+        // Alt on a group shows its members' handles (the external editor): the click picks
+        // the one member, which then moves or resizes on its own.
+        const groepLid = e?.altKey && !!clickedAnnotation.groupId;
+        if (ctx.isSelected(clickedAnnotation) && selAnns.length > 1 && !groepLid) {
+          if (!pdfaLocked && !isTextMarkup) {
+            state.isDragging = true;
+            state.originalAnnotations = selAnns.map(a => ctx.cloneAnnotation(a));
+            state.dragCursor = 'move';
+          }
+        } else {
+          // Collection: clicking any grouped member selects the WHOLE group so
+          // the collection moves and edits as a single unit. Ungroup via the
+          // "Ontbinden" button in the Verzameling ribbon group.
+          // Verse selectie van een systeemraster: sub-element-selectie
+          // wissen — die hoort bij de "tweede klik" op een al geselecteerd
+          // component. ALLEEN bij een écht verse selectie: bij een herhaalde
+          // klik op het al geselecteerde component loopt deze tak óók
+          // (herselectie vóór de sleepstart) en zou de zojuist gezette
+          // selectie meteen weer gewist worden.
+          if (clickedAnnotation.type === 'systeemraster'
+              && !ctx.isSelected(clickedAnnotation)) {
+            clickedAnnotation.selectedSub = null;
+            clickedAnnotation._hoverSub = null;
+            // Ontdekbaarheid: statusbalk-hint voor de tweede klik.
+            try {
+              updateStatusMessage('Klik nogmaals om een onderdeel te selecteren (paneel, rand of rasterlijn)');
+            } catch (_) { /* statusbalk optioneel */ }
+          }
+          if (gevelPreset(clickedAnnotation) && !ctx.isSelected(clickedAnnotation)) {
+            clickedAnnotation.selectedSub = null;
+            clickedAnnotation._hoverSub = null;
+            try {
+              updateStatusMessage(i18next.t('gevelelement.statusHint', { ns: 'properties' }));
+            } catch (_) { /* statusbalk optioneel */ }
+          }
+          let toSelect = [clickedAnnotation];
+          if (clickedAnnotation.groupId && doc && !groepLid) {
+            const members = doc.annotations.filter(a => a.groupId === clickedAnnotation.groupId);
+            if (members.length > 1) toSelect = members;
+          }
+          // Een vervanging (#508) is één correctie: beide helften, ook zonder
+          // gedeeld groupId, en het paneel toont het invoegteken in plaats
+          // van een meervoudige selectie.
+          if (doc) toSelect = expandCorrectionGroups(doc.annotations, toSelect);
+          const correctieOuder = doc && toSelect.length > 1 ? replaceParentOf(toSelect, doc.annotations) : null;
+          if (doc) { doc.selectedAnnotations = toSelect; doc.selectedAnnotation = correctieOuder || clickedAnnotation; }
+          if (correctieOuder) ctx.showProperties(correctieOuder);
+          else if (toSelect.length > 1) ctx.showMultiSelectionProperties();
+          else ctx.showProperties(clickedAnnotation);
+          if (!pdfaLocked && !isTextMarkup) {
+            state.isDragging = true;
+            state.originalAnnotation = ctx.cloneAnnotation(clickedAnnotation);
+            state.originalAnnotations = toSelect.map(a => ctx.cloneAnnotation(a));
+            state.dragCursor = 'move';
+          }
+        }
+      }
+    } else {
+      // Start rubber band selection. Modifier from initial pointerdown
+      // determines how the resulting set is combined with current selection.
+      state.isRubberBanding = true;
+      state.rubberBandStartX = x;
+      state.rubberBandStartY = y;
+      state.rubberBandEndX = x;
+      state.rubberBandEndY = y;
+      state.rubberBandPage = ctx.pageNum;
+      // Started by the armed marquee (after Escape / the Select button): a
+      // plain click without a drag still selects what is under it (below).
+      state.rubberBandArmed = armedMarquee;
+      state.rubberBandMode = 'window'; // updated live during pointermove
+      state.rubberBandModifier = (e.shiftKey)
+        ? 'add'
+        : ((e.ctrlKey || e.metaKey) ? 'toggle' : 'replace');
+      if (state.rubberBandModifier === 'replace') {
+        ctx.clearSelection();
+        ctx.hideProperties();
+      }
+      ctx.redraw();
+
+      // No annotation hit — temporarily enable text layer for text selection
+      const textLayers = document.querySelectorAll('.textLayer');
+      textLayers.forEach(layer => {
+        layer.style.pointerEvents = 'auto';
+        layer.querySelectorAll('span').forEach(span => {
+          span.style.pointerEvents = 'auto';
+          span.style.cursor = 'text';
+        });
+      });
+    }
+  },
+
+  onPointerMove(ctx, e) {
+    const { x, y, state, canvas, canvasCtx } = ctx;
+
+    // Rubber band: update the live end-point and let the render overlay pass
+    // (rendering.js drawRubberBand) paint the marquee. Drawing it there —
+    // driven by state, as the last step of every frame — means it survives
+    // each redraw, instead of being hand-painted right after redraw() where
+    // the following frame could erase it (the marquee then showed on some
+    // gestures but not others).
+    if (state.isRubberBanding) {
+      // AutoCAD-style: drag right → window (blue, solid),
+      // drag left → crossing (green, dashed).
+      state.rubberBandMode = kruisSelectie(state, x, y);
+      state.rubberBandEndX = x;
+      state.rubberBandEndY = y;
+      ctx.redraw();
+      return;
+    }
+
+    // Hover state — write to state.hoverAnnotation / state.hoverHandle.
+    // The reactive cursor module (js/ui/cursor.js) reads these and updates
+    // the visible cursor automatically; tools NEVER set canvas.style.cursor.
+    const doc = getActiveDocument();
+    const selAnns = doc ? doc.selectedAnnotations : [];
+    const hoverAnn = selAnns.length === 1 && isAnnotationPickableInView(selAnns[0]) ? selAnns[0] : null;
+    let hoverHandle = null;
+    if (hoverAnn) {
+      hoverHandle = ctx.findHandleAt(x, y, hoverAnn);
+    }
+    const vorigeHoverHandle = state.hoverHandle;
+    state.hoverHandle = hoverHandle;
+    // Het stramienslotje kleurt op bij hover: alleen bij binnenkomen of
+    // verlaten hertekenen.
+    if (vorigeHoverHandle !== hoverHandle
+        && (slotTooltip(hoverAnn, vorigeHoverHandle) || slotTooltip(hoverAnn, hoverHandle))) {
+      ctx.redraw();
+    }
+    // Sub-element-hover op een geselecteerd systeemraster: licht oplichten
+    // van het onderdeel dat een tweede klik zou pakken (ontdekbaarheid).
+    const setHoverSub = (ann, sub) => {
+      if (!ann) return;
+      if (JSON.stringify(ann._hoverSub || null) !== JSON.stringify(sub)) {
+        ann._hoverSub = sub;
+        ctx.redraw();
+      }
+    };
+    if (hoverHandle) {
+      // Hovering a resize handle — clear annotation hover so the handle wins.
+      if (hoverAnn?.type === 'systeemraster' || gevelPreset(hoverAnn)) setHoverSub(hoverAnn, null);
+      state.hoverAnnotation = null;
+      canvas.title = slotTooltip(hoverAnn, hoverHandle) || '';
+      return;
+    }
+    const hoverAnnotation = ctx.findAnnotationAt(x, y);
+    if (hoverAnn?.type === 'systeemraster') {
+      let sub = null;
+      if (hoverAnnotation === hoverAnn) {
+        try {
+          const geom = buildSysteemraster(hoverAnn, systeemrasterBuildOpts(hoverAnn));
+          sub = geom ? subElementAt(geom, x, y, 6 / (ctx.scale || 1)) : null;
+        } catch (_) { sub = null; }
+      }
+      setHoverSub(hoverAnn, sub);
+    }
+    // Gevelelement: onthoud waar de aanwijzer staat (Tab begint bij het
+    // onderdeel eronder) en licht bij een geselecteerd element het onderdeel
+    // op dat een tweede klik zou pakken.
+    const _gvHover = gevelPreset(hoverAnnotation);
+    state._gevelAanwijzer = _gvHover
+      ? { id: hoverAnnotation.id, x, y, margePt: GEVEL_RAAK_PX / (ctx.scale || 1) }
+      : null;
+    const _gvSel = gevelPreset(hoverAnn);
+    if (_gvSel) {
+      let sub = null;
+      if (hoverAnnotation === hoverAnn) {
+        try {
+          sub = onderdeelOnderPunt(hoverAnn, _gvSel, { x, y }, GEVEL_RAAK_PX / (ctx.scale || 1));
+        } catch (_) { sub = null; }
+      }
+      setHoverSub(hoverAnn, sub);
+    }
+    state.hoverAnnotation = hoverAnnotation || null;
+    canvas.title = (hoverAnnotation?.type === 'comment' && !hoverAnnotation.popupOpen && hoverAnnotation.text)
+      ? hoverAnnotation.text.split('\n').slice(0, 5).join('\n') : '';
+  },
+
+  // Escape: één niveau terug — sub-element → component → (dispatcher wist
+  // daarna de selectie zelf). Alleen handelen als er echt een sub-element
+  // geselecteerd is; anders valt Escape door naar het standaardgedrag.
+  onEscape(ctx) {
+    const doc = getActiveDocument();
+    const selAnns = doc ? doc.selectedAnnotations : [];
+    const ann = selAnns.length === 1 ? selAnns[0] : null;
+    if (ann && (ann.type === 'systeemraster' || gevelPreset(ann)) && ann.selectedSub) {
+      ann.selectedSub = null;
+      ann._hoverSub = null;
+      ctx.showProperties(ann);
+      ctx.redraw();
+      return true;
+    }
+    return false;
+  },
+
+  onPointerUp(ctx, e) {
+    const { x, y, state } = ctx;
+
+    // Rubber band selection end
+    if (state.isRubberBanding) {
+      state.isRubberBanding = false;
+      const mode = state.rubberBandMode || kruisSelectie(state, x, y);
+      const modifier = state.rubberBandModifier || 'replace';
+
+      const rbX = Math.min(state.rubberBandStartX, x);
+      const rbY = Math.min(state.rubberBandStartY, y);
+      const rbW = Math.abs(x - state.rubberBandStartX);
+      const rbH = Math.abs(y - state.rubberBandStartY);
+
+      // Drempel in schermpixels (3 px / zoom): ingezoomd moet ook een klein
+      // kader om een klein vormpje selecteren. Was 3 paginapunten.
+      const rbMin = 3 / (ctx.scale > 0 ? ctx.scale : 1);
+      const armedClick = state.rubberBandArmed && rbW <= rbMin && rbH <= rbMin;
+      state.rubberBandArmed = false;
+      if (armedClick) {
+        // The armed marquee is for a drag. A click without one (the first
+        // click after Escape) selects the markup under the cursor, like any
+        // other click; before, it selected nothing.
+        const doc = state.documents[state.activeDocumentIndex];
+        const hit = ctx.findAnnotationAt(state.rubberBandStartX, state.rubberBandStartY);
+        if (doc && hit) {
+          const members = hit.groupId && !e?.altKey ? doc.annotations.filter((a) => a.groupId === hit.groupId) : [hit];
+          const modifier = state.rubberBandModifier || 'replace';
+          if (modifier === 'replace') doc.selectedAnnotations = members;
+          else for (const a of members) if (!doc.selectedAnnotations.includes(a)) doc.selectedAnnotations.push(a);
+          doc.selectedAnnotation = hit;
+          if (doc.selectedAnnotations.length === 1) ctx.showProperties(hit);
+          else ctx.showMultiSelectionProperties();
+        }
+      } else if (rbW > rbMin || rbH > rbMin) {
+        const selected = [];
+        const doc = state.documents[state.activeDocumentIndex];
+        for (const ann of (doc?.annotations || [])) {
+          if (ann.page !== ctx.pageNum) continue;
+          // Onzichtbaar door een weergavefilter (hidden-vlag, Zichtbaarheid
+          // Elementen, statusfilter #333, uitgezette laag #468) of op een
+          // vergrendelde laag = ook niet marquee-selecteerbaar.
+          if (!isAnnotationPickableInView(ann)) continue;
+          const bounds = ctx.getAnnotationBounds(ann);
+          if (!bounds) continue;
+          // Window: helemaal erin; crossing: raakt. Een ruimte uit de
+          // plattegrond alleen als ze er helemaal in ligt, anders pakt elk
+          // vak om een paar wanden haar mee (ruimte-koppeling.js).
+          const hit = inSelectieVak(ann, bounds, { x: rbX, y: rbY, width: rbW, height: rbH }, mode);
+          if (hit) selected.push(ann);
+        }
+        // A markup in a group brings its whole group (the external editor); Alt picks members.
+        if (doc && !e?.altKey) selected.splice(0, selected.length, ...expandToGroups(doc.annotations, selected));
+        if (doc) {
+          if (modifier === 'add') {
+            for (const a of selected) {
+              if (!doc.selectedAnnotations.includes(a)) doc.selectedAnnotations.push(a);
+            }
+          } else if (modifier === 'toggle') {
+            for (const a of selected) {
+              const idx = doc.selectedAnnotations.indexOf(a);
+              if (idx >= 0) doc.selectedAnnotations.splice(idx, 1);
+              else doc.selectedAnnotations.push(a);
+            }
+          } else {
+            // replace
+            doc.selectedAnnotations = selected;
+          }
+          const selNow = doc.selectedAnnotations;
+          doc.selectedAnnotation = selNow.length > 0 ? selNow[selNow.length - 1] : null;
+          if (selNow.length === 1) ctx.showProperties(selNow[0]);
+          else if (selNow.length > 1) ctx.showMultiSelectionProperties();
+          else ctx.hideProperties();
+        }
+      }
+      ctx.redraw();
+
+      // Restore text layer to non-interactive after rubber band
+      setTimeout(() => {
+        if (state.currentTool === 'select') {
+          const textLayers = document.querySelectorAll('.textLayer');
+          textLayers.forEach(layer => {
+            layer.style.pointerEvents = 'none';
+            layer.querySelectorAll('span').forEach(span => {
+              span.style.pointerEvents = 'none';
+              span.style.cursor = 'default';
+            });
+          });
+        }
+      }, 100);
+
+      return true; // handled
+    }
+
+    // Restore text layer to non-interactive after pointer up
+    setTimeout(() => {
+      if (state.currentTool === 'select') {
+        const textLayers = document.querySelectorAll('.textLayer');
+        textLayers.forEach(layer => {
+          layer.style.pointerEvents = 'none';
+          layer.querySelectorAll('span').forEach(span => {
+            span.style.pointerEvents = 'none';
+            span.style.cursor = 'default';
+          });
+        });
+      }
+    }, 100);
+
+    return false; // not handled — let dispatcher do drag/resize finalization
+  },
+};

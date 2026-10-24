@@ -1,0 +1,62 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Engines without ::-webkit-scrollbar get thin themed bars. WebKit keeps the
+   8px bars below: setting scrollbar-width there switches them off for the
+   system's overlay bars, which float over the last row of a list and over
+   whatever sits at the bottom of the page view. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-border) var(--theme-panel-bg);
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--theme-panel-bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--theme-border);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-text-secondary);
+}
+
+/* Force default cursor on all UI elements except canvas */
+.title-bar, .title-bar *,
+.ribbon-container, .ribbon-container *,
+.status-bar, .status-bar *,
+.left-panel, .left-panel *,
+.properties-panel, .properties-panel *,
+.app-menu-overlay, .app-menu-overlay *,
+.context-menu, .context-menu *,
+.document-tabs, .document-tabs * {
+  cursor: default !important;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--theme-bg);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#app-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

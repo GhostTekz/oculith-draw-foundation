@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "externalBin": [
+      "binaries/ocudraw-community-pdfium-worker"
+    ],
+    "resources": {
+      "binaries/linux-x64/libpdfium.so": "libpdfium.so"
+    }
+  }
+}

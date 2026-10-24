@@ -1,0 +1,52 @@
+/* Capture: photos on markups and File Attachment (docs/CAPTURE.md). */
+
+.capture-viewer-dialog .modal-body { padding: var(--ox-sp-3); }
+.capture-viewer { display: flex; flex-direction: column; gap: var(--ox-sp-2); min-width: 420px; }
+.capture-viewer-stage {
+  display: flex; align-items: center; justify-content: center;
+  width: min(72vw, 820px); height: min(62vh, 600px);
+  background: var(--ox-surface-0); border: 1px solid var(--ox-line); border-radius: var(--ox-r-sm);
+  overflow: hidden;
+}
+.capture-viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; image-orientation: from-image; }
+.capture-viewer-meta { display: flex; gap: var(--ox-sp-3); align-items: baseline; font-size: var(--ox-fs-sm); color: var(--ox-text-2); }
+.capture-viewer-name { color: var(--ox-text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+.capture-viewer-counter { margin-left: auto; font-variant-numeric: tabular-nums; }
+.capture-viewer-strip { display: flex; gap: var(--ox-sp-1); overflow-x: auto; padding-bottom: 2px; }
+.capture-viewer-strip button {
+  flex: 0 0 auto; width: 56px; height: 42px; padding: 0; border: 1px solid var(--ox-line);
+  border-radius: var(--ox-r-xs); background: var(--ox-surface-1); cursor: default; overflow: hidden;
+}
+.capture-viewer-strip button.active { border-color: var(--ox-accent); box-shadow: 0 0 0 1px var(--ox-accent); }
+.capture-viewer-strip img { width: 100%; height: 100%; object-fit: cover; }
+.capture-btn {
+  padding: 4px 12px; border: 1px solid var(--ox-line-2); border-radius: var(--ox-r-xs);
+  background: var(--ox-surface-2); color: var(--ox-text); font-size: var(--ox-fs-sm); cursor: default;
+}
+.capture-btn:hover:not(:disabled) { background: var(--ox-surface-3); }
+.capture-btn:disabled { color: var(--ox-text-disabled); }
+.capture-btn.danger:hover:not(:disabled) { background: var(--ox-danger-soft); color: var(--ox-danger-ink); }
+.capture-footer { display: flex; gap: var(--ox-sp-2); width: 100%; }
+.capture-footer .spacer { flex: 1; }
+
+.capture-thumb-tip {
+  position: fixed; z-index: 10050; pointer-events: none;
+  display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; padding: 6px;
+  background: var(--ox-surface-2); border: 1px solid var(--ox-line-2); border-radius: var(--ox-r-sm);
+  box-shadow: var(--ox-shadow-2); font-size: var(--ox-fs-xs); color: var(--ox-text-2);
+}
+.capture-thumb-tip img { width: 80px; height: 60px; object-fit: cover; border-radius: var(--ox-r-xs); background: var(--ox-surface-0); }
+.capture-thumb-tip .capture-thumb-names { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+.annotation-cell-attachments { display: flex; align-items: center; gap: 3px; color: var(--ox-text-2); font-variant-numeric: tabular-nums; }
+.annotation-cell-attachments svg { width: 12px; height: 12px; }
+
+.prop-capture-thumbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.prop-capture-thumbs button {
+  width: 64px; height: 48px; padding: 0; border: 1px solid var(--ox-line); border-radius: var(--ox-r-xs);
+  background: var(--ox-surface-1); overflow: hidden; cursor: default;
+}
+.prop-capture-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.prop-capture-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.prop-capture-note { font-size: var(--ox-fs-xs); color: var(--ox-text-3); margin-top: 4px; }
+.prop-capture-file { font-size: var(--ox-fs-sm); color: var(--ox-text); word-break: break-all; }

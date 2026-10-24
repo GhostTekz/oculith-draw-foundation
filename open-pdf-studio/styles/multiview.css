@@ -1,0 +1,199 @@
+/* MultiView split panes (docs/MULTIVIEW.md, the external editor split screen). Unsplit,
+   .mv-panes is display: contents and #pdf-container lays out exactly as
+   before. Split, it is a grid: one tab row and one view per split.
+   #pdf-container is always the live (active) view; data-live says which
+   split it fills, the passive view takes the other. */
+
+.mv-panes {
+  display: contents;
+}
+
+body.mv-split .mv-panes {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--theme-panel-border, var(--ox-line));
+}
+
+body.mv-split .mv-panes[data-split="vertical"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 4px;
+}
+
+body.mv-split .mv-panes[data-split="horizontal"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+/* The global tab strip gives way to one row per split. */
+body.mv-split #document-tabs.document-tabs {
+  display: none;
+}
+
+/* Placement: vertical = split n in column n+1; horizontal = split n in rows
+   2n+1 (tabs) and 2n+2 (view). */
+.mv-panes[data-split="vertical"] > [data-pane="0"].mv-tabs { grid-column: 1; grid-row: 1; }
+.mv-panes[data-split="vertical"] > [data-pane="1"].mv-tabs { grid-column: 2; grid-row: 1; }
+.mv-panes[data-split="vertical"] > [data-pane="0"].mv-passive,
+.mv-panes[data-split="vertical"][data-live="0"] > #pdf-container { grid-column: 1; grid-row: 2; }
+.mv-panes[data-split="vertical"] > [data-pane="1"].mv-passive,
+.mv-panes[data-split="vertical"][data-live="1"] > #pdf-container { grid-column: 2; grid-row: 2; }
+
+.mv-panes[data-split="horizontal"] > [data-pane="0"].mv-tabs { grid-column: 1; grid-row: 1; }
+.mv-panes[data-split="horizontal"] > [data-pane="1"].mv-tabs { grid-column: 1; grid-row: 3; margin-top: 4px; }
+.mv-panes[data-split="horizontal"] > [data-pane="0"].mv-passive,
+.mv-panes[data-split="horizontal"][data-live="0"] > #pdf-container { grid-column: 1; grid-row: 2; }
+.mv-panes[data-split="horizontal"] > [data-pane="1"].mv-passive,
+.mv-panes[data-split="horizontal"][data-live="1"] > #pdf-container { grid-column: 1; grid-row: 4; }
+
+body.mv-split .mv-panes > #pdf-container.visible {
+  min-width: 0;
+  /* The active split: a thin accent edge drawn over the canvas. */
+  outline: 1px solid var(--ox-accent);
+  outline-offset: -1px;
+}
+
+/* ── Tab rows ─────────────────────────────────────────────────────────── */
+
+.mv-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: 30px;
+  background: var(--theme-panel-bg);
+  box-shadow: inset 0 -1px 0 var(--theme-panel-border, var(--theme-tab-border));
+  overflow: hidden;
+  user-select: none;
+}
+
+.mv-tabs-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.mv-tabs-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mv-tabs .mv-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 4px;
+  min-width: 96px;
+  max-width: 220px;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  background: var(--theme-panel-bg);
+  border-right: 1px solid var(--theme-panel-border, var(--theme-tab-border));
+}
+
+.mv-tabs .mv-tab:hover {
+  background: var(--theme-hover, var(--theme-tab-hover));
+}
+
+.mv-tabs .mv-tab.active {
+  background: var(--theme-content-bg);
+}
+
+/* Only the active split's selected tab carries the accent; the inactive
+   split's tabs are dimmed (the external editor). */
+.mv-tabs .mv-tab.mv-live {
+  box-shadow: inset 0 2px 0 var(--theme-tab-active-accent, var(--ox-accent));
+}
+
+.mv-tabs .document-tab-title {
+  flex: 1;
+  overflow: hidden;
+  padding-right: 4px;
+  color: var(--theme-tab-text);
+  font-size: var(--ox-fs-sm, 12px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-tabs.mv-active .mv-tab.active .document-tab-title {
+  color: var(--theme-tab-active-text);
+}
+
+.mv-tabs:not(.mv-active) .document-tab-title {
+  opacity: 0.6;
+}
+
+.mv-tabs .mv-tab.active .document-tab-close,
+.mv-tabs .mv-tab:hover .document-tab-close {
+  opacity: 1;
+}
+
+/* Drop target while a tab is dragged from the other split. */
+.mv-tabs.mv-drop {
+  box-shadow: inset 0 0 0 2px var(--ox-accent);
+}
+
+.mv-tabs .mv-tabs-list {
+  flex: none;
+}
+
+/* ── Passive view ─────────────────────────────────────────────────────── */
+
+.mv-passive {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--theme-content-bg);
+}
+
+.mv-pane-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: auto;
+  overflow-anchor: none;
+}
+
+/* Like the live single-page view: centred horizontally, top aligned;
+   scrollable from the top left when larger than the split. */
+.mv-page {
+  position: relative;
+  flex: none;
+  margin: 0 auto;
+  background: #ffffff;
+  box-shadow: var(--ox-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.3));
+}
+
+.mv-page canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}
+
+.mv-annotation-canvas {
+  pointer-events: none;
+}
+
+.mv-page-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  padding: 2px 8px;
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-panel-bg);
+  color: var(--theme-tab-text);
+  font-size: var(--ox-fs-xs, 11px);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* Dimmer / Dark Mode reach the passive view's PDF raster too. */
+.mv-pdf-canvas {
+  filter: var(--ocu-content-filter, none);
+}

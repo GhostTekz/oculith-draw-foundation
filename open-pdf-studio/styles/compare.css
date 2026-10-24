@@ -1,0 +1,163 @@
+/* Comparison chrome follows the Oculith workspace. Drawing paper and
+   added/removed diff colors stay separate from application surfaces. */
+:root:not([data-theme]), [data-theme='default'] {
+  --compare-old-text: #ffb8b8;
+  --compare-new-text: #9be8b5;
+  --compare-error-text: #ffa3a3;
+}
+
+[data-theme='light'] {
+  --compare-old-text: #9f1d27;
+  --compare-new-text: #17603b;
+  --compare-error-text: #a02424;
+}
+
+.compare-view { background: var(--theme-content-bg); }
+.compare-body { min-width: 0; }
+.compare-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+  color: var(--theme-text);
+  font-size: 12px;
+}
+.compare-toolbar-muted { color: var(--theme-text-secondary); }
+.compare-toolbar-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--theme-panel-border);
+}
+.compare-toolbar input[type='number'],
+.compare-page-pairs input,
+.compare-page-pairs select {
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+.compare-exit {
+  padding: 4px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.compare-exit:hover { border-color: var(--theme-accent); }
+.compare-change-list {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 260px;
+  width: 260px;
+  border-left: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+  color: var(--theme-text);
+  font-size: 12px;
+}
+.compare-panel-tabs, .compare-type-filters {
+  display: flex;
+  border-bottom: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+}
+.compare-panel-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+.compare-panel-tab[aria-current='page'] {
+  border-bottom-color: var(--theme-accent);
+  color: var(--theme-text);
+  font-weight: 600;
+}
+.compare-panel-tab:hover, .compare-type-toggle:hover { background: var(--theme-hover); }
+.compare-toolbar button:focus-visible,
+.compare-page-pairs button:focus-visible,
+.compare-change-list button:focus-visible,
+.compare-exit:focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+.compare-type-filters { gap: 4px; padding: 6px 8px; }
+.compare-type-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-size: 11px;
+}
+.compare-type-toggle[aria-pressed='false'] {
+  background: var(--theme-panel-bg);
+  color: var(--theme-text-secondary);
+}
+.compare-empty { padding: 14px; color: var(--theme-text-secondary); font-style: italic; }
+.compare-results-scroll { flex: 1; min-height: 0; overflow: auto; }
+.compare-change-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--theme-panel-border);
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.compare-change-row, .compare-text-row {
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+  color: var(--theme-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.compare-change-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+}
+.compare-change-row:hover, .compare-text-row:hover { background: var(--theme-hover); }
+.compare-change-row.focused, .compare-text-row.focused {
+  background: var(--theme-ribbon-btn-active-bg);
+  box-shadow: inset 2px 0 var(--theme-accent);
+}
+.compare-row-detail {
+  display: block;
+  overflow: hidden;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compare-text-page {
+  margin-left: auto;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+}
+.compare-report-error {
+  margin-top: 4px;
+  color: var(--compare-error-text);
+  font-size: 11px;
+}

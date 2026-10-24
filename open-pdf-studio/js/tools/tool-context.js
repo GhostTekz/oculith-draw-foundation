@@ -1,0 +1,275 @@
+import { state, getActiveDocument, clearSelection, addToSelection, removeFromSelection, isSelected, getAnnotationBounds, getSelectionBounds } from '../core/state.js';
+import { annotationCanvas, annotationCtx } from '../ui/dom-elements.js';
+import { createAnnotation, cloneAnnotation } from '../annotations/factory.js';
+import { findAnnotationAt } from '../annotations/geometry.js';
+import { findHandleAt, getCursorForHandle } from '../annotations/handles.js';
+import { applyResize, applyMove, applyRotation } from '../annotations/transforms.js';
+import { redrawAnnotations, redrawContinuous, renderAnnotationsForPage, snapToGrid } from '../annotations/rendering.js';
+import { showProperties, hideProperties, showMultiSelectionProperties } from '../ui/panels/properties-panel.js';
+import { startTextEditing, finishTextEditing, addTextAnnotation, addComment } from './text-editing.js';
+import { openStickyPopup } from '../bridge.js';
+import { findTextEditAtPosition, startTextEditEditing } from './text-edit-tool.js';
+import { markDocumentModified } from '../ui/chrome/tabs.js';
+import { recordAdd, recordModify, recordBulkModify } from '../core/undo-manager.js';
+import { showStampPicker, placeOverrideStamp } from '../annotations/stamps.js';
+import { showSignatureDialog } from '../annotations/signature.js';
+import { startPan, startContinuousPan } from './pan-handler.js';
+import { snapAngle } from '../utils/helpers.js';
+import { drawShapePreview } from './shape-preview.js';
+import { createAnnotationFromTool, createContinuousAnnotation, buildAnnotationProps, createMeasureAreaAnnotation, createMeasurePerimeterAnnotation } from './annotation-creators.js';
+import { isPdfAReadOnly } from '../pdf/loader.js';
+import { calculateDistance, calculateArea, calculatePerimeter, formatMeasurement, snapDistanceTo10 } from '../annotations/measurement.js';
+import { performSnap, drawSnapIndicator, setPolarAnchor, clearPolarAnchor } from './snap-engine.js';
+import { buildCloudPolylinePath } from '../annotations/rendering/shapes.js';
+import { drawDimension, drawMeasureAreaShape, drawCentroidLabel, drawMeasurePerimeterShape } from '../annotations/rendering/measurements.js';
+import { getAnnotationType } from '../plugins/annotation-type-registry.js';
+import { getColorPickerValue, getLineWidthValue } from '../bridge.js';
+import { viewportNaarPagina } from '../pdf/weergave-rotatie.js';
+import { weergaveNaarPagina, weergaveRotatie } from '../pdf/weergave-ruimte.js';
+
+/**
+ * Check if any modal dialog/overlay is blocking interaction
+ */
+// Live collections (getElementsByClassName): the browser keeps them current,
+// so a check per pointer event costs next to nothing. A document-wide
+// querySelector over eight selectors cost 1-2 ms per event on a document with
+// a long Markups List.
+let _overlays = null;
+const OVERLAY_ZONDER_VISIBLE = 'form-validation-overlay';
+const OVERLAYS_MET_VISIBLE = ['about-overlay', 'doc-props-overlay', 'preferences-overlay',
+  'text-annot-overlay', 'loading-overlay', 'app-menu-overlay', 'sig-overlay'];
+
+export function isModalOpen() {
+  if (state.modalDialogOpen) return true;
+  if (typeof document === 'undefined') return false;
+  if (!_overlays) {
+    _overlays = {
+      altijd: document.getElementsByClassName(OVERLAY_ZONDER_VISIBLE),
+      zichtbaar: OVERLAYS_MET_VISIBLE.map((c) => document.getElementsByClassName(c)),
+    };
+  }
+  if (_overlays.altijd.length) return true;
+  for (const lijst of _overlays.zichtbaar) {
+    for (let i = 0; i < lijst.length; i++) if (lijst[i].classList.contains('visible')) return true;
+  }
+  return false;
+}
+
+/**
+ * Resolve pointer coordinates from a PointerEvent into unified canvas-space coords.
+ * Works for both single-page and continuous modes.
+ *
+ * De uitkomst staat altijd in de paginaruimte (waar annotaties staan), ook als
+ * de weergave gedraaid is (#200): eerst naar de weergave (schaal, verschuiving),
+ * dan terugdraaien naar de pagina.
+ */
+export function resolvePointerCoords(e) {
+  const doc = getActiveDocument();
+  const docCurrentPage = doc ? doc.currentPage : 1;
+  const scale = doc?.scale || 1.5;
+  if (doc?.viewMode === 'continuous') {
+    // Events komen via de paginacontainer binnen (zie
+    // setupContinuousPageEvents) en kunnen dus ook op het pdf-canvas of de
+    // container zelf landen; het annotatiecanvas van de pagina blijft de
+    // tekencontext van het gereedschap.
+    const ccEl = e.target.closest ? e.target.closest('.canvas-container-cont') : null;
+    const canvas = (ccEl && ccEl.querySelector('.annotation-canvas'))
+      || (e.target.closest ? e.target.closest('.annotation-canvas') : null)
+      || e.target;
+    if (!canvas || !canvas.getBoundingClientRect) {
+      return { x: 0, y: 0, pageNum: docCurrentPage, canvas: null, canvasCtx: null };
+    }
+    const pageNum = parseInt(canvas?.dataset?.page ?? ccEl?.dataset?.page, 10);
+    // Het annotatiecanvas is een viewport-uitsnede van de pagina; de
+    // PAGINA-oorsprong is de canvas-container eromheen.
+    const paginaEl = ccEl || (canvas.closest && canvas.closest('.canvas-container-cont')) || canvas;
+    const rect = paginaEl.getBoundingClientRect();
+    const pagina = isNaN(pageNum) ? docCurrentPage : pageNum;
+    const p = weergaveNaarPagina(pagina, (e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale, doc);
+    return {
+      x: p.x,
+      y: p.y,
+      pageNum: pagina,
+      canvas,
+      canvasCtx: canvas.getContext ? canvas.getContext('2d') : null
+    };
+  } else {
+    const canvas = annotationCanvas;
+    if (!canvas) {
+      return { x: 0, y: 0, pageNum: docCurrentPage, canvas: null, canvasCtx: null };
+    }
+    const ctx = annotationCtx || canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    // Vector viewport mode: use viewport transform for coordinate conversion.
+    // Same guard as renderer.js zoomIn/Out: only honour the viewport if THIS
+    // doc actually uses it. Blank in-memory docs (filePath===null) are drawn
+    // via the PDF.js fallback path in renderer.js — they read coords from
+    // doc.scale + the annotation-canvas rect. If we'd let the viewport's
+    // stale zoom/offset (from a previously-open real PDF) drive the coord
+    // math here, every click on a blank-doc tab would land far off the page
+    // → user sees "tool draws nothing" while the annotation actually exists
+    // somewhere outside the canvas area.
+    const vp = window.__pdfViewport;
+    if (vp && vp.active && doc?.filePath) {
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      // Annotations use app-space: (0,0) = page top-left, Y-down, scale=1
+      // Page top-left on screen = (offsetX, offsetY) without view rotation
+      // So app coords = (screen - offset) / zoom, turned back by the view
+      // rotation (#200) — NO Y-flip needed
+      const { x: appX, y: appY } = viewportNaarPagina(vp, screenX, screenY);
+      return {
+        x: appX,
+        y: appY,
+        pageNum: docCurrentPage,
+        canvas,
+        canvasCtx: ctx
+      };
+    }
+
+    // Legacy PDF.js mode. Bij een diepe zoom is het annotatiecanvas een
+    // uitsnede van de pagina vanaf (clipX, clipY) CSS-px.
+    const clipX = parseFloat(canvas.dataset?.clipX) || 0;
+    const clipY = parseFloat(canvas.dataset?.clipY) || 0;
+    const p = weergaveNaarPagina(docCurrentPage, (e.clientX - rect.left + clipX) / scale, (e.clientY - rect.top + clipY) / scale, doc);
+    return {
+      x: p.x,
+      y: p.y,
+      pageNum: docCurrentPage,
+      canvas,
+      canvasCtx: ctx
+    };
+  }
+}
+
+// Canvas-transform voor voorbeelden en interactie van gereedschappen — in een
+// eigen lichte module (ook bruikbaar voor shape-preview.js zonder kringimport);
+// hier opnieuw uitgevoerd voor bestaande importeurs.
+import { applyToolTransform } from './tool-transform.js';
+export { applyToolTransform };
+
+// Get the effective scale for the current rendering mode — verhuisd naar een
+// eigen lichte module; hier opnieuw uitgevoerd voor bestaande importeurs.
+export { getEffectiveScale } from './effective-scale.js';
+
+/**
+ * Build a tool context object from event + resolved coordinates.
+ * This gives each tool a clean API to work with.
+ */
+export function buildToolContext(e, coords) {
+  const ctxDoc = getActiveDocument();
+  const vp = window.__pdfViewport;
+  const ctxScale = (vp && vp.active) ? vp.zoom : (ctxDoc?.scale || 1.5);
+  return {
+    // Coordinates
+    x: coords.x,
+    y: coords.y,
+    pageNum: coords.pageNum,
+    canvas: coords.canvas,
+    canvasCtx: coords.canvasCtx,
+    event: e,
+
+    // State access
+    state,
+    prefs: state.preferences,
+    scale: ctxScale,
+    viewMode: ctxDoc?.viewMode || 'single',
+
+    // Snapping
+    snap: (x, y, excludeId, extraPoints) => performSnap(x, y, ctxDoc?.annotations || [], coords.pageNum, ctxScale, excludeId, extraPoints),
+    snapToGrid,
+    snapAngle,
+    setPolarAnchor,
+    clearPolarAnchor,
+    snapDistanceTo10,
+    drawSnapIndicator: (snapResult) => {
+      if (!coords.canvasCtx) return;
+      coords.canvasCtx.save();
+      applyToolTransform(coords.canvasCtx);
+      drawSnapIndicator(coords.canvasCtx, snapResult, ctxScale);
+      coords.canvasCtx.restore();
+    },
+
+    // Annotation operations
+    findAnnotationAt,
+    findHandleAt: (x, y, ann) => findHandleAt(x, y, ann, ctxScale),
+    // De cursor volgt de richting op het scherm: annotatierotatie plus de
+    // weergaverotatie (#200).
+    getCursorForHandle: (handle, rotation, ann) => getCursorForHandle(handle, (rotation || 0) + weergaveRotatie(ctxDoc), ann),
+    createAnnotation,
+    cloneAnnotation,
+    applyResize,
+    applyMove,
+    applyRotation,
+    getAnnotationBounds,
+    getSelectionBounds,
+    buildAnnotationProps,
+    createAnnotationFromTool,
+    createContinuousAnnotation,
+    createMeasureAreaAnnotation,
+    createMeasurePerimeterAnnotation,
+    buildCloudPolylinePath,
+    drawDimension,
+    drawMeasureAreaShape,
+    drawMeasurePerimeterShape,
+    drawCentroidLabel,
+    calculateDistance,
+    calculateArea,
+    calculatePerimeter,
+    formatMeasurement,
+
+    // Selection
+    clearSelection,
+    addToSelection,
+    removeFromSelection,
+    isSelected,
+
+    // Properties panel
+    showProperties,
+    hideProperties,
+    showMultiSelectionProperties,
+
+    // Text editing
+    startTextEditing,
+    finishTextEditing,
+    addTextAnnotation,
+    addComment,
+    openStickyPopup,
+    findTextEditAtPosition,
+    startTextEditEditing,
+
+    // Stamps and signatures
+    showStampPicker,
+    placeOverrideStamp,
+    showSignatureDialog,
+
+    // Pan
+    startPan,
+    startContinuousPan,
+
+    // Drawing
+    drawShapePreview,
+    getAnnotationType,
+    getColorPickerValue,
+    getLineWidthValue,
+
+    // Undo
+    recordAdd,
+    recordModify,
+    recordBulkModify,
+    markDocumentModified,
+
+    // Rendering
+    redraw: () => {
+      if (getActiveDocument()?.viewMode === 'continuous') redrawContinuous();
+      else redrawAnnotations();
+    },
+    redrawAnnotations,
+    redrawContinuous,
+    renderAnnotationsForPage,
+
+    // PDF/A
+    isPdfAReadOnly,
+  };
+}

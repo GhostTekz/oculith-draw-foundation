@@ -1,0 +1,627 @@
+import { For, Show, createSignal, onCleanup } from 'solid-js';
+import { state } from '../../core/state.js';
+import { useTranslation } from '../../i18n/useTranslation.js';
+import i18next from '../../i18n/config.js';
+import { invoke } from '../../core/platform.js';
+import { revealInFileManager } from '../../core/file-manager-reveal.js';
+import { showDocTabMenu, showDocListMenu } from '../stores/contextMenuStore.js';
+import { tabsToClose, cycleTabIndex } from './document-tab-menu.js';
+import { lucide } from '../data/lucideIcons.js';
+import {
+  compareActive,
+  compareFocused,
+  focusCompareTab,
+  blurCompareTab,
+  exitCompare,
+  compareOldPath,
+  compareNewPath,
+} from '../../compare/compare-store.js';
+
+// Detach threshold — how far the mouse must travel BELOW the tab bar
+// during drag before we treat it as a "detach to new window" gesture.
+const DETACH_VERTICAL_PX = 60;
+
+// Cached current-window label (set once on first mount). All windows ask
+// Rust for their own label so cross-window dock IPC can identify the source.
+let _currentWindowLabel = null;
+async function getCurrentWindowLabel() {
+  if (_currentWindowLabel !== null) return _currentWindowLabel;
+  try {
+    _currentWindowLabel = await invoke('current_window_label');
+  } catch {
+    _currentWindowLabel = 'main';
+  }
+  return _currentWindowLabel;
+}
+
+async function detachTabToNewWindow(index) {
+  const doc = state.documents[index];
+  if (!doc) return;
+  const pdfPath = doc.filePath || '';
+  console.log('[detach] requested for index', index, 'pdfPath:', pdfPath);
+  // Untitled docs are backed by a TEMP file that this window owns and deletes
+  // on close — handing it to another process would leave a dangling reference.
+  // Require an explicit save first.
+  if (!pdfPath || doc.isUntitled) {
+    alert(i18next.t('tabs.saveBeforeDetach'));
+    return;
+  }
+  try {
+    const label = await invoke('spawn_window_with_pdf', { pdfPath });
+    console.log('[detach] spawn_window_with_pdf returned label:', label);
+    // Close the source tab AFTER the new window is spawned so the user
+    // visually sees the tab leave the parent.
+    await closeTabAndMaybeCloseWindow(index);
+  } catch (e) {
+    console.error('[detach] spawn_window_with_pdf failed:', e);
+    alert(i18next.t('tabs.detachFailed', { error: e?.message || e }));
+  }
+}
+
+// Close a tab in the current window. If this empties out a NON-main window
+// (i.e. a previously detached one) destroy the window too — the detached
+// window has no reason to keep hanging around as an empty shell.
+async function closeTabAndMaybeCloseWindow(index) {
+  const { closeTab } = await import('../../ui/chrome/tabs.js');
+  closeTab(index);
+  const label = await getCurrentWindowLabel();
+  if (label && label !== 'main' && state.documents.length === 0) {
+    try {
+      await invoke('close_window_by_label', { label });
+    } catch (e) {
+      console.warn('close_window_by_label failed:', e);
+    }
+  }
+}
+
+const [editingIndex, setEditingIndex] = createSignal(-1);
+const [dropTargetIndex, setDropTargetIndex] = createSignal(-1);
+const [draggingIndex, setDraggingIndex] = createSignal(-1);
+
+// Mouse-based drag state (module-level so handlers can access it)
+let dragState = null;
+
+function handleTabClick(index) {
+  if (editingIndex() === index) return;
+  blurCompareTab(); // switching to a PDF tab leaves the compare view
+  import('../../ui/chrome/tabs.js').then(m => m.switchToTab(index));
+}
+
+function handleCloseTab(e, index) {
+  e.stopPropagation();
+  import('../../ui/chrome/tabs.js').then(async m => {
+    if (await m.closeTab(index)) {
+      requestAnimationFrame(() => document.querySelector('.document-tab-select[aria-current="page"]')?.focus());
+    }
+  });
+}
+
+function handleTabKeyDown(e) {
+  if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+    const documentIndex = e.currentTarget.closest('.document-tab')?.dataset.index;
+    if (documentIndex !== undefined) handleTabContextMenu(e, Number(documentIndex));
+    return;
+  }
+  const buttons = [...document.querySelectorAll('#document-tabs .document-tab-select')];
+  const index = buttons.indexOf(e.currentTarget);
+  if (index < 0 || !buttons.length) return;
+  let next;
+  if (e.key === 'ArrowRight') next = (index + 1) % buttons.length;
+  else if (e.key === 'ArrowLeft') next = (index + buttons.length - 1) % buttons.length;
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = buttons.length - 1;
+  else return;
+  e.preventDefault();
+  e.stopPropagation();
+  buttons[next].focus();
+  buttons[next].click();
+}
+
+function handleMiddleClick(e, index) {
+  if (e.button === 1) {
+    e.preventDefault();
+    import('../../ui/chrome/tabs.js').then(m => m.closeTab(index));
+  }
+}
+
+function handleDoubleClick(e, index) {
+  e.stopPropagation();
+  const doc = state.documents[index];
+  if (!doc) return;
+
+  if (!doc.filePath) {
+    import('../../ui/chrome/tabs.js').then(m => m.renameDocument(index, ''));
+    return;
+  }
+
+  setEditingIndex(index);
+}
+
+function handleRenameKeyDown(e, index) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    commitRename(e.target, index);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    cancelRename();
+  }
+}
+
+function commitRename(input, index) {
+  const newName = input.value.trim();
+  setEditingIndex(-1);
+  if (!newName) return;
+  import('../../ui/chrome/tabs.js').then(m => m.renameDocument(index, newName));
+}
+
+function cancelRename() {
+  setEditingIndex(-1);
+}
+
+function handleInputMount(el, doc) {
+  const name = doc.fileName || '';
+  el.value = name.replace(/\.pdf$/i, '');
+  requestAnimationFrame(() => {
+    el.focus();
+    el.select();
+  });
+}
+
+// --- Mouse-based tab reordering ---
+
+const DRAG_THRESHOLD = 5; // pixels before drag starts
+
+function handleMouseDown(e, index) {
+  // Only left button, not on close button or rename input
+  if (e.button !== 0) return;
+  if (e.target.closest('.document-tab-close') || e.target.closest('.document-tab-rename-input')) return;
+  if (editingIndex() === index) return;
+
+  dragState = {
+    fromIndex: index,
+    startX: e.clientX,
+    startY: e.clientY,
+    started: false,
+  };
+
+  // Alvast laden zodat er straks geen asynchroon gat zit tussen "cursor
+  // verlaat de tabbalk" en het daadwerkelijk starten van de OS-drag — zie
+  // preloadDragDeps().
+  preloadDragDeps();
+
+  document.addEventListener('mousemove', onDocMouseMove);
+  document.addEventListener('mouseup', onDocMouseUp);
+}
+
+function onDocMouseMove(e) {
+  if (!dragState) return;
+
+  if (!dragState.started) {
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+    dragState.started = true;
+    setDraggingIndex(dragState.fromIndex);
+    document.body.style.userSelect = 'none';
+  }
+
+  // Find which tab the mouse is over
+  const tabsContainer = document.getElementById('document-tabs');
+  if (!tabsContainer) return;
+
+  const tabElements = tabsContainer.querySelectorAll('.document-tab');
+  let targetIndex = -1;
+
+  for (let i = 0; i < tabElements.length; i++) {
+    const rect = tabElements[i].getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX < rect.right) {
+      targetIndex = i;
+      break;
+    }
+  }
+
+  if (targetIndex !== -1 && targetIndex !== dragState.fromIndex) {
+    setDropTargetIndex(targetIndex);
+  } else {
+    setDropTargetIndex(-1);
+  }
+
+  // Detach / re-dock hand-off: once the cursor leaves the tab bar vertically,
+  // stop our mouse-based tracking and start a NATIVE OS file-drag of the PDF.
+  // The OS drag is what lets the user drop onto ANOTHER app instance's tab bar
+  // (cross-process re-dock) — browser mouse events can't cross window/process
+  // boundaries, the OS drag-drop layer can. Started ONCE per drag.
+  const tabBarRect = tabsContainer.getBoundingClientRect();
+  const verticalOutside =
+       e.clientY > tabBarRect.bottom + DETACH_VERTICAL_PX
+    || e.clientY < tabBarRect.top    - DETACH_VERTICAL_PX;
+  if (verticalOutside && !dragState.nativeDragStarted) {
+    dragState.nativeDragStarted = true;
+    const from = dragState.fromIndex;
+    // Tear down mouse tracking — the OS drag loop owns the pointer now.
+    document.removeEventListener('mousemove', onDocMouseMove);
+    document.removeEventListener('mouseup', onDocMouseUp);
+    document.body.style.userSelect = '';
+    dragState = null;
+    setDraggingIndex(-1);
+    setDropTargetIndex(-1);
+    startNativeTabDrag(from);
+  }
+}
+
+// Voorladen van alles wat `startNativeTabDrag` nodig heeft.
+//
+// WAAROM (issue #335): de OS-drag moet starten TERWIJL de muisknop nog
+// ingedrukt is. Werd `startDrag` pas aangeroepen na een dynamische import en
+// een `invoke`, dan zat daar een asynchroon gat van tientallen ms tot (in dev,
+// bij een koude module-load) veel langer. Liet de gebruiker in dat gat de knop
+// los, dan startte `DoDragDrop` zonder ingedrukte knop en liep zijn modale lus
+// nooit af — de complete event-loop van de app stond dan permanent stil.
+// Daarom laden we module en drag-icoon één keer voor, zodra de gebruiker een
+// tab aanraakt (handleMouseDown) — ruim voordat ze nodig zijn.
+let _dragModulePromise = null;
+let _dragIconPromise = null;
+function preloadDragDeps() {
+  if (!_dragModulePromise) {
+    _dragModulePromise = import('@crabnebula/tauri-plugin-drag').catch(() => null);
+  }
+  if (!_dragIconPromise) {
+    _dragIconPromise = invoke('drag_icon_path').catch(() => '');
+  }
+}
+
+// Synchrone spiegel van de primaire-muisknopstatus. De Rust-preflight kost een
+// IPC-rondgang; deze check kost niets en dekt het laatste stukje van het gat
+// tussen "preflight zegt ok" en "startDrag is aangeroepen".
+let _primaryDown = false;
+if (typeof document !== 'undefined') {
+  const down = (e) => { if (e.button === 0 || e.buttons & 1) _primaryDown = true; };
+  const up = () => { _primaryDown = false; };
+  document.addEventListener('pointerdown', down, true);
+  document.addEventListener('mousedown', down, true);
+  document.addEventListener('pointerup', up, true);
+  document.addEventListener('mouseup', up, true);
+  document.addEventListener('pointercancel', up, true);
+  window.addEventListener('blur', up, true);
+}
+
+// Nette melding wanneer de tab-overdracht niet veilig gestart kan worden.
+// Liever een uitleg dan een bevroren of verdwenen venster.
+function explainDragUnavailable(reason) {
+  const key = reason === 'missing-file' ? 'tabs.dragFileGone' : 'tabs.dragNotStarted';
+  const msg = i18next.t(key, { defaultValue: reason === 'missing-file'
+    ? 'Dit bestand bestaat niet meer op schijf — de tab kan niet verplaatst worden.'
+    : 'De tab kon niet naar een ander venster gesleept worden. Probeer het opnieuw, of gebruik rechtsklik → openen in nieuw venster.' });
+  alert(msg);
+}
+
+// Start a native OS file-drag of a tab's PDF. The OS handles where it lands:
+//   * dropped on another OPDS instance  → that instance docks it as a tab
+//     (its onDragDropEvent), and we close our tab here;
+//   * dropped on empty space            → classic detach into a new window;
+//   * dropped back on ourselves         → no-op (self-drop guard keeps the tab).
+async function startNativeTabDrag(index) {
+  const doc = state.documents[index];
+  if (!doc) return;
+  const pdfPath = doc.filePath || '';
+  // Untitled docs live in a temp file this window owns — don't drag them to
+  // other instances (the temp file would be deleted out from under them).
+  if (!pdfPath || doc.isUntitled) {
+    alert(i18next.t('tabs.saveBeforeDetach'));
+    return;
+  }
+
+  preloadDragDeps();
+  const mod = await _dragModulePromise;
+  const icon = await _dragIconPromise;
+  if (!mod?.startDrag) {
+    // Geen drag-backend beschikbaar → gewoon losmaken in een eigen venster.
+    detachTabToNewWindow(index);
+    return;
+  }
+
+  // Laatste controle vlak vóór we de OS-drag starten: bestaat het bestand nog
+  // en houdt de gebruiker de muisknop nog vast? Zonder ingedrukte knop hangt
+  // `DoDragDrop` de hele app op; zonder bestaand bestand paniekt de OS-laag en
+  // wordt het proces hard afgebroken. Zie window_mgmt::tab_drag_preflight.
+  let pre = { ok: false, reason: 'preflight-failed' };
+  try {
+    pre = await invoke('tab_drag_preflight', { pdfPath });
+  } catch (e) {
+    console.warn('[tab-drag] preflight faalde:', e);
+  }
+  if (!pre?.ok) {
+    if (pre?.reason === 'button-released') {
+      // Knop al losgelaten — de gebruiker bedoelde "losmaken in eigen venster".
+      detachTabToNewWindow(index);
+    } else {
+      explainDragUnavailable(pre?.reason);
+    }
+    return;
+  }
+
+  // Allerlaatste synchrone check: knop in de tussentijd toch losgelaten?
+  if (!_primaryDown) {
+    detachTabToNewWindow(index);
+    return;
+  }
+
+  // Mark THIS instance as the drag source so our own drop handler ignores a
+  // drop that lands back on us (no duplicate tab).
+  window.__OPDS_DRAGGING_OUT__ = pdfPath;
+  window.__OPDS_SELF_DROP__ = false;
+  // De callback mag maar één keer werk doen: de OS-laag kan hem in theorie
+  // vaker afvuren, en dubbel sluiten zou een al gesloten tab-index raken.
+  let settled = false;
+  try {
+    await mod.startDrag({ item: [pdfPath], icon }, (payload) => {
+      // DEFENSIEF: deze callback loopt vanuit Rust, op de hoofdthread, terwijl
+      // de OS-drag nog wordt afgerond. Gooit hij een fout, dan ontrolt die door
+      // de Rust/Win32-grens en breekt het proces hard af. Dus: alles in een
+      // try/catch, en het echte werk (tab sluiten, venster sluiten) pas ná
+      // een tick, zodat de OS-drag eerst netjes afloopt en we nooit een venster
+      // vernietigen terwijl de drag-lus er nog op staat.
+      try {
+        if (settled) return;
+        settled = true;
+        const result = payload?.result;
+        const wasSelf = !!window.__OPDS_SELF_DROP__;
+        window.__OPDS_DRAGGING_OUT__ = null;
+        window.__OPDS_SELF_DROP__ = false;
+        setTimeout(() => {
+          try {
+            if (result === 'Dropped' && !wasSelf) {
+              // Accepted by another instance/app → the tab moved; remove it here.
+              closeTabAndMaybeCloseWindow(index);
+            } else if (result === 'Cancelled') {
+              // Dropped on empty space → classic detach into its own new window.
+              detachTabToNewWindow(index);
+            }
+            // 'Dropped' + wasSelf → dropped back on us; keep the tab as-is.
+          } catch (err) {
+            console.error('[tab-drag] afhandeling na drop faalde:', err);
+          }
+        }, 0);
+      } catch (err) {
+        console.error('[tab-drag] drop-callback faalde:', err);
+      }
+    });
+  } catch (e) {
+    window.__OPDS_DRAGGING_OUT__ = null;
+    window.__OPDS_SELF_DROP__ = false;
+    console.warn('native tab drag failed, falling back to detach:', e);
+    if (!settled) {
+      settled = true;
+      detachTabToNewWindow(index);
+    }
+  }
+}
+
+// Right-click on a tab: the shared context menu (ContextMenu.jsx, 'docTab'),
+// which calls runDocTabAction below.
+function handleTabContextMenu(e, index) {
+  e.preventDefault();
+  e.stopPropagation();
+  const bounds = e.currentTarget.getBoundingClientRect();
+  showDocTabMenu(e.clientX || bounds.left, e.clientY || bounds.bottom, index);
+}
+
+/** Make a document (or, with -1 and an active compare, the compare view) current. */
+export function switchToDocument(index) {
+  handleTabClick(index);
+}
+
+// Close the given tabs, highest index first; stop when the user cancels an
+// unsaved-changes prompt.
+async function closeTabs(indices) {
+  for (const index of indices) {
+    if (index >= state.documents.length) continue;
+    const before = state.documents.length;
+    await closeTabAndMaybeCloseWindow(index);
+    if (state.documents.length === before) break;
+  }
+}
+
+/**
+ * Run a document tab menu action (ids from document-tab-menu.js) on the tab
+ * at `index`.
+ */
+export async function runDocTabAction(id, index) {
+  const doc = state.documents[index];
+  switch (id) {
+    case 'close':
+    case 'closeAll':
+    case 'closeOthers':
+      return closeTabs(tabsToClose(id, index, state.documents.length));
+    case 'detach':
+      return detachTabToNewWindow(index);
+    case 'showInFolder':
+      if (doc?.filePath) return revealInFileManager(doc.filePath);
+      return undefined;
+    case 'properties': {
+      if (!doc) return undefined;
+      if (index !== state.activeDocumentIndex) {
+        blurCompareTab();
+        const m = await import('../../ui/chrome/tabs.js');
+        m.switchToTab(index);
+      }
+      const { openDialog } = await import('../stores/dialogStore.js');
+      return openDialog('doc-properties');
+    }
+    case 'splitVertical':
+    case 'splitHorizontal': {
+      // MultiView: split with this tab as the duplicated one (the external editor).
+      if (!doc) return undefined;
+      if (index !== state.activeDocumentIndex) {
+        blurCompareTab();
+        (await import('../../ui/chrome/tabs.js')).switchToTab(index);
+      }
+      const mv = await import('../stores/multiViewStore.js');
+      return mv.splitView(id === 'splitVertical' ? 'vertical' : 'horizontal');
+    }
+    case 'switch': {
+      // the external editor Switch: move the tab to the other split.
+      const mv = await import('../stores/multiViewStore.js');
+      if (!doc || !mv.isSplitView()) return undefined;
+      const from = mv.tabMenuPane() ?? mv.activePaneIndex();
+      return mv.moveTabToPane(doc.id, from, 1 - from);
+    }
+    default:
+      return undefined;
+  }
+}
+
+// Ctrl+Tab / Ctrl+Shift+Tab cycle the open documents (the external editor). Ctrl+W (close)
+// is bound in tools/keyboard-handlers.js.
+function onCycleKeyDown(e) {
+  if (e.key !== 'Tab' || !e.ctrlKey || e.altKey || e.metaKey) return;
+  const count = state.documents.length;
+  if (count < 2) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const next = cycleTabIndex(state.activeDocumentIndex, count, e.shiftKey ? -1 : 1);
+  if (next >= 0) handleTabClick(next);
+}
+
+function onDocMouseUp(e) {
+  document.removeEventListener('mousemove', onDocMouseMove);
+  document.removeEventListener('mouseup', onDocMouseUp);
+  document.body.style.userSelect = '';
+
+  if (!dragState) return;
+
+  const from = dragState.fromIndex;
+  const wasStarted = dragState.started;
+  dragState = null;
+  setDraggingIndex(-1);
+
+  const target = dropTargetIndex();
+  setDropTargetIndex(-1);
+
+  // NB: detach / cross-instance re-dock is no longer handled here — once the
+  // cursor leaves the tab bar vertically, onDocMouseMove hands off to a native
+  // OS drag (startNativeTabDrag) and tears down these listeners. So a mouseUp
+  // that reaches here is always an IN-BAR reorder.
+  if (!wasStarted || target === -1 || target === from) return;
+
+  // Track which doc is active by its id
+  const activeId = state.documents[state.activeDocumentIndex]?.id;
+
+  // Reorder
+  const [moved] = state.documents.splice(from, 1);
+  state.documents.splice(target, 0, moved);
+
+  // Maintain active tab
+  if (activeId) {
+    const newActiveIndex = state.documents.findIndex(d => d.id === activeId);
+    if (newActiveIndex !== -1) {
+      state.activeDocumentIndex = newActiveIndex;
+    }
+  }
+
+  import('../../ui/chrome/tabs.js').then(m => m.updateTabBar());
+}
+
+export default function DocumentTabs() {
+  const { t } = useTranslation('statusbar');
+  const { t: tCtx } = useTranslation('context');
+
+  const baseName = (p) => ((p || '').split(/[\\/]/).pop() || '').replace(/\.pdf$/i, '');
+  const compareTabTip = () => {
+    const a = baseName(compareOldPath());
+    const b = baseName(compareNewPath());
+    return a && b ? `${a} ↔ ${b}` : (t('compareTabTitle') || 'Vergelijken');
+  };
+
+  document.addEventListener('keydown', onCycleKeyDown, true);
+
+  onCleanup(() => {
+    document.removeEventListener('mousemove', onDocMouseMove);
+    document.removeEventListener('mouseup', onDocMouseUp);
+    document.removeEventListener('keydown', onCycleKeyDown, true);
+  });
+
+  return (
+    <div class="document-tabs" id="document-tabs">
+      <div class="document-tabs-strip">
+        <Show when={state.documents.length === 0}>
+          <div class="document-tabs-empty">{t('noDocumentsOpen')}</div>
+        </Show>
+
+        <For each={state.documents}>
+          {(doc, i) => (
+            <div
+              class={'document-tab'
+                + (i() === state.activeDocumentIndex && !compareFocused() ? ' active' : '')
+                + (draggingIndex() === i() ? ' dragging' : '')
+                + (dropTargetIndex() === i() ? ' drop-target' : '')}
+              data-index={i()}
+              onAuxClick={(e) => handleMiddleClick(e, i())}
+              onMouseDown={(e) => handleMouseDown(e, i())}
+              onContextMenu={(e) => handleTabContextMenu(e, i())}
+            >
+              <Show when={editingIndex() === i()} fallback={
+                <button type="button" class="document-tab-select"
+                  aria-label={`${doc.fileName}${doc.modified ? ', unsaved changes' : ''}`}
+                  aria-current={i() === state.activeDocumentIndex && !compareFocused() ? 'page' : undefined}
+                  tabIndex={i() === state.activeDocumentIndex && !compareFocused() ? 0 : -1}
+                  onClick={() => handleTabClick(i())}
+                  onDblClick={(e) => handleDoubleClick(e, i())}
+                  onKeyDown={handleTabKeyDown}>
+                  <span class="document-tab-modified" aria-hidden="true">{doc.modified ? '*' : ''}</span>
+                  <span class="document-tab-title" title={doc.filePath || doc.fileName}>{doc.fileName}</span>
+                </button>
+              }>
+                <input
+                  class="document-tab-rename-input"
+                  ref={(el) => handleInputMount(el, doc)}
+                  onKeyDown={(e) => handleRenameKeyDown(e, i())}
+                  onBlur={() => cancelRename()}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Show>
+              <button type="button" class="document-tab-close" title={t('closeTab')}
+                aria-label={`${t('closeTab')}: ${doc.fileName}`}
+                onClick={(e) => handleCloseTab(e, i())}>&times;</button>
+            </div>
+          )}
+        </For>
+
+        {/* Compare session lives as its OWN tab (not a real document) so you can
+            flip between your PDFs and the side-by-side comparison. */}
+        <Show when={compareActive()}>
+          <div
+            class={'document-tab compare-tab' + (compareFocused() ? ' active' : '')}
+            title={compareTabTip()}
+            onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); exitCompare(); } }}
+          >
+            <button type="button" class="document-tab-select"
+              aria-current={compareFocused() ? 'page' : undefined}
+              tabIndex={compareFocused() ? 0 : -1}
+              onClick={() => focusCompareTab()} onKeyDown={handleTabKeyDown}>
+              <span class="document-tab-title" style="display:inline-flex; align-items:center; gap:5px;">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;">
+                <rect x="3" y="4" width="7" height="16" /><rect x="14" y="4" width="7" height="16" />
+              </svg>
+              {t('compareTabTitle') || 'Vergelijken'}
+              </span>
+            </button>
+            <button type="button" class="document-tab-close" title={t('closeTab')}
+              aria-label={`${t('closeTab')}: ${t('compareTabTitle') || 'Compare'}`}
+              onClick={(e) => { e.stopPropagation(); exitCompare(); }}>&times;</button>
+          </div>
+        </Show>
+      </div>
+
+      {/* the external editor: no "+" button; a ▾ at the far right lists the open documents. */}
+      <button type="button" class="document-tabs-list" id="document-tabs-list"
+        title={tCtx('docTab.openDocuments')} aria-label={tCtx('docTab.openDocuments')} aria-haspopup="menu"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          showDocListMenu(Math.round(r.left), Math.round(r.bottom));
+        }}>
+        <span innerHTML={lucide('chevron-down')} />
+      </button>
+    </div>
+  );
+}

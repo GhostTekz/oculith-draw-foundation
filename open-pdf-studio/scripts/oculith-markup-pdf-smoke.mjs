@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createServer as createNetServer } from 'node:net';
+import { chromium } from 'playwright';
+import { PDFDocument } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createServer } from 'vite';
+
+const fixture = await PDFDocument.create();
+fixture.addPage([612, 792]);
+const bytes = Array.from(await fixture.save());
+const probe = createNetServer();
+await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+const port = probe.address().port;
+await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+let server;
+let browser;
+try {
+  server = await createServer({ server: { host: '127.0.0.1', port, strictPort: true, hmr: { port } }, logLevel: 'error' });
+  await server.listen();
+  browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
+  const page = await browser.newPage({ acceptDownloads: true });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
+  await page.evaluate(async content => {
+    const { createTab } = await import('/js/ui/chrome/tabs.js');
+    const { loadPDF } = await import('/js/pdf/loader.js');
+    const { index } = createTab('markup-review.pdf');
+    await loadPDF('markup-review.pdf', index, Uint8Array.from(content));
+    const { state } = await import('/js/core/state.ts');
+    const doc = state.documents[state.activeDocumentIndex];
+    doc.annotations.push({ id: 'comment', page: 1, type: 'comment', author: 'Alex', subject: 'Door', status: 'accepted', text: 'Verify clearance' });
+    doc.annotations.push({ id: 'measurement', page: 1, type: 'measureDistance', author: 'Pat', subject: 'Opening', status: 'completed', measureText: '12 ft', text: 'Check width' });
+    doc.selectedAnnotation = doc.annotations[0];
+    doc.selectedAnnotations = [doc.annotations[0]];
+    const menu = await import('/js/solid/stores/appMenuStore.js');
+    menu.openAppMenu();
+    menu.setActivePanel('export');
+  }, bytes);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Markups List summary/u }).click();
+  const download = await downloadPromise;
+  assert.equal(download.suggestedFilename(), 'markup-review-markups-summary.pdf');
+  const pdfBytes = await readFile(await download.path());
+  const task = getDocument({ data: new Uint8Array(pdfBytes), useSystemFonts: false });
+  const reader = await task.promise;
+  const content = await (await reader.getPage(1)).getTextContent();
+  const text = content.items.map(item => item.str).join(' ');
+  assert.match(text, /MARKUPS LIST SUMMARY/u);
+  assert.match(text, /Source PDF: markup-review\.pdf/u);
+  assert.match(text, /2 markups/u);
+  assert.match(text, /Page 1 \| comment/u);
+  assert.match(text, /Status: accepted/u);
+  assert.match(text, /Text: Verify clearance/u);
+  assert.match(text, /Measurement shown on markup: 12 ft \| UNVERIFIED/u);
+  assert.deepEqual(errors, []);
+  await task.destroy();
+  await page.evaluate(async () => {
+    const menu = await import('/js/solid/stores/appMenuStore.js');
+    menu.openAppMenu();
+    menu.setActivePanel('export');
+  });
+  const selectedPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Selected markups summary/u }).click();
+  const selectedDownload = await selectedPromise;
+  assert.equal(selectedDownload.suggestedFilename(), 'markup-review-selected-markups-summary.pdf');
+  const selectedTask = getDocument({ data: new Uint8Array(await readFile(await selectedDownload.path())), useSystemFonts: false });
+  const selectedReader = await selectedTask.promise;
+  const selectedContent = await (await selectedReader.getPage(1)).getTextContent();
+  const selectedText = selectedContent.items.map(item => item.str).join(' ');
+  assert.match(selectedText, /1 markup/u);
+  assert.match(selectedText, /Text: Verify clearance/u);
+  assert.doesNotMatch(selectedText, /Measurement shown on markup:/u);
+  await selectedTask.destroy();
+  console.log('Markup PDF smoke passed: all and selected app-menu exports reopen');
+} finally {
+  await browser?.close();
+  await server?.close();
+}

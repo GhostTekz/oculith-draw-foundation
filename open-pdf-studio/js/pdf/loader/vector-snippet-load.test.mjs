@@ -1,0 +1,198 @@
+// De rondgang van een vectorknipsel: schrijven, opslaan, heropenen, terugvinden.
+// Dit is de test die telt — hij gebruikt het echte schrijfpad en het echte
+// leespad, zonder de app ertussen.
+
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
+
+import { bouwKnipselAppearance, CATALOGUS_SLEUTEL } from '../saver/vector-snippet.js';
+import { leesKnipselBronnen, leesKnipselVelden, knipselUitExtra } from './vector-snippet-load.js';
+import { extractAnnotationColors } from './color-extraction.js';
+import { bewaar, bytesVan, leegmaken, sleutelVoor } from '../../annotations/vector-snippet-store.js';
+import { pdfTextString } from '../saver/pdf-text.js';
+
+const VAK = { left: 100, bottom: 80, right: 220, top: 140 };
+
+async function bronBytes() {
+  const d = await PDFDocument.create();
+  const p = d.addPage([600, 400]);
+  p.drawRectangle({ x: 100, y: 80, width: 120, height: 60 });
+  return d.save();
+}
+
+/** Bouwt een document met één knipsel-stempel erop, precies zoals de saver dat doet. */
+async function documentMetKnipsel({ rect = [50, 50, 290, 170], label = 'Bron.pdf, blad 1' } = {}) {
+  const bytes = await bronBytes();
+  const sleutel = sleutelVoor(bytes);
+  const doc = await PDFDocument.create();
+  const pagina = doc.addPage([600, 600]);
+  const gebouwd = await bouwKnipselAppearance(doc, { bronBytes: bytes, srcBox: VAK, rect, sleutel });
+
+  const context = doc.context;
+  const apStream = context.stream(gebouwd.content, {
+    Type: 'XObject', Subtype: 'Form', BBox: rect,
+    Matrix: [1, 0, 0, 1, -rect[0], -rect[1]],
+    Resources: context.obj({ XObject: context.obj(gebouwd.xobjects) }),
+  });
+  const annot = context.obj({
+    Type: 'Annot', Subtype: 'Stamp', Rect: rect,
+    OPS_Subtype: PDFString.of('vectorSnippet'),
+    OPS_SnippetKey: PDFString.of(sleutel),
+    OPS_SrcBox: [VAK.left, VAK.bottom, VAK.right, VAK.top],
+    OPS_SrcLabel: pdfTextString(label),
+    AP: context.obj({ N: context.register(apStream) }),
+  });
+  pagina.node.set(PDFName.of('Annots'), context.obj([context.register(annot)]));
+  return { bytes: await doc.save(), sleutel, brongrootte: bytes.length };
+}
+
+test('de bronpagina komt na heropenen terug in de store', async () => {
+  leegmaken();
+  const { bytes, sleutel, brongrootte } = await documentMetKnipsel();
+  const heropend = await PDFDocument.load(bytes);
+  const sleutels = await leesKnipselBronnen(heropend, bewaar);
+  assert.deepEqual(sleutels, [sleutel], 'sleutel uit het bestand');
+  assert.equal(bytesVan(sleutel).length, brongrootte, 'bytes ongewijzigd terug');
+});
+
+test('een niet-ASCII-bronlabel (UTF-16-hex) komt als tekst terug', async () => {
+  leegmaken();
+  const label = 'Plattegrond € 22 – café 中文.pdf, blad 2';
+  const { bytes } = await documentMetKnipsel({ label });
+  const heropend = await PDFDocument.load(bytes);
+  const annots = heropend.getPage(0).node.lookup(PDFName.of('Annots'));
+  const annot = heropend.context.lookup(annots.get(0));
+  const velden = await leesKnipselVelden(annot, heropend.context);
+  assert.equal(velden.srcLabel, label);
+});
+
+test('een oud bronlabel als literal string blijft leesbaar', async () => {
+  const doc = await PDFDocument.create();
+  const context = doc.context;
+  const annot = context.obj({
+    Type: 'Annot', Subtype: 'Stamp', Rect: [0, 0, 10, 10],
+    OPS_SnippetKey: PDFString.of('abc'),
+    OPS_SrcBox: [1, 2, 3, 4],
+    OPS_SrcLabel: PDFString.of('Oud café.pdf, blad 1'),
+  });
+  const velden = await leesKnipselVelden(annot, context);
+  assert.equal(velden.srcLabel, 'Oud café.pdf, blad 1');
+});
+
+test('de knipsel-velden komen terug van de stempel', async () => {
+  leegmaken();
+  const { bytes, sleutel } = await documentMetKnipsel({ label: 'Barn - Elevations.pdf, blad 4' });
+  const heropend = await PDFDocument.load(bytes);
+  const annots = heropend.getPage(0).node.lookup(PDFName.of('Annots'));
+  const annot = heropend.context.lookup(annots.get(0));
+  const velden = await leesKnipselVelden(annot, heropend.context);
+  assert.equal(velden.snippetKey, sleutel);
+  assert.deepEqual(velden.srcBox, VAK);
+  assert.equal(velden.srcLabel, 'Barn - Elevations.pdf, blad 4');
+});
+
+test('een gewone stempel zonder knipsel-sleutel levert niets op', async () => {
+  const doc = await PDFDocument.create();
+  const context = doc.context;
+  const annot = context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [0, 0, 10, 10] });
+  assert.equal(await leesKnipselVelden(annot, context), null);
+});
+
+test('een stempel met sleutel maar zonder vak wordt geweigerd', async () => {
+  const doc = await PDFDocument.create();
+  const context = doc.context;
+  const annot = context.obj({
+    Type: 'Annot', Subtype: 'Stamp', Rect: [0, 0, 10, 10],
+    OPS_SnippetKey: PDFString.of('aaaabbbbccccdddd'),
+  });
+  assert.equal(await leesKnipselVelden(annot, context), null);
+});
+
+test('een document zonder knipsels geeft een lege lijst in plaats van een fout', async () => {
+  leegmaken();
+  const doc = await PDFDocument.create();
+  doc.addPage([300, 300]);
+  const heropend = await PDFDocument.load(await doc.save());
+  assert.deepEqual(await leesKnipselBronnen(heropend, bewaar), []);
+});
+
+test('de opgeslagen appearance verwijst echt naar het ingebedde knipsel', async () => {
+  const { bytes } = await documentMetKnipsel();
+  const heropend = await PDFDocument.load(bytes);
+  const annots = heropend.getPage(0).node.lookup(PDFName.of('Annots'));
+  const annot = heropend.context.lookup(annots.get(0));
+  const ap = heropend.context.lookup(annot.get(PDFName.of('AP'))).get(PDFName.of('N'));
+  const form = heropend.context.lookup(ap);
+  const res = heropend.context.lookup(form.dict.get(PDFName.of('Resources')));
+  const xobj = heropend.context.lookup(res.get(PDFName.of('XObject')));
+  assert.equal(xobj.keys().length, 1, 'de appearance heeft het knipsel in zijn resources');
+});
+
+test('twee knipsels uit dezelfde bron leveren één bronstream in het bestand', async () => {
+  const bytes = await bronBytes();
+  const sleutel = sleutelVoor(bytes);
+  const doc = await PDFDocument.create();
+  doc.addPage([600, 600]);
+  await bouwKnipselAppearance(doc, { bronBytes: bytes, srcBox: VAK, rect: [0, 0, 120, 60], sleutel });
+  await bouwKnipselAppearance(doc, { bronBytes: bytes, srcBox: VAK, rect: [200, 200, 320, 260], sleutel });
+  const heropend = await PDFDocument.load(await doc.save());
+  const wb = heropend.catalog.lookup(PDFName.of(CATALOGUS_SLEUTEL));
+  assert.equal(wb.keys().length, 1, 'ontdubbeld: één bronpagina voor twee knipsels');
+});
+
+// --- aangesloten op de loader ---------------------------------------------
+//
+// De leesfuncties hierboven zijn pas iets waard als de loader ze aanroept.
+// extractAnnotationColors is de plek waar de loader per pagina onze eigen
+// OPS_*-velden van pdf-lib ophaalt; de converter maakt er daarna een
+// annotatie van (knipselUitExtra).
+
+test('extractAnnotationColors levert de knipsel-velden en vult de store', async () => {
+  leegmaken();
+  const { bytes, sleutel } = await documentMetKnipsel();
+  const doc = await PDFDocument.load(bytes);
+  const kaart = await extractAnnotationColors(1, doc);
+  const extra = kaart.get('50,50,290,170');
+  assert.ok(extra, 'geen gegevens voor de knipsel-Rect');
+  assert.equal(extra.opsSubtype, 'vectorSnippet');
+  assert.deepEqual(extra.vectorSnippet, {
+    snippetKey: sleutel, srcBox: VAK, srcLabel: 'Bron.pdf, blad 1',
+  });
+  assert.ok(bytesVan(sleutel), 'de bronpagina staat na het laden in de store');
+});
+
+test('knipselUitExtra maakt er een knipsel van als de bronpagina er is', () => {
+  const extra = {
+    opsSubtype: 'vectorSnippet',
+    vectorSnippet: { snippetKey: 'abc', srcBox: VAK, srcLabel: 'x' },
+  };
+  assert.deepEqual(knipselUitExtra(extra, () => true), { snippetKey: 'abc', srcBox: VAK, srcLabel: 'x' });
+});
+
+test('een onderlegger onthoudt dat hij onder de inhoud hoort', async () => {
+  const extra = {
+    opsSubtype: 'vectorSnippet',
+    vectorSnippet: { snippetKey: 'abc', srcBox: VAK, srcLabel: 'x', belowContent: true },
+  };
+  assert.equal(knipselUitExtra(extra, () => true).belowContent, true);
+  // Van de stempel gelezen: alleen een echte booleaan telt.
+  const doc = await PDFDocument.create();
+  const stempel = (onder) => doc.context.obj({
+    OPS_SnippetKey: PDFString.of('abc'), OPS_SrcBox: [VAK.left, VAK.bottom, VAK.right, VAK.top], ...onder,
+  });
+  assert.equal((await leesKnipselVelden(stempel({ OPS_BelowContent: true }), doc.context)).belowContent, true);
+  assert.equal((await leesKnipselVelden(stempel({ OPS_BelowContent: false }), doc.context)).belowContent, undefined);
+  assert.equal((await leesKnipselVelden(stempel({ OPS_BelowContent: 1 }), doc.context)).belowContent, undefined);
+  assert.equal((await leesKnipselVelden(stempel({}), doc.context)).belowContent, undefined);
+});
+
+test('zonder bronpagina blijft het een stempel die zijn appearance toont', () => {
+  const extra = {
+    opsSubtype: 'vectorSnippet',
+    vectorSnippet: { snippetKey: 'abc', srcBox: VAK, srcLabel: 'x' },
+  };
+  assert.equal(knipselUitExtra(extra, () => false), null);
+  assert.equal(knipselUitExtra({ opsSubtype: 'stavenreeks' }, () => true), null);
+  assert.equal(knipselUitExtra({}, () => true), null);
+});

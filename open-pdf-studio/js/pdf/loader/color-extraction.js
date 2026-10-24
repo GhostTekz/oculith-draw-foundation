@@ -1,0 +1,1876 @@
+import { parseEditorDom } from '../../text/editor-dom-parse.js';
+import { PDFName, PDFDict, PDFArray, PDFHexString, PDFString } from 'pdf-lib';
+import { pdfNum, pdfColorToHex, mapPdfFontName, inflateBytes } from './pdf-helpers.js';
+import { fillAlphaAtFirstFill } from './ap-fill-alpha.js';
+import { leesKnipselBronnen, leesKnipselVelden } from './vector-snippet-load.js';
+import { bewaar as bewaarKnipsel } from '../../annotations/vector-snippet-store.js';
+import { decodePdfTextObject } from '../saver/pdf-text.js';
+import { readPluginPdfAnnotation } from '../../plugins/plugin-pdf.js';
+import { laagVanOc } from '../saver/annotatie-lagen.js';
+import { leesPlattegrondMeta } from './plattegrond-meta.js';
+import { leesMeetExtra } from './meet-extra.js';
+import { leesCapture } from './capture-load.js';
+import { readCaptionTemplate } from '../formula-captions-pdf.js';
+import { leesLijnSleutels } from './maatlijn-uit-bestand.js';
+import { customTextValue } from '../../annotations/custom-text-column.js';
+import { CHOICE_OPTION_MAX } from '../../annotations/custom-choice-column.js';
+import { numberValue, NUMBER_TEXT_MAX } from '../../annotations/custom-number-column.js';
+import { checkmarkValue, CHECKMARK_VALUE_MAX } from '../../annotations/custom-checkmark-column.js';
+import { validDurableMarkupId } from '../../annotations/durable-markup-id.js';
+import { parseCarriedFrom, CARRIED_FROM_MAX } from '../../annotations/carried-from.js';
+import { assemblyIdText, ASSEMBLY_ID_MAX } from '../../annotations/assemblies.js';
+import { isExtAnnotDict, leesExtExtra, producerIsExt } from '../ext-interop.js';
+import { readGroupKeys } from '../markup-group-pdf.js';
+
+// Documenten waarvan de knipsel-bronpagina's al in de store staan: dat
+// uitpakken gebeurt één keer per document, bij het eerste knipsel dat we zien.
+const _knipselBronnenGelezen = new WeakSet();
+
+// Tekst van een eigen sleutel (OPS_*). De saver schrijft niet-ASCII-tekst als
+// UTF-16-hex, waarvan `.value` de hex-cijfers is. decodePdfTextObject decodeert
+// hex en geeft oude literal strings exact terug zoals ze geschreven zijn, zodat
+// JSON-waarden uit eerdere versies heel blijven. Een PDFName (zoals
+// OPS_LeaderStyle) gaat via decodeText.
+function leesPdfTekst(context, raw) {
+  if (!raw) return undefined;
+  const v = context.lookup(raw) || raw;
+  const tekst = decodePdfTextObject(v);
+  if (tekst !== undefined) return tekst;
+  return v && typeof v.decodeText === 'function' ? v.decodeText() : undefined;
+}
+
+// Decode an appearance stream to text (handles /FlateDecode).
+async function decodeApStream(stream) {
+  let bytes;
+  if (typeof stream.getContents === 'function') bytes = stream.getContents();
+  else if (typeof stream.contents === 'function') bytes = stream.contents();
+  else if (stream.contentsCache?.value) bytes = stream.contentsCache.value;
+  if (!bytes) return null;
+  const dict = stream.dict || stream;
+  const filterRaw = dict.get(PDFName.of('Filter'));
+  if (filterRaw?.toString() === '/FlateDecode') {
+    const dec = await inflateBytes(bytes);
+    return dec ? new TextDecoder().decode(dec) : null;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Alfa's uit de graphics-state van een appearance-stream.
+ *
+ * PDF kent twee soorten doorzichtigheid voor een annotatie. De annotatie-dict
+ * heeft /CA, maar dat is één waarde voor het geheel. Fijnmaziger — en heel
+ * gebruikelijk bij GIS- en kaart-exports — zet de appearance-stream zelf een
+ * ExtGState met /ca (vulling) en /CA (lijn), bijvoorbeeld een vlak op 20%
+ * met een volledig dekkende rand. Die staat NIET in de annotatie-dict.
+ *
+ * De app tekent annotaties op een eigen overlay (PDF.js-annotatierendering is
+ * uitgeschakeld), dus zo'n ExtGState wordt nooit vanzelf toegepast: zonder
+ * deze functie kwam zo'n vlak volledig dekkend op het scherm en verdween de
+ * kaart eronder.
+ *
+ * Alleen de ExtGStates die de stream ook echt met `gs` aanroept tellen mee;
+ * ongebruikte resources mogen het beeld niet beïnvloeden. Vindt de stream
+ * meerdere verschillende lijn-alfa's, dan is er geen enkele waarde die de
+ * annotatie als geheel beschrijft en geven we niets terug. Bij meerdere
+ * vul-alfa's telt de alfa van het eerste vlak (zie fillAlphaAtFirstFill).
+ *
+ * @returns {Promise<{fillAlpha: number|null, strokeAlpha: number|null}>}
+ */
+async function extractApAlphas(context, nStream) {
+  const empty = { fillAlpha: null, strokeAlpha: null };
+  try {
+    const nDict = nStream.dict || nStream;
+    const resRaw = nDict.get(PDFName.of('Resources'));
+    if (!resRaw) return empty;
+    const res = context.lookup(resRaw) || resRaw;
+    const egsRaw = res?.get?.(PDFName.of('ExtGState'));
+    if (!egsRaw) return empty;
+    const egs = context.lookup(egsRaw) || egsRaw;
+    if (!egs || typeof egs.get !== 'function') return empty;
+
+    const content = await decodeApStream(nStream);
+    if (!content) return empty;
+
+    // Namen die de stream daadwerkelijk activeert: `/Naam gs`.
+    const used = new Set();
+    const gsRe = /\/([^\s/<>[\]()]+)\s+gs(?![A-Za-z0-9])/g;
+    let m;
+    while ((m = gsRe.exec(content)) !== null) used.add(m[1]);
+    if (used.size === 0) return empty;
+
+    const fills = new Set();
+    const strokes = new Set();
+    const fillAlphaByName = new Map();
+    for (const name of used) {
+      const gsRefRaw = egs.get(PDFName.of(name));
+      if (!gsRefRaw) continue;
+      const gs = context.lookup(gsRefRaw) || gsRefRaw;
+      if (!gs || typeof gs.get !== 'function') continue;
+      const caRaw = gs.get(PDFName.of('ca'));
+      const CARaw = gs.get(PDFName.of('CA'));
+      const ca = caRaw !== undefined ? pdfNum(context.lookup(caRaw) || caRaw) : null;
+      const CA = CARaw !== undefined ? pdfNum(context.lookup(CARaw) || CARaw) : null;
+      if (ca !== null && ca >= 0 && ca <= 1) {
+        fills.add(ca);
+        fillAlphaByName.set(name, ca);
+      }
+      if (CA !== null && CA >= 0 && CA <= 1) strokes.add(CA);
+    }
+    // Meerdere vul-alfa's: geen enkele /ca geldt voor de hele stream. Gangbaar
+    // bij meetvlakken — het vlak op 30%, het maatlabel in een eigen
+    // graphics-state op 100%. Dan telt de alfa van het eerste vlak: dat is de
+    // vulling (/IC) van de annotatie; het label tekent de app zelf.
+    let fillAlpha = null;
+    if (fills.size === 1) fillAlpha = [...fills][0];
+    else if (fills.size > 1) fillAlpha = fillAlphaAtFirstFill(content, fillAlphaByName);
+    return {
+      fillAlpha,
+      strokeAlpha: strokes.size === 1 ? [...strokes][0] : null,
+    };
+  } catch (_) {
+    return empty;
+  }
+}
+
+const TEKSTCORRECTIE_SOORTEN = new Set(['/Caret', '/Highlight', '/Underline', '/StrikeOut', '/Squiggly']);
+
+// Een gewone tekst-string uit een ander programma (/NM, /Subj, /Contents):
+// met escapes en UTF-16 gedecodeerd, zoals pdf.js dat ook doet.
+function leesTekstString(context, raw) {
+  if (!raw) return undefined;
+  const v = context.lookup(raw) || raw;
+  return (v instanceof PDFString || v instanceof PDFHexString) ? v.decodeText() : undefined;
+}
+
+// /Sy, /RD, /NM, /Subj, de rauwe /QuadPoints (bestandsvolgorde),
+// /OPS_TextDir en /OPS_MarkedText; bij een /Caret ook de eigen /Contents (als
+// kind in een groep geeft pdf.js die van de ouder).
+function leesTekstcorrectieExtra(context, annotDict, subtypeName, colors) {
+  const getallen = (raw) => {
+    const arr = raw !== undefined ? (context.lookup(raw) || raw) : null;
+    if (!arr || typeof arr.size !== 'function') return null;
+    const uit = [];
+    for (let j = 0; j < arr.size(); j++) uit.push(pdfNum(context.lookup(arr.get(j)) || arr.get(j)));
+    return uit.every((v) => typeof v === 'number' && Number.isFinite(v)) ? uit : null;
+  };
+  const syRaw = annotDict.get(PDFName.of('Sy'));
+  if (syRaw) {
+    const sy = String(context.lookup(syRaw) || syRaw).replace('/', '');
+    if (sy) colors.sy = sy;
+  }
+  const rd = getallen(annotDict.get(PDFName.of('RD')));
+  if (rd && rd.length === 4) colors.rd = rd;
+  const nm = leesTekstString(context, annotDict.get(PDFName.of('NM')));
+  if (nm) colors.nm = nm;
+  const subj = leesTekstString(context, annotDict.get(PDFName.of('Subj')));
+  if (subj) colors.subj = subj;
+  const quads = getallen(annotDict.get(PDFName.of('QuadPoints')));
+  if (quads && quads.length >= 8) colors.rawQuadPoints = quads;
+  const tdRaw = annotDict.get(PDFName.of('OPS_TextDir'));
+  if (tdRaw !== undefined) {
+    const td = pdfNum(context.lookup(tdRaw) || tdRaw);
+    if (typeof td === 'number' && Number.isFinite(td)) colors.opsTextDir = td;
+  }
+  const gemarkeerd = leesPdfTekst(context, annotDict.get(PDFName.of('OPS_MarkedText')));
+  if (gemarkeerd) colors.opsMarkedText = gemarkeerd;
+  if (subtypeName === '/Caret') {
+    const eigen = leesTekstString(context, annotDict.get(PDFName.of('Contents')));
+    if (eigen !== undefined) colors.ownContents = eigen;
+  }
+}
+
+// Extract colors (IC, appearance stream) from annotations using pdf-lib
+// Returns Map<rectKey, { ic, apStrokeColor }> where ic = Interior Color hex, apStrokeColor = stroke from appearance stream
+export async function extractAnnotationColors(pageNum, pdfDoc) {
+  const colorMap = new Map();
+  try {
+    const page = pdfDoc.getPages()[pageNum - 1];
+    if (!page) return colorMap;
+    const context = pdfDoc.context;
+    const annotsRaw = page.node.get(PDFName.of('Annots'));
+    if (!annotsRaw) return colorMap;
+    const annots = context.lookup(annotsRaw);
+    if (!annots) return colorMap;
+    const hasRefMetadata = annots.asArray().some(ref => {
+      const dict = context.lookup(ref);
+      return !!(dict?.get?.(PDFName.of('OPS_MarkupTextValue'))
+        || dict?.get?.(PDFName.of('OPS_MarkupTextValue2V1'))
+        || dict?.get?.(PDFName.of('OPS_MarkupChoiceValue'))
+        || dict?.get?.(PDFName.of('OPS_MarkupChoiceValue2V1'))
+        || dict?.get?.(PDFName.of('OPS_MarkupNumberValue'))
+        || dict?.get?.(PDFName.of('OPS_MarkupNumberValue2V1'))
+        || dict?.get?.(PDFName.of('OPS_MarkupCheckmarkValue'))
+        || dict?.get?.(PDFName.of('OPS_MarkupIdV1'))
+        || dict?.get?.(PDFName.of('OPS_Capture'))
+        || dict?.get?.(PDFName.of('OPS_CarriedFromV1'))
+        || dict?.get?.(PDFName.of('OPS_AssemblyIdV1'))
+        || dict?.get?.(PDFName.of('OPS_GroupPathV1'))
+        || dict?.get?.(PDFName.of('OPS_Subtype')));
+    });
+    // the external editor markups (docs/MARKUP-INTEROP.md): identified per dictionary and
+    // always mapped by reference, so the saver can keep or rewrite exactly
+    // the object the model came from.
+    const extProducer = producerIsExt(pdfDoc);
+
+    for (let i = 0; i < annots.size(); i++) {
+      const annotDict = context.lookup(annots.get(i));
+      if (!annotDict) continue;
+      const subtype = annotDict.get(PDFName.of('Subtype'));
+      if (!subtype) continue;
+      const subtypeName = subtype.toString();
+
+      // Get rect key for matching
+      const rectRaw = annotDict.get(PDFName.of('Rect'));
+      if (!rectRaw) continue;
+      const rect = context.lookup(rectRaw);
+      if (!rect || typeof rect.size !== 'function') continue;
+      const key = `${pdfNum(rect.get(0))},${pdfNum(rect.get(1))},${pdfNum(rect.get(2))},${pdfNum(rect.get(3))}`;
+
+      const colors = {};
+      const ext = isExtAnnotDict(annotDict, context, { producerIsExt: extProducer })
+        ? leesExtExtra(annotDict, annots.get(i), context) : null;
+      // Plek in de /Annots-rij: PDFium vindt een markering zonder unieke /NM
+      // daaraan terug (ap-render-state.js).
+      if (ext) ext.annotsIndex = i;
+      // The private ID belongs to this PDF object, never to its /Rect: distinct
+      // shapes may overlap exactly. Bound bytes before decoding.
+      if (subtypeName === '/Square' || subtypeName === '/Circle' || subtypeName === '/Line') {
+        const idKey = annotDict.get(PDFName.of('OPS_MarkupIdV1'));
+        const idRaw = idKey ? context.lookup(idKey) : null;
+        let id;
+        if ((idRaw instanceof PDFString || idRaw instanceof PDFHexString)
+            && idRaw.value.length <= 128) {
+          try { id = idRaw.decodeText(); } catch (_) { /* malformed PDF text */ }
+        }
+        if (validDurableMarkupId(id)) colors.durableMarkupId = id;
+      }
+      const markupText = customTextValue(leesPdfTekst(context, annotDict.get(PDFName.of('OPS_MarkupTextValue'))));
+      if (markupText) colors.markupTextValue = markupText;
+      const secondTextKey = annotDict.get(PDFName.of('OPS_MarkupTextValue2V1'));
+      const secondTextRaw = secondTextKey ? context.lookup(secondTextKey) : null;
+      const markupSecondText = (secondTextRaw instanceof PDFHexString || secondTextRaw instanceof PDFString)
+        && secondTextRaw.value.length <= 1028
+        ? customTextValue(leesPdfTekst(context, secondTextRaw)) : '';
+      if (markupSecondText) colors.markupTextValue2 = markupSecondText;
+      const choiceKey = annotDict.get(PDFName.of('OPS_MarkupChoiceValue'));
+      const choiceRaw = choiceKey ? context.lookup(choiceKey) : null;
+      // The PDF is untrusted: bound the encoded bytes before decoding text.
+      const markupChoice = (choiceRaw instanceof PDFHexString || choiceRaw instanceof PDFString)
+        && choiceRaw.value.length <= (CHOICE_OPTION_MAX + 1) * 4
+        ? leesPdfTekst(context, choiceRaw) : undefined;
+      if (typeof markupChoice === 'string' && markupChoice.length <= CHOICE_OPTION_MAX
+          && markupChoice && !/[\u0000-\u001f\u007f-\u009f]/u.test(markupChoice)) {
+        colors.markupChoiceValue = markupChoice;
+      }
+      const secondChoiceKey = annotDict.get(PDFName.of('OPS_MarkupChoiceValue2V1'));
+      const secondChoiceRaw = secondChoiceKey ? context.lookup(secondChoiceKey) : null;
+      const markupSecondChoice = (secondChoiceRaw instanceof PDFHexString || secondChoiceRaw instanceof PDFString)
+        && secondChoiceRaw.value.length <= (CHOICE_OPTION_MAX + 1) * 4
+        ? leesPdfTekst(context, secondChoiceRaw) : undefined;
+      if (typeof markupSecondChoice === 'string' && markupSecondChoice.length <= CHOICE_OPTION_MAX
+          && markupSecondChoice && !/[\u0000-\u001f\u007f-\u009f]/u.test(markupSecondChoice)) {
+        colors.markupChoiceValue2 = markupSecondChoice;
+      }
+      const numberKey = annotDict.get(PDFName.of('OPS_MarkupNumberValue'));
+      const numberRaw = numberKey ? context.lookup(numberKey) : null;
+      const markupNumber = (numberRaw instanceof PDFHexString || numberRaw instanceof PDFString)
+        && numberRaw.value.length <= (NUMBER_TEXT_MAX + 1) * 4
+        ? numberValue(leesPdfTekst(context, numberRaw)) : null;
+      if (markupNumber !== null) colors.markupNumberValue = markupNumber;
+      const secondNumberKey = annotDict.get(PDFName.of('OPS_MarkupNumberValue2V1'));
+      const secondNumberRaw = secondNumberKey ? context.lookup(secondNumberKey) : null;
+      const markupSecondNumber = (secondNumberRaw instanceof PDFHexString || secondNumberRaw instanceof PDFString)
+        && secondNumberRaw.value.length <= (NUMBER_TEXT_MAX + 1) * 4
+        ? numberValue(leesPdfTekst(context, secondNumberRaw)) : null;
+      if (markupSecondNumber !== null) colors.markupNumberValue2 = markupSecondNumber;
+      const checkmarkKey = annotDict.get(PDFName.of('OPS_MarkupCheckmarkValue'));
+      const checkmarkRaw = checkmarkKey ? context.lookup(checkmarkKey) : null;
+      const markupCheckmark = (checkmarkRaw instanceof PDFHexString || checkmarkRaw instanceof PDFString)
+        && checkmarkRaw.value.length <= (CHECKMARK_VALUE_MAX + 1) * 4
+        ? checkmarkValue(leesPdfTekst(context, checkmarkRaw)) : null;
+      if (markupCheckmark) colors.markupCheckmarkValue = markupCheckmark;
+      const carriedKey = annotDict.get(PDFName.of('OPS_CarriedFromV1'));
+      const carriedRaw = carriedKey ? context.lookup(carriedKey) : null;
+      const carriedFrom = (carriedRaw instanceof PDFHexString || carriedRaw instanceof PDFString)
+        && carriedRaw.value.length <= (CARRIED_FROM_MAX + 1) * 4
+        ? parseCarriedFrom(leesPdfTekst(context, carriedRaw)) : null;
+      if (carriedFrom) colors.carriedFrom = carriedFrom;
+      const assemblyKey = annotDict.get(PDFName.of('OPS_AssemblyIdV1'));
+      const assemblyRaw = assemblyKey ? context.lookup(assemblyKey) : null;
+      const assemblyId = (assemblyRaw instanceof PDFHexString || assemblyRaw instanceof PDFString)
+        && assemblyRaw.value.length <= (ASSEMBLY_ID_MAX + 1) * 4
+        ? assemblyIdText(leesPdfTekst(context, assemblyRaw)) : '';
+      if (assemblyId) colors.assemblyId = assemblyId;
+      const pluginAnnotation = readPluginPdfAnnotation(annotDict, context);
+      if (pluginAnnotation) {
+        // Rectangles are not unique: overlapping plugin objects may have
+        // identical geometry. PDF.js exposes the indirect reference as id.
+        const ref = annots.get(i);
+        const refId = Number.isInteger(ref?.objectNumber)
+          ? `${ref.objectNumber}R${ref.generationNumber || ''}` : null;
+        const pluginExtra = { pluginAnnotation,
+          ...(markupText ? { markupTextValue: markupText } : {}),
+          ...(markupSecondText ? { markupTextValue2: markupSecondText } : {}),
+          ...(colors.markupChoiceValue ? { markupChoiceValue: colors.markupChoiceValue } : {}),
+          ...(colors.markupChoiceValue2 ? { markupChoiceValue2: colors.markupChoiceValue2 } : {}),
+          ...(markupNumber !== null ? { markupNumberValue: markupNumber } : {}) };
+        if (markupSecondNumber !== null) pluginExtra.markupNumberValue2 = markupSecondNumber;
+        if (markupCheckmark) pluginExtra.markupCheckmarkValue = markupCheckmark;
+        if (carriedFrom) pluginExtra.carriedFrom = carriedFrom;
+        if (assemblyId) pluginExtra.assemblyId = assemblyId;
+        // Annotatielaag (#468), net als hieronder voor de andere soorten.
+        const pluginLaag = laagVanOc(context, annotDict.get(PDFName.of('OC')));
+        if (pluginLaag) pluginExtra.layer = pluginLaag;
+        colorMap.set(refId ? `@ref:${refId}` : key, pluginExtra);
+        continue;
+      }
+
+      // Read /CA (opacity) entry for ALL annotation types - PDF.js doesn't always expose this
+      const caRaw = annotDict.get(PDFName.of('CA'));
+      if (caRaw) {
+        const caVal = pdfNum(context.lookup(caRaw) || caRaw);
+        if (caVal !== null && caVal >= 0 && caVal <= 1) {
+          colors.opacity = caVal;
+        }
+      }
+
+      // Doorzichtigheid uit de graphics-state van de appearance-stream — zie
+      // extractApAlphas(). Geldt voor ALLE annotatiesoorten. De annotatie-dict
+      // /CA hierboven wint: die is expliciet voor deze annotatie gezet.
+      try {
+        const apForAlpha = annotDict.get(PDFName.of('AP'));
+        if (apForAlpha) {
+          const apDict = context.lookup(apForAlpha) || apForAlpha;
+          const nForAlpha = apDict?.get?.(PDFName.of('N'));
+          const nStreamForAlpha = nForAlpha ? context.lookup(nForAlpha) : null;
+          if (nStreamForAlpha) {
+            const { fillAlpha, strokeAlpha } = await extractApAlphas(context, nStreamForAlpha);
+            // Gelijk aan /CA is het de algehele doorzichtigheid die ook in de
+            // appearance staat (#512), geen aparte vul-alfa.
+            if (fillAlpha !== null && fillAlpha !== colors.opacity) colors.fillOpacity = fillAlpha;
+            if (strokeAlpha !== null && colors.opacity === undefined) colors.opacity = strokeAlpha;
+          }
+        }
+      } catch (_) { /* appearance zonder bruikbare graphics-state */ }
+
+      // /FillOpacity: niet-standaard sleutel die externe tekenpakketten naast de
+      // appearance zetten. Alleen terugval: de appearance hierboven is wat andere
+      // lezers werkelijk tonen. Zonder (bruikbare) appearance is dit de enige
+      // bron voor de vul-alfa.
+      if (colors.fillOpacity === undefined) {
+        const foRaw = annotDict.get(PDFName.of('FillOpacity'));
+        if (foRaw !== undefined) {
+          const fo = pdfNum(context.lookup(foRaw) || foRaw);
+          if (fo !== null && fo >= 0 && fo <= 1) colors.fillOpacity = fo;
+        }
+      }
+
+      // Annotatielaag (#468): /OC naar een eigen OCG (herkenbaar aan
+      // /OPS_LayerId, zie saver/annotatie-lagen.js). Een OCG van een ander
+      // programma is geen annotatielaag van deze app.
+      const laagId = laagVanOc(context, annotDict.get(PDFName.of('OC')));
+      if (laagId) colors.layer = laagId;
+
+      // Eigen sleutel van deze app (zie saver.js): wint van de afgeleide
+      // waarde hierboven, want die is expliciet bij het opslaan bewaard.
+      const ofoRaw = annotDict.get(PDFName.of('OPS_FillOpacity'));
+      if (ofoRaw !== undefined) {
+        const ofo = pdfNum(context.lookup(ofoRaw) || ofoRaw);
+        if (ofo !== null && ofo >= 0 && ofo <= 1) colors.fillOpacity = ofo;
+      }
+
+      // Read /BE (border effect) — { /S /C } = cloudy border ("wolkjes", zoals
+      // externe editors om FreeText-ballonnen en Squares zetten). PDF.js
+      // exposeert dit niet.
+      const beRaw = annotDict.get(PDFName.of('BE'));
+      if (beRaw) {
+        const be = context.lookup(beRaw) || beRaw;
+        if (be && typeof be.get === 'function') {
+          const beS = be.get(PDFName.of('S'));
+          const beSName = beS ? String(context.lookup(beS) || beS) : '';
+          if (beSName === '/C') {
+            colors.borderCloudy = true;
+            const beI = be.get(PDFName.of('I'));
+            const iv = beI !== undefined ? pdfNum(context.lookup(beI) || beI) : null;
+            if (iv !== null) colors.cloudIntensity = iv;
+          }
+        }
+      }
+
+      // Read stamp-specific entries (PDF.js doesn't expose /Name for stamps)
+      if (subtypeName === '/Stamp') {
+        const nameRaw = annotDict.get(PDFName.of('Name'));
+        if (nameRaw) {
+          const n = context.lookup(nameRaw) || nameRaw;
+          const nameStr = n.toString().replace('/', '');
+          if (nameStr) colors.stampPdfName = nameStr;
+        }
+        const opsNameRaw = annotDict.get(PDFName.of('OPS_StampName'));
+        if (opsNameRaw) {
+          const on = leesPdfTekst(context, opsNameRaw);
+          if (on !== undefined) colors.stampName = on;
+        }
+        const opsTekstRaw = annotDict.get(PDFName.of('OPS_StampText'));
+        if (opsTekstRaw) {
+          const tekst = leesPdfTekst(context, opsTekstRaw);
+          if (tekst) colors.opsStampText = tekst;
+        }
+        // Dynamic stamp design (docs/STAMPS.md), validated by the converter.
+        const designRaw = annotDict.get(PDFName.of('OPS_StampDesign'));
+        if (designRaw) {
+          const json = leesPdfTekst(context, designRaw);
+          if (json && json.length <= 1_000_000) {
+            try { colors.opsStampDesign = JSON.parse(json); } catch { /* not a design */ }
+          }
+        }
+        // Read /OPS_CropLeft.. (non-destructive image crop, fractions 0-1
+        // per side — issue #212). The AP embeds the FULL bitmap, so these
+        // fractions re-apply the crop after the image round-trips.
+        for (const [pdfKey, prop] of [
+          ['OPS_CropLeft', 'cropLeft'], ['OPS_CropTop', 'cropTop'],
+          ['OPS_CropRight', 'cropRight'], ['OPS_CropBottom', 'cropBottom'],
+        ]) {
+          const cRaw = annotDict.get(PDFName.of(pdfKey));
+          if (cRaw) {
+            const cv = pdfNum(context.lookup(cRaw) || cRaw);
+            if (cv !== null && cv > 0 && cv < 1) colors[prop] = cv;
+          }
+        }
+        // Word-style image adjustments (grayscale / brightness / contrast).
+        const gsRaw = annotDict.get(PDFName.of('OPS_Grayscale'));
+        if (gsRaw) {
+          const gv = context.lookup(gsRaw) || gsRaw;
+          if (gv === true || (gv && typeof gv.value === 'boolean' && gv.value)) colors.grayscale = true;
+        }
+        for (const [pdfKey, prop] of [['OPS_Brightness', 'brightness'], ['OPS_Contrast', 'contrast']]) {
+          const aRaw = annotDict.get(PDFName.of(pdfKey));
+          if (aRaw) {
+            const av = pdfNum(context.lookup(aRaw) || aRaw);
+            if (av !== null && av >= 0 && av !== 1) colors[prop] = av;
+          }
+        }
+      }
+
+      // Kruis in een rechthoek of cirkel/ellips (OPS_Cross, zie saver).
+      const opsCrossRaw = annotDict.get(PDFName.of('OPS_Cross'));
+      if (opsCrossRaw) {
+        const cv = context.lookup(opsCrossRaw) || opsCrossRaw;
+        if (cv === true || (cv && typeof cv.value === 'boolean' && cv.value)) colors.cross = true;
+      }
+
+      // Read /OPS_Rotation (our custom rotation key) for ALL annotation types
+      const opsRotRaw = annotDict.get(PDFName.of('OPS_Rotation'));
+      if (opsRotRaw) {
+        const rv = pdfNum(context.lookup(opsRotRaw) || opsRotRaw);
+        if (rv !== null) colors.rotation = rv;
+      }
+
+      // /OPS_LineHeads: exacte lijnkoppen die /LE niet kent (lijnkoppen.js).
+      const opsKoppenRaw = annotDict.get(PDFName.of('OPS_LineHeads'));
+      if (opsKoppenRaw) {
+        const koppen = leesPdfTekst(context, opsKoppenRaw);
+        if (koppen) colors.opsLineHeads = koppen;
+      }
+
+      // Read /OPS_HeadSize (our custom arrowhead size for dimension annotations)
+      const opsHsRaw = annotDict.get(PDFName.of('OPS_HeadSize'));
+      if (opsHsRaw) {
+        const hs = pdfNum(context.lookup(opsHsRaw) || opsHsRaw);
+        if (hs !== null) colors.opsHeadSize = hs;
+      }
+
+      // Label size of an area or perimeter measurement (saver.js). A length
+      // measurement reads the same key through maatlijn-uit-bestand.js.
+      const opsFsRaw = annotDict.get(PDFName.of('OPS_FontSize'));
+      if (opsFsRaw) {
+        const fs = pdfNum(context.lookup(opsFsRaw) || opsFsRaw);
+        if (fs !== null && fs > 0) colors.opsFontSize = fs;
+      }
+
+      // Read /OPS_Precision (our custom decimal precision for measurement annotations)
+      const opsPrecRaw = annotDict.get(PDFName.of('OPS_Precision'));
+      if (opsPrecRaw) {
+        const prec = pdfNum(context.lookup(opsPrecRaw) || opsPrecRaw);
+        if (prec !== null) colors.opsPrecision = prec;
+      }
+
+      // Read /OPS_TextOffsetX/Y (user-dragged dimension-text offset from the
+      // dimension-line midpoint, stored in the visual annotation frame)
+      const opsToxRaw = annotDict.get(PDFName.of('OPS_TextOffsetX'));
+      if (opsToxRaw) {
+        const tox = pdfNum(context.lookup(opsToxRaw) || opsToxRaw);
+        if (tox !== null) colors.opsTextOffsetX = tox;
+      }
+      const opsToyRaw = annotDict.get(PDFName.of('OPS_TextOffsetY'));
+      if (opsToyRaw) {
+        const toy = pdfNum(context.lookup(opsToyRaw) || opsToyRaw);
+        if (toy !== null) colors.opsTextOffsetY = toy;
+      }
+
+      // Read /OPS_Subtype (our custom subtype for cloud/cloudPolyline/measurements)
+      const opsSubRaw = annotDict.get(PDFName.of('OPS_Subtype'));
+      if (subtypeName === '/Circle' && opsSubRaw !== undefined) colors.opsSubtypePresent = true;
+      if (opsSubRaw) {
+        const sub = leesPdfTekst(context, opsSubRaw);
+        if (sub !== undefined) colors.opsSubtype = sub;
+      }
+
+      // Hyperlink markup (saver/hyperlink-dict.js): the target page.
+      if (colors.opsSubtype === 'hyperlink' && subtypeName === '/Link') {
+        const lpRaw = annotDict.get(PDFName.of('OPS_LinkPage'));
+        const lp = lpRaw ? pdfNum(context.lookup(lpRaw) || lpRaw) : null;
+        if (Number.isInteger(lp) && lp >= 1) colors.opsLinkPage = lp;
+        // Set Batch Link: the other PDF (relative path) the page is in.
+        const lfRaw = annotDict.get(PDFName.of('OPS_LinkFile'));
+        if (lfRaw) {
+          const lf = leesPdfTekst(context, lfRaw);
+          if (typeof lf === 'string' && lf) colors.opsLinkFile = lf;
+        }
+        // Batch Link (pdf/batch-link.js): its marker and the outline width.
+        const batchRaw = annotDict.get(PDFName.of('OPS_BatchLink'));
+        if (batchRaw && String(context.lookup(batchRaw) ?? batchRaw) === 'true') colors.opsBatchLink = true;
+      }
+
+      if (colors.opsSubtype === 'count') {
+        const category = annotDict.get(PDFName.of('OPS_CountCategory'));
+        const markerStyle = annotDict.get(PDFName.of('OPS_MarkerStyle'));
+        const number = annotDict.get(PDFName.of('OPS_CountNumber'));
+        if (category) colors.opsCountCategory = leesPdfTekst(context, category);
+        if (markerStyle) colors.opsMarkerStyle = leesPdfTekst(context, markerStyle);
+        if (number) colors.opsCountNumber = pdfNum(context.lookup(number) || number);
+        const symbolSize = annotDict.get(PDFName.of('OPS_SymbolSize'));
+        if (symbolSize) colors.opsSymbolSize = pdfNum(context.lookup(symbolSize) || symbolSize);
+      }
+
+      // A symbol count saved with its number hidden (saver.js, count).
+      if (colors.opsSubtype === 'count') {
+        const showNumber = annotDict.get(PDFName.of('OPS_CountShowNumber'));
+        if (showNumber && String(context.lookup(showNumber) || showNumber) === 'false') colors.opsCountShowNumber = false;
+      }
+
+      // Plattegrond: maat zonder eenheid, meetvlak zonder label, zaadpunt en
+      // naam van een ruimte (zie saver/plattegrond-meta.js).
+      Object.assign(colors, leesPlattegrondMeta(annotDict, context));
+      // Measurement extras: depth, slope, kind, caption (saver/meet-extra.js).
+      Object.assign(colors, leesMeetExtra(annotDict, context));
+      // Capture photos on the markup (loader/capture-load.js).
+      Object.assign(colors, leesCapture(annotDict, context));
+      Object.assign(colors, readCaptionTemplate(annotDict, context));
+      // /Subj: pdf.js geeft hem niet door; een meting, notitie of tekstvak
+      // bewaart er haar onderwerp in (loader/annotatie-opmerking.js).
+      const onderwerp = leesTekstString(context, annotDict.get(PDFName.of('Subj')));
+      if (onderwerp) colors.subj = onderwerp;
+      // Markup group (the external editor /GroupNesting, OcuDraw /OPS_GroupPathV1): markup-group-pdf.js.
+      const markupGroup = readGroupKeys(annotDict, context);
+      if (markupGroup) colors.markupGroup = markupGroup;
+
+      // Vectorknipsel: de knipsel-velden van de stempel, en bij het eerste
+      // knipsel in dit document de bronpagina's van de catalogus in de store.
+      // Zie loader/vector-snippet-load.js; de converter maakt er weer een
+      // verplaatsbaar knipsel van.
+      if (colors.opsSubtype === 'vectorSnippet' && subtypeName === '/Stamp') {
+        try {
+          const velden = await leesKnipselVelden(annotDict, context);
+          if (velden) {
+            if (!_knipselBronnenGelezen.has(pdfDoc)) {
+              _knipselBronnenGelezen.add(pdfDoc);
+              await leesKnipselBronnen(pdfDoc, bewaarKnipsel);
+            }
+            colors.vectorSnippet = velden;
+          }
+        } catch (err) {
+          console.warn('[loader] knipsel niet leesbaar, blijft een stempel:', err?.message || err);
+        }
+      }
+
+      // Callout curved leader flag: /OPS_LeaderStyle ('curved' = ronde aanhaallijn)
+      const opsLeaderStyleRaw = annotDict.get(PDFName.of('OPS_LeaderStyle'));
+      if (opsLeaderStyleRaw) {
+        const ls = leesPdfTekst(context, opsLeaderStyleRaw);
+        if (ls !== undefined) colors.opsLeaderStyle = ls;
+      }
+
+      // Textbox leaders: /OPS_LeaderId + /IRT (in-reply-to parent textbox Rect)
+      const opsLidRaw = annotDict.get(PDFName.of('OPS_LeaderId'));
+      if (opsLidRaw) {
+        const lv = leesPdfTekst(context, opsLidRaw);
+        if (lv !== undefined) colors.opsLeaderId = lv;
+      }
+      const irtRaw = annotDict.get(PDFName.of('IRT'));
+      if (irtRaw) {
+        const irt = context.lookup(irtRaw);
+        if (irt && typeof irt.get === 'function') {
+          const irtRectRaw = irt.get(PDFName.of('Rect'));
+          if (irtRectRaw) {
+            const irtRect = context.lookup(irtRectRaw) || irtRectRaw;
+            if (irtRect && typeof irtRect.size === 'function' && irtRect.size() >= 4) {
+              colors.irtRectKey = `${pdfNum(irtRect.get(0))},${pdfNum(irtRect.get(1))},${pdfNum(irtRect.get(2))},${pdfNum(irtRect.get(3))}`;
+            }
+          }
+        }
+      }
+
+      // Read /OPS_PixelsPerUnit, /OPS_Unit, /OPS_ScaleRatio, /OPS_Divisions, /OPS_TotalUnits (viewport/scaleBar)
+      const opsPpuRaw = annotDict.get(PDFName.of('OPS_PixelsPerUnit'));
+      if (opsPpuRaw) {
+        const ppu = pdfNum(context.lookup(opsPpuRaw) || opsPpuRaw);
+        if (ppu !== null) colors.opsPixelsPerUnit = ppu;
+      }
+      const opsUnitRaw = annotDict.get(PDFName.of('OPS_Unit'));
+      if (opsUnitRaw) {
+        const u = leesPdfTekst(context, opsUnitRaw);
+        if (u !== undefined) colors.opsUnit = u;
+      }
+      const opsMeasureUnitRaw = annotDict.get(PDFName.of('OPS_MeasureUnit'));
+      if (opsMeasureUnitRaw) {
+        const unit = leesPdfTekst(context, opsMeasureUnitRaw);
+        if (unit !== undefined) colors.opsMeasureUnit = unit;
+      }
+      const opsMeasureValueRaw = annotDict.get(PDFName.of('OPS_MeasureValue'));
+      if (opsMeasureValueRaw) {
+        const value = pdfNum(context.lookup(opsMeasureValueRaw) || opsMeasureValueRaw);
+        if (value !== null) colors.opsMeasureValue = value;
+      }
+      const opsSrRaw = annotDict.get(PDFName.of('OPS_ScaleRatio'));
+      if (opsSrRaw) {
+        const sr = leesPdfTekst(context, opsSrRaw);
+        if (sr !== undefined) colors.opsScaleRatio = sr;
+      }
+      const opsDivRaw = annotDict.get(PDFName.of('OPS_Divisions'));
+      if (opsDivRaw) {
+        const div = pdfNum(context.lookup(opsDivRaw) || opsDivRaw);
+        if (div !== null) colors.opsDivisions = div;
+      }
+      const opsTuRaw = annotDict.get(PDFName.of('OPS_TotalUnits'));
+      if (opsTuRaw) {
+        const tu = pdfNum(context.lookup(opsTuRaw) || opsTuRaw);
+        if (tu !== null) colors.opsTotalUnits = tu;
+      }
+      // Scale region custom keys
+      const opsScaleStringRaw = annotDict.get(PDFName.of('OPS_ScaleString'));
+      if (opsScaleStringRaw) {
+        const ss = leesPdfTekst(context, opsScaleStringRaw);
+        if (ss !== undefined) colors.opsScaleString = ss;
+      }
+      const opsTekeningtypeRaw = annotDict.get(PDFName.of('OPS_Tekeningtype'));
+      if (opsTekeningtypeRaw) {
+        const tt = leesPdfTekst(context, opsTekeningtypeRaw);
+        if (tt !== undefined) colors.opsTekeningtype = tt;
+      }
+      const opsUnitsRaw = annotDict.get(PDFName.of('OPS_Units'));
+      if (opsUnitsRaw) {
+        const u = leesPdfTekst(context, opsUnitsRaw);
+        if (u !== undefined) colors.opsUnits = u;
+      }
+      const opsLabelRaw = annotDict.get(PDFName.of('OPS_Label'));
+      if (opsLabelRaw) {
+        const l = leesPdfTekst(context, opsLabelRaw);
+        if (l !== undefined) colors.opsLabel = l;
+      }
+
+      const opsLwRaw = annotDict.get(PDFName.of('OPS_LineWidth'));
+      if (opsLwRaw) {
+        const lw = pdfNum(context.lookup(opsLwRaw) || opsLwRaw);
+        if (lw !== null) colors.opsLineWidth = lw;
+      }
+
+      const opsScheduleRaw = annotDict.get(PDFName.of('OPS_ScheduleData'));
+      if (opsScheduleRaw) {
+        const sd = leesPdfTekst(context, opsScheduleRaw);
+        if (sd !== undefined) colors.opsScheduleData = sd;
+      }
+      const opsTableRaw = annotDict.get(PDFName.of('OPS_TableData'));
+      if (opsTableRaw) {
+        const td = leesPdfTekst(context, opsTableRaw);
+        if (td !== undefined) colors.opsTableData = td;
+      }
+      const opsGroupByRaw = annotDict.get(PDFName.of('OPS_GroupBy'));
+      if (opsGroupByRaw) {
+        const gb = leesPdfTekst(context, opsGroupByRaw);
+        if (gb !== undefined) colors.opsGroupBy = gb;
+      }
+
+      // Parametric symbol metadata
+      const opsSymRaw = annotDict.get(PDFName.of('OPS_SymbolId'));
+      if (opsSymRaw) {
+        const s = leesPdfTekst(context, opsSymRaw);
+        if (s !== undefined) colors.opsSymbolId = s;
+      }
+      const opsParamsRaw = annotDict.get(PDFName.of('OPS_Params'));
+      if (opsParamsRaw) {
+        const p = leesPdfTekst(context, opsParamsRaw);
+        if (p !== undefined) colors.opsParams = p;
+      }
+      const opsIfcRaw = annotDict.get(PDFName.of('OPS_IfcCategory'));
+      if (opsIfcRaw) {
+        const c = leesPdfTekst(context, opsIfcRaw);
+        if (c !== undefined) colors.opsIfcCategory = c;
+      }
+      const opsIfcPreRaw = annotDict.get(PDFName.of('OPS_IfcPredefined'));
+      if (opsIfcPreRaw) {
+        const c = leesPdfTekst(context, opsIfcPreRaw);
+        if (c !== undefined) colors.opsIfcPredefined = c;
+      }
+      const opsTwoPointRaw = annotDict.get(PDFName.of('OPS_TwoPoint'));
+      if (opsTwoPointRaw) {
+        const arr = context.lookup(opsTwoPointRaw) || opsTwoPointRaw;
+        if (arr && typeof arr.size === 'function' && arr.size() === 4) {
+          const points = [];
+          for (let i = 0; i < 4; i++) {
+            const value = arr.get(i);
+            const number = pdfNum(context.lookup(value) || value);
+            if (number !== null) points.push(number);
+          }
+          if (points.length === 4) colors.opsTwoPoint = points;
+        }
+      }
+      // Ongedraaide maat [w h] (PDF-ruimte) van een gedraaide vorm waarvan
+      // /Rect alleen de omhullende is — zie gedraaide-vorm-maat.js.
+      const opsMaatRaw = annotDict.get(PDFName.of('OPS_Maat'));
+      if (opsMaatRaw) {
+        const arr = context.lookup(opsMaatRaw) || opsMaatRaw;
+        if (arr && typeof arr.size === 'function' && arr.size() === 2) {
+          const mw = pdfNum(context.lookup(arr.get(0)) || arr.get(0));
+          const mh = pdfNum(context.lookup(arr.get(1)) || arr.get(1));
+          if (mw > 0 && mh > 0) colors.opsMaat = { width: mw, height: mh };
+        }
+      }
+      const opsTwoPointBandRaw = annotDict.get(PDFName.of('OPS_TwoPointBand'));
+      if (opsTwoPointBandRaw) {
+        const band = pdfNum(context.lookup(opsTwoPointBandRaw) || opsTwoPointBandRaw);
+        if (band !== null && band > 0) colors.opsTwoPointBand = band;
+      }
+
+      // ── Stavenreeks (wapeningsstaven-reeks) ─────────────────────────────
+      // Onze eigen parameters + de reekslijn-coördinaten. `OPS_SRRect` is de
+      // /Rect zoals WIJ hem schreven: wijkt de actuele /Rect daarvan af, dan
+      // heeft een andere editor het object verplaatst en past de converter die
+      // verschuiving toe op de geometrie. Ontbreken deze keys, dan blijft het
+      // een gewone stamp (tonen-zoals-de-appearance) — nooit crashen.
+      {
+        const srNum = (k) => {
+          const raw = annotDict.get(PDFName.of(k));
+          if (!raw) return null;
+          return pdfNum(context.lookup(raw) || raw);
+        };
+        const srStr = (k) => leesPdfTekst(context, annotDict.get(PDFName.of(k))) ?? null;
+        const srArr = (k) => {
+          const raw = annotDict.get(PDFName.of(k));
+          if (!raw) return null;
+          const arr = context.lookup(raw) || raw;
+          if (!arr || typeof arr.size !== 'function') return null;
+          const out = [];
+          for (let ai = 0; ai < arr.size(); ai++) {
+            const val = arr.get(ai);
+            const num = pdfNum(context.lookup(val) || val);
+            if (num !== null) out.push(num);
+          }
+          return out;
+        };
+        const srCount = srNum('OPS_SRCount');
+        if (srCount !== null) colors.srCount = srCount;
+        const srDia = srNum('OPS_SRDiameter');
+        if (srDia !== null) colors.srDiameter = srDia;
+        const srBl = srNum('OPS_SRBarLengthMm');
+        if (srBl !== null) colors.srBarLengthMm = srBl;
+        const srLl = srNum('OPS_SRLegLength');
+        if (srLl !== null) colors.srLegLength = srLl;
+        const srLt = srNum('OPS_SRLineTail');
+        if (srLt !== null) colors.srLineTail = srLt;
+        const srFs = srNum('OPS_SRFontSize');
+        if (srFs !== null) colors.srFontSize = srFs;
+        const srLw = srNum('OPS_SRLineWidth');
+        if (srLw !== null) colors.srLineWidth = srLw;
+        const srLd = srStr('OPS_SRLegDir');
+        if (srLd) colors.srLegDir = srLd;
+        const srLs = srStr('OPS_SRLabelSide');
+        if (srLs) colors.srLabelSide = srLs;
+        const srGeom = srArr('OPS_SRGeom');
+        if (srGeom && srGeom.length === 4) colors.srGeom = srGeom;
+        const srRect = srArr('OPS_SRRect');
+        if (srRect && srRect.length === 4) colors.srRect = srRect;
+
+        // ── Betonbalk ─────────────────────────────────────────────────────
+        // Eigen parameters + de hartlijn-coördinaten. `OPS_BbRect` is de
+        // /Rect zoals WIJ hem schreven: wijkt de actuele /Rect daarvan af,
+        // dan heeft een ander programma het object verplaatst en past de
+        // converter die verschuiving toe op de hartlijn. Ontbreken deze
+        // keys, dan blijft het een gewone polygon — nooit crashen.
+        const bbBreedte = srNum('OPS_BreedteMm');
+        if (bbBreedte !== null) colors.bbBreedteMm = bbBreedte;
+        const bbHoogte = srNum('OPS_HoogteMm');
+        if (bbHoogte !== null) colors.bbHoogteMm = bbHoogte;
+        const bbStijl = srStr('OPS_Lijnstijl');
+        if (bbStijl) colors.bbLijnstijl = bbStijl;
+        const bbLw = srNum('OPS_BbLineWidth');
+        if (bbLw !== null) colors.bbLineWidth = bbLw;
+        const bbHl = srNum('OPS_BbHartlijnTonen');
+        if (bbHl !== null) colors.bbHartlijnTonen = bbHl === 1;
+        const bbTagT = srNum('OPS_BbTagTonen');
+        if (bbTagT !== null) colors.bbTagTonen = bbTagT === 1;
+        const bbTagS = srStr('OPS_BbTagTekst');
+        if (bbTagS) colors.bbTagTekst = bbTagS;
+        const bbTagDx = srNum('OPS_BbTagDx');
+        if (bbTagDx !== null) colors.bbTagDx = bbTagDx;
+        const bbTagDy = srNum('OPS_BbTagDy');
+        if (bbTagDy !== null) colors.bbTagDy = bbTagDy;
+        // Huidige vorm: lijnstuk [x1,y1,x2,y2].
+        const bbGeom = srArr('OPS_BbGeom');
+        if (bbGeom && bbGeom.length === 4) colors.bbGeom = bbGeom;
+
+        // ── Systeemraster ─────────────────────────────────────────────────
+        // Rasterparameters; de contour zelf komt uit /Vertices (dus een
+        // verplaatsing in een ander programma reist vanzelf mee). Ontbreken
+        // de keys, dan blijft het een gewone polygon — nooit crashen.
+        const sgPlB = srNum('OPS_SgPlaatB');
+        if (sgPlB !== null) colors.sgPlaatBreedteMm = sgPlB;
+        const sgPlH = srNum('OPS_SgPlaatH');
+        if (sgPlH !== null) colors.sgPlaatHoogteMm = sgPlH;
+        const sgOx = srNum('OPS_SgOrigX');
+        if (sgOx !== null) colors.sgOriginXMm = sgOx;
+        const sgOy = srNum('OPS_SgOrigY');
+        if (sgOy !== null) colors.sgOriginYMm = sgOy;
+        const sgEqX = srNum('OPS_SgEqX');
+        if (sgEqX !== null) colors.sgEqualizeX = sgEqX === 1;
+        const sgEqY = srNum('OPS_SgEqY');
+        if (sgEqY !== null) colors.sgEqualizeY = sgEqY === 1;
+        const sgRand = srStr('OPS_SgRand');
+        if (sgRand) colors.sgRandConditie = sgRand;
+        const sgMinR = srNum('OPS_SgMinRand');
+        if (sgMinR !== null) colors.sgMinRandMm = sgMinR;
+        const sgHoek = srNum('OPS_SgHoek');
+        if (sgHoek !== null) colors.sgRasterHoek = sgHoek;
+        const sgTag = srNum('OPS_SgTagTonen');
+        if (sgTag !== null) colors.sgTagTonen = sgTag === 1;
+        const sgFs = srNum('OPS_SgFontSize');
+        if (sgFs !== null) colors.sgTagFontSize = sgFs;
+        const sgLw = srNum('OPS_SgLineWidth');
+        if (sgLw !== null) colors.sgLineWidth = sgLw;
+        // Systeem (v1: systeemplafond): type, randprofiel, boogsegmenten
+        // (parallelle arrays per contour-node) en paneel-overrides (JSON).
+        const sgSys = srStr('OPS_SgSysType');
+        if (sgSys) colors.sgSysType = sgSys;
+        const sgEdge = srStr('OPS_SgEdge');
+        if (sgEdge) colors.sgEdgeProfiel = sgEdge;
+        const sgArcF = srArr('OPS_SgArcFlags');
+        if (sgArcF) colors.sgArcFlags = sgArcF;
+        const sgArcB = srArr('OPS_SgArcBulges');
+        if (sgArcB) colors.sgArcBulges = sgArcB;
+        const sgPanels = srStr('OPS_SgPanels');
+        if (sgPanels) colors.sgPanelsJson = sgPanels;
+        const sgEdges = srStr('OPS_SgEdges');
+        if (sgEdges) colors.sgEdgesJson = sgEdges;
+        const sgSpar = srStr('OPS_SgSparingen');
+        if (sgSpar) colors.sgSparingenJson = sgSpar;
+        // Systeemtype: verwijzing + meegereisd JSON-snapshot van de definitie.
+        const sgTypeId = srStr('OPS_SgTypeId');
+        if (sgTypeId) colors.sgTypeId = sgTypeId;
+        const sgTypeDef = srStr('OPS_SgTypeDef');
+        if (sgTypeDef) colors.sgTypeDefJson = sgTypeDef;
+        // Legacy (eerste vorm): hartlijn-polyline [x1,y1,...] — de converter
+        // splitst meerpunts-exemplaren in losse tweepunts-balken.
+        const bbHart = srArr('OPS_Hartlijn');
+        if (bbHart && bbHart.length >= 4) colors.bbHartlijn = bbHart;
+        const bbRect = srArr('OPS_BbRect');
+        if (bbRect && bbRect.length === 4) colors.bbRect = bbRect;
+      }
+
+      const opsArRaw = annotDict.get(PDFName.of('OPS_ArcRadius'));
+      if (opsArRaw) {
+        const ar = pdfNum(context.lookup(opsArRaw) || opsArRaw);
+        if (ar !== null) colors.opsArcRadius = ar;
+      }
+
+      // Read /OPS_Points (our custom control points for spline annotations)
+      const opsPointsRaw = annotDict.get(PDFName.of('OPS_Points'));
+      if (opsPointsRaw) {
+        const pointsArr = context.lookup(opsPointsRaw) || opsPointsRaw;
+        if (pointsArr && typeof pointsArr.size === 'function') {
+          const flatPoints = [];
+          for (let pi = 0; pi < pointsArr.size(); pi++) {
+            const val = pointsArr.get(pi);
+            const num = pdfNum(context.lookup(val) || val);
+            if (num !== null) flatPoints.push(num);
+          }
+          // >= 4 (2 points): spline arrows (issue #267) can have as few as two
+          // control points; the spline loader still self-gates on >= 6.
+          if (flatPoints.length >= 4) colors.opsPoints = flatPoints;
+        }
+      }
+
+      // Read /OPS_Holes (our custom holes data for measureArea with cutouts)
+      const opsHolesRaw = annotDict.get(PDFName.of('OPS_Holes'));
+      if (opsHolesRaw) {
+        const holesArr = context.lookup(opsHolesRaw) || opsHolesRaw;
+        if (holesArr && typeof holesArr.size === 'function') {
+          const holes = [];
+          for (let hi = 0; hi < holesArr.size(); hi++) {
+            const holeRaw = context.lookup(holesArr.get(hi)) || holesArr.get(hi);
+            if (holeRaw && typeof holeRaw.size === 'function') {
+              const holePoints = [];
+              for (let pi = 0; pi + 1 < holeRaw.size(); pi += 2) {
+                const hx = pdfNum(context.lookup(holeRaw.get(pi)) || holeRaw.get(pi));
+                const hy = pdfNum(context.lookup(holeRaw.get(pi + 1)) || holeRaw.get(pi + 1));
+                if (hx !== null && hy !== null) {
+                  holePoints.push({ x: hx, y: hy });
+                }
+              }
+              if (holePoints.length >= 3) holes.push(holePoints);
+            }
+          }
+          if (holes.length > 0) colors.holes = holes;
+        }
+      }
+
+      // Read /OPS_HatchPattern, /OPS_HatchColor, /OPS_HatchScale, /OPS_HatchAngle
+      // (used by 'filledArea' annotations to persist user-controlled hatch fill).
+      const hpRaw = annotDict.get(PDFName.of('OPS_HatchPattern'));
+      if (hpRaw) {
+        const hp = context.lookup(hpRaw) || hpRaw;
+        if (typeof hp.decodeText === 'function') colors.opsHatchPattern = hp.decodeText();
+        else if (typeof hp.value === 'string') colors.opsHatchPattern = hp.value;
+      }
+      const hcRaw = annotDict.get(PDFName.of('OPS_HatchColor'));
+      if (hcRaw) {
+        const hc = context.lookup(hcRaw) || hcRaw;
+        if (typeof hc.decodeText === 'function') colors.opsHatchColor = hc.decodeText();
+        else if (typeof hc.value === 'string') colors.opsHatchColor = hc.value;
+      }
+      const hsRaw = annotDict.get(PDFName.of('OPS_HatchScale'));
+      if (hsRaw) {
+        const hs = pdfNum(context.lookup(hsRaw) || hsRaw);
+        if (hs !== null) colors.opsHatchScale = hs;
+      }
+      const haRaw = annotDict.get(PDFName.of('OPS_HatchAngle'));
+      if (haRaw) {
+        const ha = pdfNum(context.lookup(haRaw) || haRaw);
+        if (ha !== null) colors.opsHatchAngle = ha;
+      }
+
+      // Eigen lijnstijl (/OPS_LineStyle) en een meegenomen .PAT-patroon
+      // (/OPS_HatchDef): JSON, pas bij het omzetten gecontroleerd.
+      const lijnstijl = leesPdfTekst(context, annotDict.get(PDFName.of('OPS_LineStyle')));
+      if (typeof lijnstijl === 'string' && lijnstijl.length <= 64 * 1024) colors.opsLineStyle = lijnstijl;
+      const arceringDef = leesPdfTekst(context, annotDict.get(PDFName.of('OPS_HatchDef')));
+      if (typeof arceringDef === 'string' && arceringDef.length <= 256 * 1024) colors.opsHatchDef = arceringDef;
+
+      // Read /OPS_DikteMm — wall thickness in real-world mm (wall round-trip)
+      const dkRaw = annotDict.get(PDFName.of('OPS_DikteMm'));
+      if (dkRaw) {
+        const dk = pdfNum(context.lookup(dkRaw) || dkRaw);
+        if (dk !== null) colors.opsDikteMm = dk;
+      }
+
+      // Read /OPS_IsolatieType — insulation sub-material for walls
+      const isoTypeRaw = annotDict.get(PDFName.of('OPS_IsolatieType'));
+      if (isoTypeRaw) {
+        const isoType = context.lookup(isoTypeRaw) || isoTypeRaw;
+        if (typeof isoType.decodeText === 'function') colors.opsIsolatieType = isoType.decodeText();
+        else if (typeof isoType.value === 'string') colors.opsIsolatieType = isoType.value;
+      }
+
+      // Read /OPS_NoJoin — wall end(s) whose automatic join is off (#476)
+      const noJoinRaw = annotDict.get(PDFName.of('OPS_NoJoin'));
+      if (noJoinRaw) {
+        const noJoin = context.lookup(noJoinRaw) || noJoinRaw;
+        if (typeof noJoin.decodeText === 'function') colors.opsNoJoin = noJoin.decodeText();
+        else if (typeof noJoin.value === 'string') colors.opsNoJoin = noJoin.value;
+      }
+
+      // Read /OPS_LinkedPath — source file of a LINKED image annotation
+      const lpRaw = annotDict.get(PDFName.of('OPS_LinkedPath'));
+      if (lpRaw) {
+        const lp = context.lookup(lpRaw) || lpRaw;
+        if (typeof lp.decodeText === 'function') colors.opsLinkedPath = lp.decodeText();
+        else if (typeof lp.value === 'string') colors.opsLinkedPath = lp.value;
+      }
+
+      // Read /OPS_TintColor — colour tint of an image compare-overlay
+      const tcRaw = annotDict.get(PDFName.of('OPS_TintColor'));
+      if (tcRaw) {
+        const tc = context.lookup(tcRaw) || tcRaw;
+        if (typeof tc.decodeText === 'function') colors.opsTintColor = tc.decodeText();
+        else if (typeof tc.value === 'string') colors.opsTintColor = tc.value;
+      }
+
+      // Read /OPS_ArcFlags + /OPS_ArcBulges (parallel arrays, one entry per
+      // outer vertex). Used to round-trip arc-segment metadata for filledArea.
+      const afRaw = annotDict.get(PDFName.of('OPS_ArcFlags'));
+      if (afRaw) {
+        const arr = context.lookup(afRaw) || afRaw;
+        if (arr && typeof arr.size === 'function') {
+          const flags = [];
+          for (let i = 0; i < arr.size(); i++) {
+            const v = pdfNum(context.lookup(arr.get(i)) || arr.get(i));
+            flags.push(v ? 1 : 0);
+          }
+          colors.opsArcFlags = flags;
+        }
+      }
+      const abRaw = annotDict.get(PDFName.of('OPS_ArcBulges'));
+      if (abRaw) {
+        const arr = context.lookup(abRaw) || abRaw;
+        if (arr && typeof arr.size === 'function') {
+          const bulges = [];
+          for (let i = 0; i < arr.size(); i++) {
+            const v = pdfNum(context.lookup(arr.get(i)) || arr.get(i));
+            bulges.push(v != null ? v : 0);
+          }
+          colors.opsArcBulges = bulges;
+        }
+      }
+
+      // Read /OPS_HoleArcFlags + /OPS_HoleArcBulges (array of sub-arrays,
+      // one sub-array per hole, parallel to /OPS_Holes). Round-trip arc
+      // metadata for vertices inside hole contours.
+      const hafRaw = annotDict.get(PDFName.of('OPS_HoleArcFlags'));
+      if (hafRaw) {
+        const arr = context.lookup(hafRaw) || hafRaw;
+        if (arr && typeof arr.size === 'function') {
+          const out = [];
+          for (let i = 0; i < arr.size(); i++) {
+            const sub = context.lookup(arr.get(i)) || arr.get(i);
+            const flags = [];
+            if (sub && typeof sub.size === 'function') {
+              for (let j = 0; j < sub.size(); j++) {
+                const v = pdfNum(context.lookup(sub.get(j)) || sub.get(j));
+                flags.push(v ? 1 : 0);
+              }
+            }
+            out.push(flags);
+          }
+          colors.opsHoleArcFlags = out;
+        }
+      }
+      const habRaw = annotDict.get(PDFName.of('OPS_HoleArcBulges'));
+      if (habRaw) {
+        const arr = context.lookup(habRaw) || habRaw;
+        if (arr && typeof arr.size === 'function') {
+          const out = [];
+          for (let i = 0; i < arr.size(); i++) {
+            const sub = context.lookup(arr.get(i)) || arr.get(i);
+            const bulges = [];
+            if (sub && typeof sub.size === 'function') {
+              for (let j = 0; j < sub.size(); j++) {
+                const v = pdfNum(context.lookup(sub.get(j)) || sub.get(j));
+                bulges.push(v != null ? v : 0);
+              }
+            }
+            out.push(bulges);
+          }
+          colors.opsHoleArcBulges = out;
+        }
+      }
+
+      // /NM of every markup: the model keeps it and the saver writes it back
+      // (a markup keeps its name in the external editor, saver/ext-natief.js).
+      if (!colors.nm) {
+        const nmRaw = annotDict.get(PDFName.of('NM'));
+        const nmObj = nmRaw ? (context.lookup(nmRaw) || nmRaw) : null;
+        const nmTekst = nmObj && typeof nmObj.decodeText === 'function' ? nmObj.decodeText() : '';
+        if (nmTekst) colors.nm = nmTekst;
+      }
+
+      // Read /IT (Intent) for measurement annotations
+      const itRaw = annotDict.get(PDFName.of('IT'));
+      if (itRaw) {
+        const it = context.lookup(itRaw) || itRaw;
+        const itStr = it.toString();
+        if (itStr) colors.intent = itStr.replace('/', '');
+      }
+
+      // /RD van een rechthoek of ellips: de vorm ligt binnen /Rect
+      // (loader/vorm-inzet.js). pdf.js geeft /RD niet door.
+      if (subtypeName === '/Square' || subtypeName === '/Circle') {
+        const rdRaw = annotDict.get(PDFName.of('RD'));
+        const rdArr = rdRaw !== undefined ? (context.lookup(rdRaw) || rdRaw) : null;
+        if (rdArr && typeof rdArr.size === 'function' && rdArr.size() === 4) {
+          const rd = [0, 1, 2, 3].map((j) => pdfNum(context.lookup(rdArr.get(j)) || rdArr.get(j)));
+          if (rd.every((v) => typeof v === 'number' && Number.isFinite(v))) colors.shapeRd = rd;
+        }
+      }
+
+      // Proefleescorrecties (#508) en tekstmarkeringen: pdf.js geeft /Sy, /RD,
+      // /NM, /Subj, de rauwe /QuadPoints en de eigen sleutels niet door (zie
+      // loader/correction-load.js). Alleen gezet als het bestand ze heeft.
+      if (TEKSTCORRECTIE_SOORTEN.has(subtypeName)) {
+        leesTekstcorrectieExtra(context, annotDict, subtypeName, colors);
+      }
+
+      // Check for /Measure dictionary (PDF measurement annotations)
+      const measureRaw = annotDict.get(PDFName.of('Measure'));
+      if (measureRaw) {
+        colors.hasMeasure = true;
+        // Extract scale, unit, and precision from Measure NumberFormat dictionaries
+        const measureDict = context.lookup(measureRaw);
+        // A /Measure OcuDraw derived from the model for the external editor (saver/ext-
+        // natief.js) is no scale of its own: the model keeps its page scale.
+        const afgeleid = measureDict?.get?.(PDFName.of('OPS_RevuMeasure')) !== undefined;
+        if (measureDict && !afgeleid) {
+          // Helper: read a single NumberFormat dict, extract C (scale), U (unit), D (precision)
+          const readOneNF = (dict) => {
+            if (!dict || typeof dict.get !== 'function') return null;
+            const result = {};
+            const cRaw = dict.get(PDFName.of('C'));
+            const cVal = pdfNum(context.lookup(cRaw) || cRaw);
+            if (cVal !== null && cVal > 0) result.scale = cVal;
+            const uRaw = dict.get(PDFName.of('U'));
+            if (uRaw) {
+              const uStr = (context.lookup(uRaw) || uRaw);
+              if (typeof uStr.decodeText === 'function') result.unit = uStr.decodeText();
+              else if (typeof uStr.value === 'string') result.unit = uStr.value;
+              else result.unit = uStr.toString().replace(/[()\/]/g, '');
+            }
+            const dRaw = dict.get(PDFName.of('D'));
+            if (dRaw) {
+              const dVal = pdfNum(context.lookup(dRaw) || dRaw);
+              if (dVal !== null && dVal >= 0) result.precision = dVal;
+            }
+            return Object.keys(result).length > 0 ? result : null;
+          };
+
+          // Read a NumberFormat array: multiply C values across the chain,
+          // take U and D from the last element (the display unit/precision).
+          const readNumberFormat = (nfRaw) => {
+            if (!nfRaw) return null;
+            const arr = context.lookup(nfRaw);
+            if (!arr) return null;
+            // Single dict (not array)
+            if (typeof arr.size !== 'function') return readOneNF(arr);
+            const count = arr.size();
+            if (count === 0) return null;
+            // Read all elements: cumulative scale, last element's unit and precision
+            let cumulativeScale = 1;
+            let unit = null;
+            let precision = undefined;
+            for (let ei = 0; ei < count; ei++) {
+              const nf = readOneNF(context.lookup(arr.get(ei)));
+              if (nf) {
+                if (nf.scale) cumulativeScale *= nf.scale;
+                if (nf.unit) unit = nf.unit;
+                if (nf.precision !== undefined) precision = nf.precision;
+              }
+            }
+const result = {};
+            if (cumulativeScale > 0) result.scale = cumulativeScale;
+            if (unit) result.unit = unit;
+            if (precision !== undefined) result.precision = precision;
+            return Object.keys(result).length > 0 ? result : null;
+          };
+
+          // /X = per-pixel scale factor and unit
+          const xFmt = readNumberFormat(measureDict.get(PDFName.of('X')));
+          if (xFmt && xFmt.scale) {
+            colors.measureScale = xFmt.scale;
+            if (xFmt.unit) colors.measureUnit = xFmt.unit;
+          }
+          // /D = distance display format — its D value is a denominator (e.g. 100000 = 5 decimals)
+          // Fallback to /X precision for annotations without /D (e.g. simple Line dimensions)
+          const dFmt = readNumberFormat(measureDict.get(PDFName.of('D')));
+          if (dFmt && dFmt.precision !== undefined && dFmt.precision > 1) {
+            colors.measurePrecision = Math.round(Math.log10(dFmt.precision));
+          } else if (xFmt && xFmt.precision !== undefined) {
+            colors.measurePrecision = xFmt.precision;
+          }
+          // /A = area display format — D value is also a denominator
+          const aFmt = readNumberFormat(measureDict.get(PDFName.of('A')));
+          if (aFmt && aFmt.unit) {
+            colors.measureAreaUnit = aFmt.unit;
+          }
+          if (aFmt && aFmt.precision !== undefined && aFmt.precision > 1) {
+            colors.measureAreaPrecision = Math.round(Math.log10(aFmt.precision));
+          }
+        }
+      }
+
+      // Read BS/D (dash array) to distinguish dashed from dotted
+      const bsRaw = annotDict.get(PDFName.of('BS'));
+      if (bsRaw) {
+        const bsDict = context.lookup(bsRaw);
+        if (bsDict) {
+          const dRaw = bsDict.get(PDFName.of('D'));
+          if (dRaw) {
+            const dArr = context.lookup(dRaw) || dRaw;
+            if (dArr && typeof dArr.size === 'function' && dArr.size() >= 2) {
+              const d0 = pdfNum(dArr.get(0));
+              const d1 = pdfNum(dArr.get(1));
+              // Short dash segments (<=3) indicate dotted; longer ones are dashed
+              if (d0 !== null && d0 <= 3 && d1 !== null && d1 <= 3) {
+                colors.borderStyle = 'dotted';
+              } else {
+                colors.borderStyle = 'dashed';
+              }
+            }
+          }
+        }
+      }
+
+      // IC and type-specific extraction only for shape/text annotations
+      const needsIcTypes = ['/FreeText', '/Square', '/Circle', '/Line', '/PolyLine', '/Polygon'];
+      if (needsIcTypes.includes(subtypeName)) {
+        // Read IC (Interior Color) entry
+        const icRaw = annotDict.get(PDFName.of('IC'));
+        if (icRaw) {
+          const ic = context.lookup(icRaw);
+          colors.ic = pdfColorToHex(ic, context);
+        }
+
+        // Randkleur aanwezig? Bij FreeText is /IC de rand, anders /C. Ontbreekt
+        // hij of is hij leeg, dan is de vorm met /W 0 randloos (loader/geen-rand.js)
+        // — als er zonder rand iets te zien blijft: tekst of een vulling. Een vlak
+        // zonder vulling én zonder rand is onzichtbaar (zoals de doorzoekbare
+        // tekstvlakken die CAD-programma's meeschrijven); de app tekent dat met
+        // een dunne hulplijn, zodat het vindbaar blijft, en dat blijft zo.
+        const rkRaw = annotDict.get(PDFName.of(subtypeName === '/FreeText' ? 'IC' : 'C'));
+        const rk = rkRaw ? (context.lookup(rkRaw) || rkRaw) : null;
+        const geenRandkleur = !rk || (typeof rk.size === 'function' && rk.size() === 0);
+        colors.geenRandkleur = geenRandkleur && (subtypeName === '/FreeText' || !!colors.ic);
+        // De kale vraag "staat er een randkleur in het bestand?" blijft apart
+        // bewaard: samen met een uitdrukkelijke lijndikte 0 en zonder vulling
+        // is de vorm onzichtbaar (#435, zie loader/geen-rand.js).
+        colors.randkleurOntbreekt = geenRandkleur;
+        // Eigen sleutel van een vorm zonder rand (zie markeerZonderRand in saver/utils.js).
+        const nsRaw = annotDict.get(PDFName.of('OPS_NoStroke'));
+        if (nsRaw !== undefined) {
+          const ns = context.lookup(nsRaw) || nsRaw;
+          const bewaard = {};
+          if (ns instanceof PDFDict) {
+            const nsW = ns.get(PDFName.of('W'));
+            const w = nsW !== undefined ? pdfNum(context.lookup(nsW) || nsW) : null;
+            if (w !== null) bewaard.lijndikte = w;
+            const nsC = ns.get(PDFName.of('C'));
+            const kleur = nsC ? pdfColorToHex(context.lookup(nsC) || nsC, context) : null;
+            if (kleur) bewaard.kleur = kleur;
+          }
+          colors.opsNoStroke = bewaard;
+        }
+
+        // Lijndikte-, punt- en bijschriftsleutels van een lijn of polylijn
+        // zoals ze in het woordenboek staan (zie maatlijn-uit-bestand.js).
+        if (subtypeName === '/Line' || subtypeName === '/PolyLine') {
+          colors.lijn = leesLijnSleutels(annotDict, context);
+        }
+
+        // For Line annotations, read original /L array (PDF.js normalizeRect destroys direction)
+        if (subtypeName === '/Line') {
+          const lRaw = annotDict.get(PDFName.of('L'));
+          if (lRaw) {
+            const lArr = context.lookup(lRaw) || lRaw;
+            if (lArr && typeof lArr.size === 'function' && lArr.size() >= 4) {
+              colors.lineCoords = [
+                pdfNum(lArr.get(0)),
+                pdfNum(lArr.get(1)),
+                pdfNum(lArr.get(2)),
+                pdfNum(lArr.get(3))
+              ];
+            }
+          }
+          // Read leader line properties for dimension annotations
+          const llRaw = annotDict.get(PDFName.of('LL'));
+          if (llRaw) {
+            const llVal = pdfNum(context.lookup(llRaw) || llRaw);
+            if (llVal !== null) colors.leaderLength = llVal;
+          }
+          const lleRaw = annotDict.get(PDFName.of('LLE'));
+          if (lleRaw) {
+            const lleVal = pdfNum(context.lookup(lleRaw) || lleRaw);
+            if (lleVal !== null) colors.leaderExtension = lleVal;
+          }
+          const lloRaw = annotDict.get(PDFName.of('LLO'));
+          if (lloRaw) {
+            const lloVal = pdfNum(context.lookup(lloRaw) || lloRaw);
+            if (lloVal !== null) colors.leaderOffset = lloVal;
+          }
+          // Read caption properties
+          const capRaw = annotDict.get(PDFName.of('Cap'));
+          if (capRaw) colors.hasCaption = true;
+          const cpRaw = annotDict.get(PDFName.of('CP'));
+          if (cpRaw) {
+            const cpVal = (context.lookup(cpRaw) || cpRaw).toString();
+            colors.captionPosition = cpVal.replace('/', '');
+          }
+          const coRaw = annotDict.get(PDFName.of('CO'));
+          if (coRaw) {
+            const coArr = context.lookup(coRaw) || coRaw;
+            if (coArr && typeof coArr.size === 'function' && coArr.size() >= 2) {
+              colors.captionOffset = [pdfNum(coArr.get(0)), pdfNum(coArr.get(1))];
+            }
+          }
+        }
+      }
+
+      // Extract border width from /BS or /Border for ALL annotation types.
+      // PDF.js's annot.borderStyle?.width sometimes returns 1 (default) when the
+      // PDF actually has /BS<</W 4>> or /Border [0 0 4]. Reading the raw dict
+      // here gives the real value.
+      const bwBsRaw = annotDict.get(PDFName.of('BS'));
+      if (bwBsRaw) {
+        const bwBs = context.lookup(bwBsRaw);
+        if (bwBs) {
+          const wRaw = bwBs.get(PDFName.of('W'));
+          if (wRaw !== undefined && wRaw !== null) {
+            const w = pdfNum(context.lookup(wRaw) || wRaw);
+            if (w !== null) colors.borderWidth = w;
+          }
+        }
+      }
+      // Fallback: /Border array [H V W] - third element is width
+      if (colors.borderWidth === undefined) {
+        const borderRaw = annotDict.get(PDFName.of('Border'));
+        if (borderRaw) {
+          const border = context.lookup(borderRaw) || borderRaw;
+          if (border && typeof border.size === 'function' && border.size() >= 3) {
+            const w = pdfNum(border.get(2));
+            if (w !== null) colors.borderWidth = w;
+          }
+        }
+      }
+
+      // For FreeText, extract additional FreeText-specific properties
+      if (subtypeName === '/FreeText') {
+        // Read standard /Rotate key (externe referentie-editor writes this for 90/180/270 rotations)
+        const stdRotRaw = annotDict.get(PDFName.of('Rotate'));
+        if (stdRotRaw) {
+          const sr = pdfNum(context.lookup(stdRotRaw) || stdRotRaw);
+          if (sr !== null) {
+            // PDF spec: /Rotate is CCW degrees in PDF space; we negate for canvas (Y-down)
+            colors.stdRotation = -sr;
+          }
+        }
+
+        // Extract font family from /DR (default resources) → /Font → /BaseFont
+        const daRaw = annotDict.get(PDFName.of('DA'));
+        const drRaw = annotDict.get(PDFName.of('DR'));
+        if (daRaw && drRaw) {
+          try {
+            const daStr = daRaw.toString?.() || '';
+            // Get font reference name from DA string, e.g. "/Helv 12 Tf" → "Helv"
+            const daFontMatch = daStr.match(/\/([^\s)]+)\s+[\d.]+\s+Tf/);
+            if (daFontMatch) {
+              const fontRef = daFontMatch[1];
+              const dr = context.lookup(drRaw);
+              if (dr) {
+                const fontDictRaw = dr.get(PDFName.of('Font'));
+                if (fontDictRaw) {
+                  const fontDict = context.lookup(fontDictRaw);
+                  if (fontDict) {
+                    const fontObjRaw = fontDict.get(PDFName.of(fontRef));
+                    if (fontObjRaw) {
+                      const fontObj = context.lookup(fontObjRaw);
+                      if (fontObj) {
+                        const baseFont = fontObj.get(PDFName.of('BaseFont'));
+                        if (baseFont) {
+                          const fontInfo = mapPdfFontName(baseFont.toString());
+                          if (fontInfo) {
+                            colors.fontFamily = fontInfo.family;
+                            if (fontInfo.bold) colors.fontBold = true;
+                            if (fontInfo.italic) colors.fontItalic = true;
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) { /* ignore font extraction errors */ }
+        }
+
+        // Extract text styles from /RC (Rich Content) XHTML string
+        const rcRaw = annotDict.get(PDFName.of('RC'));
+        if (rcRaw) {
+          try {
+            // Een hex-/RC (UTF-16) gaf via toString() '<FEFF...>', waarin de
+            // regexen hieronder niets vinden: dan eerst decoderen.
+            const rcObj = context.lookup(rcRaw) || rcRaw;
+            const rcStr = rcObj instanceof PDFHexString ? rcObj.decodeText() : (rcRaw.toString?.() || '');
+            if (rcStr) {
+              // Check for text-decoration in style attributes
+              const decoMatch = rcStr.match(/text-decoration\s*:\s*([^;"']+)/i);
+              if (decoMatch) {
+                const deco = decoMatch[1].toLowerCase();
+                if (deco.includes('underline')) colors.fontUnderline = true;
+                if (deco.includes('line-through')) colors.fontStrikethrough = true;
+              }
+              // Also check for bold/italic in RC if not already detected from font name
+              if (!colors.fontBold) {
+                const weightMatch = rcStr.match(/font-weight\s*:\s*([^;"']+)/i);
+                if (weightMatch && /bold|[7-9]00/i.test(weightMatch[1])) {
+                  colors.fontBold = true;
+                }
+              }
+              if (!colors.fontItalic) {
+                const styleMatch = rcStr.match(/font-style\s*:\s*([^;"']+)/i);
+                if (styleMatch && /italic|oblique/i.test(styleMatch[1])) {
+                  colors.fontItalic = true;
+                }
+              }
+              // Inline opmaak (deels vet/cursief) als runs per regel: <p>/<div>
+              // zijn regels, <b>/<i>/font-weight/font-style de opmaak. Alleen
+              // bewaren als er echt gemengde opmaak in zit.
+              try {
+                if (typeof DOMParser !== 'undefined' && /<(b|i|strong|em|span|p|div)\b/i.test(rcStr)) {
+                  // toString() van een PDFString bevat de haakjes/escapes van
+                  // de PDF-notatie; voor het parsen de gedecodeerde tekst.
+                  const rcDecoded = (typeof rcRaw.decodeText === 'function') ? rcRaw.decodeText()
+                    : (typeof rcRaw.asString === 'function') ? rcRaw.asString() : rcStr.replace(/^\(|\)$/g, '');
+                  // Some authoring tools (XFA-style RC) end every
+                  // paragraph with BOTH a trailing \r AND its own <p>/<div>
+                  // block — belt-and-suspenders encoding of the same line
+                  // break. parseEditorDom (shared with the live editor, where
+                  // a lone trailing \r is meaningful — see its own contract
+                  // comment) counts each independently, doubling every blank
+                  // line between paragraphs. Drop the redundant \r right
+                  // before a block closes; it carries no information the
+                  // block boundary doesn't already provide.
+                  const rcCleaned = String(rcDecoded).replace(/^\s*<\?xml[^>]*\?>/i, '')
+                    .replace(/(?:&#(?:13|10);|[\r\n])+(?=<\/(?:span|p|div)>)/gi, '');
+                  const rcDoc = new DOMParser().parseFromString(rcCleaned, 'text/html');
+                  const rcBody = rcDoc.body;
+                  if (rcBody) {
+                    const rcLines = parseEditorDom(rcBody);
+                    const eersteRun = rcLines.flat()[0];
+                    const gemengd = rcLines.flat().some(r =>
+                      r.bold !== !!eersteRun?.bold || r.italic !== !!eersteRun?.italic ||
+                      !!r.underline !== !!eersteRun?.underline || !!r.strikethrough !== !!eersteRun?.strikethrough);
+                    if (gemengd) {
+                      colors.textRuns = rcLines;
+                    } else {
+                      // Uniform styling: trust the actual parsed run over the
+                      // naive whole-blob regex above, which matches the FIRST
+                      // "text-decoration:" it finds anywhere in the RC string —
+                      // typically the <body>'s own "text-decoration:none"
+                      // default, appearing before a <p>'s own override. That
+                      // silently dropped an underline/strikethrough applying
+                      // to the whole (single-style) annotation.
+                      colors.fontUnderline = !!eersteRun?.underline;
+                      colors.fontStrikethrough = !!eersteRun?.strikethrough;
+                    }
+                  }
+                }
+              } catch (_) { /* RC zonder bruikbare structuur */ }
+              // Extract line-height from RC (stored as absolute pt value, convert to multiplier)
+              const lhMatch = rcStr.match(/line-height\s*:\s*([\d.]+)/i);
+              if (lhMatch) {
+                colors.rawLineHeight = parseFloat(lhMatch[1]);
+              }
+            }
+          } catch (e) { /* ignore RC parsing errors */ }
+        }
+
+        // Extract /DS (Default Style) for font-size, font-family, font-weight
+        // and line-height. The DS string is a CSS-like declaration used by
+        // reference desktop editors' FreeText annotations to encode rich styling:
+        //   /DS (font-family:Segoe UI;font-size:22pt;font-weight:bold;color:#FFFFFF;)
+        // Without parsing font-family here we silently fall back to Arial,
+        // which is wider per glyph than Segoe UI Bold → text wraps to
+        // additional lines that fit fine in reference viewers.
+        // Concrete victim: "CONSTRUCTIE OVERZICHT" at Segoe UI Bold 22pt
+        // measures ~272pt → fits in a 275.9pt box. In Arial Bold 22pt the
+        // same string measures ~290pt → wraps to two lines.
+        const dsRaw = annotDict.get(PDFName.of('DS'));
+        if (dsRaw) {
+          try {
+            // Hex-/DS (UTF-16, bijv. een niet-ASCII-fontnaam): eerst decoderen.
+            const dsObj = context.lookup(dsRaw) || dsRaw;
+            // Gedecodeerd, zonder de haakjes van de PDF-notatie: anders mist
+            // een /DS die met 'margin:' begint zijn eerste declaratie.
+            const dsStr = decodePdfTextObject(dsObj) ?? (dsRaw.toString?.() || '');
+            const fsSizeMatch = dsStr.match(/font-size\s*:\s*([\d.]+)\s*pt/i);
+            if (fsSizeMatch) {
+              colors.dsFontSize = parseFloat(fsSizeMatch[1]);
+            }
+            // font-family — capture until ';' or end of string; trim quotes/spaces.
+            // DS uses CSS syntax so the value may be a comma-separated stack
+            // ("Arial, sans-serif"). We take the first family — that's what
+            // the authoring editor actually used for the box.
+            if (!colors.fontFamily) {
+              const ffMatch = dsStr.match(/font-family\s*:\s*([^;]+)/i);
+              if (ffMatch) {
+                const fam = ffMatch[1].trim().split(',')[0].trim().replace(/^['"]|['"]$/g, '');
+                if (fam) colors.fontFamily = fam;
+              }
+            }
+            // font-weight — bold/600+ → fontBold. Anything else leaves the
+            // existing value (which may have been set from BaseFont parsing).
+            if (!colors.fontBold) {
+              const fwMatch = dsStr.match(/font-weight\s*:\s*([^;]+)/i);
+              if (fwMatch) {
+                const w = fwMatch[1].trim().toLowerCase();
+                if (w === 'bold' || w === 'bolder' || /^[6-9]\d{2}$/.test(w)) {
+                  colors.fontBold = true;
+                }
+              }
+            }
+            // font-style — italic
+            if (!colors.fontItalic) {
+              const fsMatch = dsStr.match(/font-style\s*:\s*([^;]+)/i);
+              if (fsMatch && /italic|oblique/i.test(fsMatch[1])) {
+                colors.fontItalic = true;
+              }
+            }
+            // Binnenmarge van het tekstvak. De app kent één gelijke marge;
+            // bij meerdere CSS-waarden telt de eerste.
+            // Tekstkleur: /DS gaat voor /DA. the external editor zet in /DA de lijnkleur
+            // (rand, aanhaallijn) en de tekstkleur alleen in /DS (en /RC).
+            const dsKleur = dsStr.match(/(?:^|[;\s])color\s*:\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/i);
+            if (dsKleur) {
+              const h = dsKleur[1].length === 4
+                ? '#' + dsKleur[1].slice(1).split('').map((c) => c + c).join('') : dsKleur[1];
+              colors.dsColor = h.toLowerCase();
+            }
+            const marginMatch = dsStr.match(/(?:^|[;\s])margin\s*:\s*(\d+(?:\.\d+)?|\.\d+)\s*pt/i);
+            if (marginMatch) {
+              const marge = parseFloat(marginMatch[1]);
+              if (Number.isFinite(marge)) colors.dsMargin = marge;
+            }
+            if (!colors.rawLineHeight) {
+              const lhMatch = dsStr.match(/line-height\s*:\s*([\d.]+)/i);
+              if (lhMatch) {
+                colors.rawLineHeight = parseFloat(lhMatch[1]);
+              }
+            }
+          } catch (e) { /* ignore DS parsing errors */ }
+        }
+
+        // Extract /OPS_Rotation (our custom key only — ignore standard /Rotation
+        // which other tools use for text orientation, not whole-annotation rotation)
+        const opsRotRaw = annotDict.get(PDFName.of('OPS_Rotation'));
+        if (opsRotRaw) {
+          const rv = pdfNum(context.lookup(opsRotRaw) || opsRotRaw);
+          if (rv !== null) colors.rotation = rv;
+        }
+
+        // Extract /C (Color) entry directly for FreeText — needed for callout stroke detection
+        const cRaw = annotDict.get(PDFName.of('C'));
+        if (cRaw) {
+          colors.cColor = pdfColorToHex(context.lookup(cRaw) || cRaw, context);
+        }
+
+        // Extract /CL (Callout Line) array — pdf.js doesn't expose this
+        const clRaw = annotDict.get(PDFName.of('CL'));
+        if (clRaw) {
+          const cl = context.lookup(clRaw) || clRaw;
+          if (cl && typeof cl.size === 'function') {
+            const clArr = [];
+            for (let ci = 0; ci < cl.size(); ci++) {
+              const v = pdfNum(cl.get(ci));
+              if (v !== null) clArr.push(v);
+            }
+            if (clArr.length >= 4) colors.calloutLine = clArr;
+          }
+        }
+
+        // Extract /RD (Rectangle Differences) — insets from Rect to actual text box
+        const rdRaw = annotDict.get(PDFName.of('RD'));
+        if (rdRaw) {
+          const rd = context.lookup(rdRaw) || rdRaw;
+          if (rd && typeof rd.size === 'function' && rd.size() >= 4) {
+            colors.rectDiff = [pdfNum(rd.get(0)), pdfNum(rd.get(1)), pdfNum(rd.get(2)), pdfNum(rd.get(3))];
+          }
+        }
+
+        const apRaw = annotDict.get(PDFName.of('AP'));
+        if (apRaw) {
+          const ap = context.lookup(apRaw);
+          if (ap) {
+            const nRaw = ap.get(PDFName.of('N'));
+            if (nRaw) {
+              const nStream = context.lookup(nRaw);
+              if (nStream) {
+                const nDict = nStream.dict || nStream;
+
+                // Extract rotation from /Matrix [a, b, c, d, e, f]
+                // The Matrix maps form BBox to annotation Rect (includes page rotation)
+                const matrixRaw = nDict.get(PDFName.of('Matrix'));
+                if (matrixRaw) {
+                  const matrix = context.lookup(matrixRaw) || matrixRaw;
+                  if (matrix && typeof matrix.size === 'function' && matrix.size() >= 4) {
+                    const a = pdfNum(matrix.get(0));
+                    const b = pdfNum(matrix.get(1));
+                    if (a !== null && b !== null) {
+                      colors.matrixAngle = Math.round(Math.atan2(b, a) * 180 / Math.PI * 100) / 100;
+                    }
+                  }
+                }
+
+                // Extract font from AP/N Resources → Font → BaseFont (fallback when /DR is missing)
+                if (!colors.fontFamily) {
+                  try {
+                    const resRaw = nDict.get(PDFName.of('Resources'));
+                    if (resRaw) {
+                      const res = context.lookup(resRaw);
+                      if (res) {
+                        const apFontDictRaw = res.get(PDFName.of('Font'));
+                        if (apFontDictRaw) {
+                          const apFontDict = context.lookup(apFontDictRaw);
+                          if (apFontDict) {
+                            // Get the font reference name from DA string
+                            const daRawForAP = annotDict.get(PDFName.of('DA'));
+                            const daStrForAP = daRawForAP?.toString?.() || '';
+                            const daFontRef = daStrForAP.match(/\/([^\s)]+)\s+[\d.]+\s+Tf/);
+                            const refName = daFontRef ? daFontRef[1] : null;
+
+                            // Try specific font ref first, then iterate all fonts
+                            const fontKeysToTry = refName ? [refName] : [];
+                            if (apFontDict.entries) {
+                              for (const [key] of apFontDict.entries()) {
+                                const k = key.toString().replace(/^\//, '');
+                                if (k !== refName) fontKeysToTry.push(k);
+                              }
+                            }
+
+                            for (const fk of fontKeysToTry) {
+                              const fObjRaw = apFontDict.get(PDFName.of(fk));
+                              if (fObjRaw) {
+                                const fObj = context.lookup(fObjRaw);
+                                if (fObj) {
+                                  const bf = fObj.get(PDFName.of('BaseFont'));
+                                  if (bf) {
+                                    const fontInfo = mapPdfFontName(bf.toString());
+                                    if (fontInfo) {
+                                      colors.fontFamily = fontInfo.family;
+                                      if (fontInfo.bold) colors.fontBold = true;
+                                      if (fontInfo.italic) colors.fontItalic = true;
+                                      break;
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } catch (e) { /* ignore AP font extraction errors */ }
+                }
+
+                // Extract BBox - original unrotated dimensions of the textbox
+                const bboxRaw = nDict.get(PDFName.of('BBox'));
+                if (bboxRaw) {
+                  const bbox = context.lookup(bboxRaw) || bboxRaw;
+                  if (bbox && typeof bbox.size === 'function' && bbox.size() >= 4) {
+                    colors.bboxWidth = Math.abs(pdfNum(bbox.get(2)) - pdfNum(bbox.get(0)));
+                    colors.bboxHeight = Math.abs(pdfNum(bbox.get(3)) - pdfNum(bbox.get(1)));
+                  }
+                }
+
+                // Decode the AP/N content once — used for the stroke-color
+                // fallback below AND for the legacy-appearance detection.
+                const decodeStream = async (stream) => {
+                  let bytes;
+                  if (typeof stream.getContents === 'function') bytes = stream.getContents();
+                  else if (typeof stream.contents === 'function') bytes = stream.contents();
+                  else if (stream.contentsCache?.value) bytes = stream.contentsCache.value;
+                  if (!bytes) return null;
+                  const dict = stream.dict || stream;
+                  const filterRaw = dict.get(PDFName.of('Filter'));
+                  const filterName = filterRaw?.toString();
+                  if (filterName === '/FlateDecode') {
+                    const dec = await inflateBytes(bytes);
+                    return dec ? new TextDecoder().decode(dec) : null;
+                  }
+                  return new TextDecoder().decode(bytes);
+                };
+                const content = await decodeStream(nStream);
+
+                // Inner box rectangle from the AP content stream — the TRUE,
+                // UNROTATED textbox dimensions.
+                //
+                // The appearance stream draws the textbox plane (the coloured
+                // background) with a single `x y w h re` operator, in the local
+                // space *inside* the rotation `cm`. Its w/h are therefore the
+                // unrotated box dims, written literally by the saver.
+                //
+                // The /BBox above is NOT that: it is the axis-aligned bounding
+                // box of the ROTATED result. Reconstructing the box dims from
+                // /Rect + angle (as the converter used to do) is lossy — it is
+                // singular at 45° (cos²−sin² = 0) and swaps W/H at 90°. Reading
+                // the `re` operator instead gives the exact values.
+                //
+                // Robustness: only accept an UNAMBIGUOUS result — exactly one
+                // DISTINCT rectangle with a substantial area. The same
+                // rectangle may legitimately appear more than once: the
+                // appearance paints the box (`re B`/`re f`) and then reuses the
+                // identical rect as a text clip (`re W n`). Genuinely different
+                // rectangles mean we cannot tell which one is the textbox, so
+                // we leave apInnerRect unset and the converter keeps to its
+                // previous reconstruction path.
+                if (content) {
+                  const reOpRe = /(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+re(?![A-Za-z0-9])/g;
+                  const distinct = new Map();
+                  let reMatch;
+                  while ((reMatch = reOpRe.exec(content)) !== null) {
+                    const rx = parseFloat(reMatch[1]);
+                    const ry = parseFloat(reMatch[2]);
+                    const rw = Math.abs(parseFloat(reMatch[3]));
+                    const rh = Math.abs(parseFloat(reMatch[4]));
+                    // Skip degenerate/hairline rects (separators, zero-area ops).
+                    if (rw > 1 && rh > 1) {
+                      const k = `${rx.toFixed(2)},${ry.toFixed(2)},${rw.toFixed(2)},${rh.toFixed(2)}`;
+                      if (!distinct.has(k)) distinct.set(k, { x: rx, y: ry, w: rw, h: rh });
+                    }
+                  }
+                  if (distinct.size === 1) colors.apInnerRect = distinct.values().next().value;
+                }
+
+                // Legacy-appearance detection (self-healing for files saved by
+                // an older version of this app). Those appearances contain our
+                // exact text-state signature but NO rotation in any cm/Tm
+                // operator and a translation-only /Matrix: on a page with
+                // /Rotate the text then renders sideways, and the loader's
+                // matrix heuristic misreads the page rotation as annotation
+                // rotation. Flag them so the converter can treat the
+                // annotation as visually unrotated; the next save rewrites the
+                // appearance with proper page-rotation compensation. Only for
+                // annotations WITHOUT our explicit /OPS_Rotation key.
+                // Does the appearance bake in ANY rotation/skew? b or c ≠ 0 in a
+                // cm/Tm matrix means it rotates/skews (identity, translation and
+                // pure scaling all have b = c = 0). This is what every PDF engine
+                // actually paints, so it is the authority on whether the label
+                // sits rotated on the page.
+                // Een halve slag (a en d allebei negatief, b = c = 0) is ook
+                // een rotatie: de saver schrijft `-1 0 0 -1 0 0 cm` voor een
+                // vak dat 180 graden ten opzichte van de pagina staat. Eén
+                // negatieve as is een spiegeling en telt niet mee.
+                let apHasRotationOp = false;
+                if (content) {
+                  const opRe = /(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(cm|Tm)\b/g;
+                  let opMatch;
+                  while ((opMatch = opRe.exec(content)) !== null) {
+                    if (Math.abs(parseFloat(opMatch[2])) > 0.001 ||
+                        Math.abs(parseFloat(opMatch[3])) > 0.001 ||
+                        (parseFloat(opMatch[1]) < 0 && parseFloat(opMatch[4]) < 0)) {
+                      apHasRotationOp = true;
+                      break;
+                    }
+                  }
+                  colors.apHasRotationOp = apHasRotationOp;
+                }
+
+                if (colors.rotation === undefined && content &&
+                    content.includes('0 Tc 0 Tw 100 Tz 0 Tr') &&
+                    (colors.matrixAngle === undefined || Math.abs(colors.matrixAngle) <= 0.01) &&
+                    !apHasRotationOp) {
+                  colors.apLegacyUnrotated = true;
+                }
+
+                // Extract stroke color from content stream (or referenced XObjects)
+                if (!colors.ic) {
+                  let rgMatch = content ? content.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+RG/) : null;
+
+                  // If not found, follow XObject form references (e.g. /Fm0 Do)
+                  if (!rgMatch && content) {
+                    const xobjMatch = content.match(/\/(\S+)\s+Do/);
+                    if (xobjMatch) {
+                      try {
+                        const resRaw = nDict.get(PDFName.of('Resources'));
+                        const res = resRaw ? context.lookup(resRaw) : null;
+                        const xobjDictRaw = res ? res.get(PDFName.of('XObject')) : null;
+                        const xobjDict = xobjDictRaw ? context.lookup(xobjDictRaw) : null;
+                        const fmRaw = xobjDict ? xobjDict.get(PDFName.of(xobjMatch[1])) : null;
+                        const fmStream = fmRaw ? context.lookup(fmRaw) : null;
+                        if (fmStream) {
+                          const fmContent = await decodeStream(fmStream);
+                          if (fmContent) {
+                            rgMatch = fmContent.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+RG/);
+                          }
+                        }
+                      } catch (e) { /* ignore XObject extraction errors */ }
+                    }
+                  }
+
+                  if (rgMatch) {
+                    const r = parseFloat(rgMatch[1]), g = parseFloat(rgMatch[2]), b = parseFloat(rgMatch[3]);
+                    colors.apStrokeColor = `#${Math.round(r * 255).toString(16).padStart(2, '0')}${Math.round(g * 255).toString(16).padStart(2, '0')}${Math.round(b * 255).toString(16).padStart(2, '0')}`;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // For non-FreeText annotations, extract rotation Matrix and BBox from AP/N stream
+      if (subtypeName !== '/FreeText' && colors.matrixAngle === undefined) {
+        const apRaw2 = annotDict.get(PDFName.of('AP'));
+        if (apRaw2) {
+          const ap2 = context.lookup(apRaw2);
+          if (ap2) {
+            const nRaw2 = ap2.get(PDFName.of('N'));
+            if (nRaw2) {
+              const nStream2 = context.lookup(nRaw2);
+              if (nStream2) {
+                const nDict2 = nStream2.dict || nStream2;
+
+                // Extract rotation from /Matrix [a, b, c, d, e, f]
+                const matrixRaw2 = nDict2.get(PDFName.of('Matrix'));
+                if (matrixRaw2) {
+                  const matrix2 = context.lookup(matrixRaw2) || matrixRaw2;
+                  if (matrix2 && typeof matrix2.size === 'function' && matrix2.size() >= 4) {
+                    const a2 = pdfNum(matrix2.get(0));
+                    const b2 = pdfNum(matrix2.get(1));
+                    if (a2 !== null && b2 !== null) {
+                      colors.matrixAngle = Math.round(Math.atan2(b2, a2) * 180 / Math.PI * 100) / 100;
+                    }
+                  }
+                }
+
+                // Extract BBox - original unrotated dimensions
+                const bboxRaw2 = nDict2.get(PDFName.of('BBox'));
+                if (bboxRaw2) {
+                  const bbox2 = context.lookup(bboxRaw2) || bboxRaw2;
+                  if (bbox2 && typeof bbox2.size === 'function' && bbox2.size() >= 4) {
+                    colors.bboxWidth = Math.abs(pdfNum(bbox2.get(2)) - pdfNum(bbox2.get(0)));
+                    colors.bboxHeight = Math.abs(pdfNum(bbox2.get(3)) - pdfNum(bbox2.get(1)));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Convert absolute line-height (pt) to multiplier using font size
+      if (colors.rawLineHeight) {
+        // Get font size from DA string
+        const daRawForLH = annotDict.get(PDFName.of('DA'));
+        const daStrLH = daRawForLH?.toString?.() || '';
+        const fsSizeMatch = daStrLH.match(/([\d.]+)\s+Tf/);
+        const fsVal = fsSizeMatch ? parseFloat(fsSizeMatch[1]) : (colors.dsFontSize || 12);
+        if (fsVal > 0) {
+          const ratio = Math.round(colors.rawLineHeight / fsVal * 100) / 100;
+          if (ratio >= 0.5 && ratio <= 5) colors.lineSpacing = ratio;
+        }
+        delete colors.rawLineHeight;
+      }
+
+      if (ext) {
+        colors.ext = ext;
+        // the external editor's own /FillOpacity is what the external editor shows; the appearance of a
+        // the external editor rectangle nests its fill alpha in a form the alpha reader
+        // above does not open (it then reads an opaque 1). A real alpha in
+        // the appearance and the app's own key still win.
+        if (ext.fillOpacity !== undefined && !annotDict.get(PDFName.of('OPS_FillOpacity'))
+            && (colors.fillOpacity === undefined || colors.fillOpacity === 1)) {
+          colors.fillOpacity = ext.fillOpacity;
+        }
+      }
+      if (Object.keys(colors).length > 0) colorMap.set(key, colors);
+      // Distinct markups can share a /Rect. When this page carries custom
+      // values, map every annotation by reference, including blank ones, so
+      // one markup never inherits its neighbour's value. Text corrections
+      // already need reference matching for their own metadata.
+      if (hasRefMetadata || ext || TEKSTCORRECTIE_SOORTEN.has(subtypeName)) {
+        const ref = annots.get(i);
+        if (Number.isInteger(ref?.objectNumber)) {
+          colorMap.set(`@ref:${ref.objectNumber}R${ref.generationNumber || ''}`, colors);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to extract annotation colors:', e);
+  }
+  return colorMap;
+}

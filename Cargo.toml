@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+  "open-pdf-studio/src-tauri",
+  "open-pdf-render",
+  "pdfium-worker",
+  "open-pdf-cad",
+  "ocg-render-copy",
+  "open-pdf-geos",
+]
+
+# Upstream tesseract-rs caches its Windows/macOS build-tesseract source
+# build in a single directory not namespaced by target triple, so building
+# two targets back-to-back on the same machine (a macOS universal build's
+# two architectures) makes the second one silently reuse the first one's
+# now-wrong-arch compiled static libs — see
+# https://github.com/philip-tam/tesseract-rs/commit/aa90105 for the fix
+# (namespace the cache dir by $TARGET). Not yet released upstream.
+[patch.crates-io]
+tesseract-rs = { git = "https://github.com/philip-tam/tesseract-rs", rev = "aa90105" }
+
+# De eigen render-engine is in unoptimized debug 10-30x trager (5M-ops
+# CAD-blad: scene-build 40+ s i.p.v. ~2 s) — dev-builds krijgen daarom
+# geoptimaliseerde codegen voor de engine en zijn hete dependencies.
+# De app-crate zelf blijft snel compileren.
+[profile.dev.package.open-pdf-render]
+opt-level = 3
+
+# Alle externe dependencies geoptimaliseerd (eenmalige extra compile, daarna
+# gecachet); workspace-crates behouden snelle debug-compiles.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Rendering hot paths get full optimization in development. These profiles
+# must be declared at the workspace root; Cargo ignores them in member crates.
+[profile.dev.package.tiny-skia]
+opt-level = 3
+
+[profile.dev.package.tiny-skia-path]
+opt-level = 3
+
+[profile.dev.package.lopdf]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.pdfium-render]
+opt-level = 3

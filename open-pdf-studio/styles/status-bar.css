@@ -1,0 +1,228 @@
+/* Oculith workstation status bar (the external editor layout, 30 px: spec §6 deviation) */
+.status-bar {
+  background: var(--theme-status-bg);
+  border-top: 1px solid var(--theme-status-border);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  font-size: 11px;
+  color: var(--theme-status-text);
+  flex-shrink: 0;
+  user-select: none;
+  cursor: default;
+}
+
+.status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+/* Puur informatief (tool-naam, annotatie-teller, statusmelding) — geen
+   hover-achtergrond: die suggereert ten onrechte dat het item klikbaar is. */
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 30px;
+  cursor: default;
+}
+
+/* Command hint: "Ready", the active tool or a passing message. */
+.status-hint {
+  color: var(--theme-status-text-value);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Page size and cursor position: numbers read against each other. */
+.status-readout {
+  font-family: var(--ox-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-status-text-value);
+  white-space: nowrap;
+}
+
+.status-cursor {
+  min-width: 148px;
+  justify-content: flex-end;
+}
+
+/* Paper coordinates (no scale): dimmer, so they do not read as real lengths. */
+.status-cursor--paper {
+  color: var(--theme-status-text-label);
+}
+
+.status-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--theme-status-separator);
+}
+
+.status-item-label {
+  color: var(--theme-status-text-label);
+}
+
+.status-item-value {
+  color: var(--theme-status-text-value);
+  font-weight: 500;
+}
+
+.status-bar button:focus-visible,
+.status-bar input:focus-visible {
+  outline: 2px solid var(--theme-focus, var(--theme-accent));
+  outline-offset: 1px;
+}
+
+/* Weergave draaien (#200): zichtbaar zolang de weergave gedraaid staat; een
+   klik draait hem terug. Windows-flat, zonder afgeronde hoeken. */
+.status-view-rotation {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 0 6px;
+  height: 20px;
+  background: var(--theme-status-active, var(--theme-status-nav-hover));
+  border: none;
+  border-left: 1px solid var(--theme-status-separator);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--theme-status-separator);
+  color: var(--theme-status-nav-text);
+  font-size: 11px;
+  cursor: default;
+}
+
+.status-view-rotation:hover {
+  background: var(--theme-status-hover);
+}
+
+.status-view-rotation svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+}
+
+/* Drawing scale of the current page; a click opens Set Scale. Not set or
+   only detected (not confirmed) uses the accent ink, never the "ok" look. */
+.status-scale {
+  height: 20px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-status-separator);
+  border-radius: 3px;
+  background: var(--theme-status-active, var(--theme-status-nav-hover));
+  color: var(--theme-status-nav-text);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.status-scale:hover {
+  background: var(--theme-status-hover);
+}
+
+.status-scale--unset {
+  border-color: var(--theme-status-accent-ink, var(--theme-status-separator));
+  color: var(--theme-status-accent-ink, var(--theme-status-nav-text));
+}
+
+.status-engine {
+  height: 20px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-status-separator);
+  border-radius: 3px;
+  background: var(--theme-status-active, var(--theme-status-nav-hover));
+  color: var(--theme-status-nav-text);
+  font-size: 11px;
+}
+
+.status-engine--scene {
+  border-color: var(--theme-status-ok-ink, var(--theme-status-separator));
+  background: var(--theme-status-ok-soft, var(--theme-status-nav-hover));
+  color: var(--theme-status-ok-ink, var(--theme-status-nav-text));
+}
+
+.status-engine--vector {
+  border-color: var(--theme-status-info-ink, var(--theme-status-separator));
+  background: var(--theme-status-info-soft, var(--theme-status-nav-hover));
+  color: var(--theme-status-info-ink, var(--theme-status-nav-text));
+}
+
+/* Drawing-aid toggles (Show Grid, Snap to Grid/Content/Markup, Ortho, Reuse,
+   Sync): 20 px icon buttons; pressed = accent fill, as in the external editor. */
+.status-snap-toggles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.status-snap-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 1px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-status-nav-text);
+  cursor: default;
+}
+
+.status-snap-toggle svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+.status-snap-toggle:hover:not(:disabled) {
+  background: var(--theme-status-nav-hover);
+}
+
+.status-snap-toggle.active {
+  border-color: var(--ox-accent-line, var(--theme-status-separator));
+  background: var(--ox-accent-soft, var(--theme-status-active));
+  color: var(--theme-status-accent-ink, var(--theme-accent));
+}
+
+.status-snap-toggle:disabled {
+  opacity: 0.4;
+}
+
+.status-sync-mode .status-caret svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Sync ▾ sits flush against the Sync toggle. */
+.status-snap-toggle.status-sync-mode {
+  width: 14px;
+  min-width: 14px;
+  margin-left: -2px;
+  padding: 0;
+}
+
+/* Live value of the measurement being placed. */
+.status-measure-readout {
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-status-text-value);
+  white-space: nowrap;
+}

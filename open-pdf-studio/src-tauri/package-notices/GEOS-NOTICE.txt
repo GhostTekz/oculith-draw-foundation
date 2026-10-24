@@ -1,0 +1,22 @@
+GEOS — Geometry Engine Open Source
+Version 3.14.1
+https://libgeos.org
+
+Copyright (C) 2005 Refractions Research Inc.
+Copyright (C) OSGeo and the GEOS contributors
+
+GEOS is free software. A desktop build of Oculith Draw that includes
+the geos feature uses it through the shared libraries libgeos_c.so.1
+and libgeos.so.3.14.1. Those libraries are separate files. You can
+replace them with interface-compatible libraries built from the source
+of this same version.
+
+License: LGPL-2.1-only (GNU Lesser General Public License, version 2.1 only).
+The license text is the accompanying file LGPL-2.1.txt.
+
+Source for this version:
+https://github.com/libgeos/geos/releases/tag/3.14.1
+
+Oculith Draw, the work that uses the library, is licensed under
+LGPL-3.0-or-later. Its source is at
+https://github.com/GhostTekz/oculith-foundation

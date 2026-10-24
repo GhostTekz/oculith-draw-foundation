@@ -1,0 +1,1742 @@
+import { state, imageCache } from '../../core/state.js';
+import { createAnnotation } from '../../annotations/factory.js';
+import { generateImageId } from '../../utils/helpers.js';
+import { colorArrayToHex } from '../../utils/colors.js';
+import { mapPdfFontName, mapBorderStyle } from './pdf-helpers.js';
+import { calculateDistance, calculateArea, calculatePerimeter, formatMeasurement } from '../../annotations/measurement.js';
+import { findImageForAnnotation, findImageEntryForAnnotation } from './annotation-image-sources.mjs';
+import { ifcCategoryForAnnotationType, ifcCategoryForParametric } from '../../solid/data/ifcCategoryMap.js';
+import { nenIfcForStamp } from '../../solid/data/nenIfcMap.js';
+import { cleanStampDesign, stampDesignText } from '../../annotations/stamp-templates.js';
+import { STAVENREEKS_DEFAULTS } from '../../annotations/stavenreeks.js';
+import { knipselUitExtra } from './vector-snippet-load.js';
+import { hatchUitExtra } from '../saver/hatch-meta.js';
+import { wandJoinUitExtra } from '../saver/wand-join-meta.js';
+import { wolkVakUitHoeken, wolkVakUitZeshoek } from '../saver/veelhoek-grondvorm.js';
+import { vlakOmhullende } from '../../annotations/vlak-ringen.js';
+import { heeft as heeftKnipselBron } from '../../annotations/vector-snippet-store.js';
+import { syncTwoPointGeometry } from '../../symbols/two-point.js';
+import { systeemFromOps, sparingenFromJson } from '../../annotations/systeemraster.js';
+import { systeemTypeFromJson } from '../../annotations/systeem-typen.js';
+import { ensureSysteemType, getSysteemTypeById } from '../../annotations/systeem-typen-registry.js';
+import { computeTextboxContentHeight } from '../../annotations/rendering/shapes.js';
+import { pasRegelafstandAanDoos } from '../../annotations/rendering/textbox-layout.js';
+import { maatVanGedraaideVorm } from './gedraaide-vorm-maat.js';
+import { vormInzet, pasVormInzetToe } from './vorm-inzet.js';
+import { tekstvakRotatie, tekstvakMaat } from './tekstvak-rotatie.js';
+import { onzichtbaarVlakUitExtra, randloosUitExtra } from './geen-rand.js';
+import { opmerkingUitAnnot, zonderDubbeleOpmerking, metOnderwerpUitSubj } from './annotatie-opmerking.js';
+import { extOnderwerp } from '../saver/ext-natief.js';
+import { zetLaagUitBestand } from './annotatie-laag.js';
+import { extraVoorAnnotatie } from './extra-sleutel.js';
+import { plattegrondUitExtra } from './plattegrond-meta.js';
+import { metMeetExtra } from './meet-extra.js';
+import { metCapture, fileAttachmentProps } from './capture-load.js';
+import { viewportRectangle } from '../pdfjs-record.js';
+import {
+  maatlijnUitBestand, lijnBreedteUitBestand, pijlKopVullingUitBestand, meetlijnKoppenUitBestand,
+} from './maatlijn-uit-bestand.js';
+import { eigenTekststempel, tekststempelKleur } from './stempel-tekst.js';
+import { koppenUitBestand } from '../lijnkoppen.js';
+import { kiesTekstvakTekst, runsZonderInspringing } from './tekstvak-tekst.js';
+import { inzetUitDsMarge, tolerantieVoorDsInzet } from '../../annotations/rendering/textbox-layout.js';
+import { caretPropsFromPdf, textEditPropsFromPdf } from './correction-load.js';
+import { normalizeHyperlinkUrl } from '../saver/hyperlink-dict.js';
+import { metLijnstijlUitBestand } from '../saver/line-style-meta.js';
+import { isSafeRelativePdfPath } from '../remote-link.js';
+import { metExt } from './ext-load.js';
+
+// Colour, outline and Batch Link marker of an app-made hyperlink. A link
+// with a border (Batch Link's outline) keeps its width and /C colour; one
+// without keeps the app's light dashed frame.
+// Vak van een /Square of /Circle in weergaveruimte, ingezet met /RD en de
+// halve lijndikte (loader/vorm-inzet.js). Schaal = weergave per PDF-eenheid.
+function metVormInzet(vak, extraColors, annot, weergaveRect, pdfRect, gedraaid, wolk) {
+  const inzet = vormInzet({
+    rd: extraColors.shapeRd,
+    lijndikte: extraColors.borderWidth ?? annot.borderStyle?.width,
+    wolk,
+  });
+  if (!inzet) return vak;
+  const pdfW = Math.abs(pdfRect[2] - pdfRect[0]);
+  const pdfH = Math.abs(pdfRect[3] - pdfRect[1]);
+  // Op een blad met /Rotate 90/270 staat de weergave-breedte langs de PDF-hoogte.
+  const schaal = pdfW > 0 && Math.abs(weergaveRect.width / pdfW - weergaveRect.height / pdfH) < 1e-6
+    ? weergaveRect.width / pdfW
+    : (pdfH > 0 ? weergaveRect.width / pdfH : 0);
+  // Bij een gedraaid blad liggen /RD-zijden niet langs x/y: gemiddelde inzet.
+  const bladGedraaid = !(pdfW > 0 && Math.abs(weergaveRect.width / pdfW - weergaveRect.height / pdfH) < 1e-6);
+  return pasVormInzetToe(vak, inzet, schaal, gedraaid || bladGedraaid);
+}
+
+export function hyperlinkLookFromPdf(annot, extraColors = {}) {
+  const width = Number(annot?.borderStyle?.width) || 0;
+  const c = annot?.color;
+  const color = width > 0 && c && c.length >= 3 ? colorArrayToHex(c, '#2563eb') : '#2563eb';
+  return {
+    color,
+    strokeColor: color,
+    lineWidth: width > 0 ? width : 1,
+    linkBorder: width > 0 ? width : 0,
+    ...(extraColors.opsBatchLink ? { batchLink: true } : {}),
+  };
+}
+
+/**
+ * Zet een PDF-annotatie om naar het model van de app.
+ *
+ * De opmerkingstekst (/Contents) komt in `subject`, behalve bij soorten die
+ * hem in een eigen veld lezen (tekst van een notitie of tekstvak, meettekst,
+ * label van een kader). Zie annotatie-opmerking.js.
+ */
+export async function convertPdfAnnotation(annot, pageNum, viewport, stampImageMap, annotColorMap) {
+  const omgezet = zonderDubbeleOpmerking(
+    await converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, annotColorMap));
+  // De laag komt uit het bestand (/OC, zie color-extraction.js), nooit uit de
+  // huidige laag die createAnnotation voor nieuwe markeringen invult (#468).
+  // Meet-extra's (diepte, helling, soort, bijschrift) uit /OPS_MeasureExtra.
+  // Capture photos uit /OPS_Capture (capture-load.js).
+  const model = metCapture(metMeetExtra(zetLaagUitBestand(omgezet, extraVoorAnnotatie(annotColorMap, annot)?.layer),
+    extraVoorAnnotatie(annotColorMap, annot)?.measureExtra), extraVoorAnnotatie(annotColorMap, annot)?.capturePhotos);
+  // Het onderwerp van een meting, notitie of tekstvak staat in /Subj (zie annotatie-opmerking.js).
+  // the external editor's default Subject that OcuDraw wrote on its own markup (saver/
+  // ext-natief.js) is no subject the user gave: the model stays as it was.
+  const subj = extraVoorAnnotatie(annotColorMap, annot)?.subj;
+  const eigenStandaard = model && !extraVoorAnnotatie(annotColorMap, annot)?.ext && subj === extOnderwerp(model);
+  if (!eigenStandaard) metOnderwerpUitSubj(model, subj);
+  // Custom Caption template of this markup (/OPS_CaptionTemplateV1).
+  const captionTemplate = extraVoorAnnotatie(annotColorMap, annot)?.captionTemplate;
+  if (model && captionTemplate) model.captionTemplate = captionTemplate;
+  // Group keys for linkMarkupGroups (convert-page.js), which removes them.
+  const markupGroup = extraVoorAnnotatie(annotColorMap, annot)?.markupGroup;
+  if (model && markupGroup) model._groupKeys = markupGroup;
+  // Eigen lijnstijl en meegenomen .PAT-patroon (line-style-meta.js).
+  // externe markeringen: herkomst, bronsleutels en bestandsschaal (ext-load.js).
+  return metExt(metLijnstijlUitBestand(model, extraVoorAnnotatie(annotColorMap, annot)),
+    extraVoorAnnotatie(annotColorMap, annot)?.ext, annot, viewport);
+}
+
+// Convert PDF annotation to our format
+async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, annotColorMap) {
+  // Helpers to convert PDF coordinates to viewport coordinates (handles CropBox/MediaBox offsets)
+  const convertPoint = (pdfX, pdfY) => viewport.convertToViewportPoint(pdfX, pdfY);
+  const convertRect = (pdfRect) => {
+    const vr = viewportRectangle(viewport, pdfRect);
+    return {
+      x: Math.min(vr[0], vr[2]),
+      y: Math.min(vr[1], vr[3]),
+      width: Math.abs(vr[2] - vr[0]),
+      height: Math.abs(vr[3] - vr[1])
+    };
+  };
+
+  // Helper to parse PDF dates (format: D:YYYYMMDDHHmmSS or similar)
+  const parsePdfDate = (pdfDate) => {
+    if (!pdfDate) return new Date().toISOString();
+    try {
+      // Handle PDF date format D:YYYYMMDDHHmmSS
+      if (typeof pdfDate === 'string' && pdfDate.startsWith('D:')) {
+        const dateStr = pdfDate.substring(2);
+        const year = dateStr.substring(0, 4);
+        const month = dateStr.substring(4, 6) || '01';
+        const day = dateStr.substring(6, 8) || '01';
+        const hour = dateStr.substring(8, 10) || '00';
+        const min = dateStr.substring(10, 12) || '00';
+        const sec = dateStr.substring(12, 14) || '00';
+        // Time zone (the external editor: D:20260820100057-04'00'); none = UTC, as before.
+        const tz = /^([+-])(\d{2})'?(\d{2})?/.exec(dateStr.substring(14));
+        const zone = tz ? `${tz[1]}${tz[2]}:${tz[3] || '00'}` : 'Z';
+        return new Date(`${year}-${month}-${day}T${hour}:${min}:${sec}${zone}`).toISOString();
+      }
+      // Try direct parsing
+      const date = new Date(pdfDate);
+      if (isNaN(date.getTime())) return new Date().toISOString();
+      return date.toISOString();
+    } catch {
+      return new Date().toISOString();
+    }
+  };
+
+  // Get common properties
+  const rect = annot.rect;
+  if (!rect || rect.length < 4) return null;
+
+  // Look up extra colors extracted via pdf-lib (IC entry, appearance stream
+  // colors). Zie extra-sleutel.js voor het zoeken op de rauwe /Rect.
+  let extraColors = extraVoorAnnotatie(annotColorMap, annot) || {};
+  if (extraColors.pluginAnnotation) {
+    return createAnnotation({ ...extraColors.pluginAnnotation, page: pageNum,
+      ...(extraColors.markupTextValue ? { markupTextValue: extraColors.markupTextValue } : {}),
+      ...(extraColors.markupTextValue2 ? { markupTextValue2: extraColors.markupTextValue2 } : {}),
+      ...(extraColors.markupChoiceValue ? { markupChoiceValue: extraColors.markupChoiceValue } : {}),
+      ...(extraColors.markupChoiceValue2 ? { markupChoiceValue2: extraColors.markupChoiceValue2 } : {}),
+      ...(extraColors.markupNumberValue !== undefined ? { markupNumberValue: extraColors.markupNumberValue } : {}),
+      ...(extraColors.markupNumberValue2 !== undefined ? { markupNumberValue2: extraColors.markupNumberValue2 } : {}),
+      ...(extraColors.markupCheckmarkValue ? { markupCheckmarkValue: extraColors.markupCheckmarkValue } : {}),
+      ...(extraColors.carriedFrom ? { carriedFrom: { ...extraColors.carriedFrom } } : {}),
+      ...(extraColors.assemblyId ? { assemblyId: extraColors.assemblyId } : {}) });
+  }
+
+  // Echte maat van een gedraaide vorm waarvan /Rect de assen-uitgelijnde
+  // omhullende is (rechthoek, ellips, maskeervlak, parametrisch symbool).
+  // Kandidaten: de eigen /OPS_Maat en de /BBox van de appearance, die de vorm
+  // ongedraaid tekent. Zie gedraaide-vorm-maat.js.
+  const echteVormMaat = (omhullende) => maatVanGedraaideVorm({
+    rotatie: extraColors.rotation,
+    omhullende,
+    kandidaten: [
+      extraColors.opsMaat || null,
+      (extraColors.bboxWidth && extraColors.bboxHeight)
+        ? { width: extraColors.bboxWidth, height: extraColors.bboxHeight } : null,
+    ],
+    paginaRotatie: viewport.rotation || 0,
+  });
+
+  const baseProps = {
+    page: pageNum,
+    ...(extraColors.markupTextValue ? { markupTextValue: extraColors.markupTextValue } : {}),
+    ...(extraColors.markupTextValue2 ? { markupTextValue2: extraColors.markupTextValue2 } : {}),
+    ...(extraColors.markupChoiceValue ? { markupChoiceValue: extraColors.markupChoiceValue } : {}),
+    ...(extraColors.markupChoiceValue2 ? { markupChoiceValue2: extraColors.markupChoiceValue2 } : {}),
+    ...(extraColors.markupNumberValue !== undefined ? { markupNumberValue: extraColors.markupNumberValue } : {}),
+    ...(extraColors.markupNumberValue2 !== undefined ? { markupNumberValue2: extraColors.markupNumberValue2 } : {}),
+    ...(extraColors.markupCheckmarkValue ? { markupCheckmarkValue: extraColors.markupCheckmarkValue } : {}),
+    ...(extraColors.carriedFrom ? { carriedFrom: { ...extraColors.carriedFrom } } : {}),
+    ...(extraColors.assemblyId ? { assemblyId: extraColors.assemblyId } : {}),
+    // /NM: the saver writes it back, so the markup keeps its name in the external editor.
+    ...(extraColors.nm ? { nm: extraColors.nm } : {}),
+    author: (annot.titleObj && annot.titleObj.str) || annot.title || 'User',
+    // pdf.js kent geen /Subject: de opmerking van een annotatie staat in
+    // /Contents. Soorten met een eigen tekstveld raken hem hierna weer kwijt.
+    subject: opmerkingUitAnnot(annot),
+    createdAt: parsePdfDate(annot.creationDate),
+    modifiedAt: parsePdfDate(annot.modificationDate),
+    opacity: annot.opacity !== undefined ? annot.opacity : (extraColors.opacity !== undefined ? extraColors.opacity : 1.0),
+    // Aparte vul-doorzichtigheid (/ca uit de appearance-graphics-state). Alleen
+    // gezet als de PDF hem echt apart opgeeft; anders volgt de vulling gewoon
+    // `opacity`. Zie extractApAlphas() in color-extraction.js.
+    ...(extraColors.fillOpacity !== undefined ? { fillOpacity: extraColors.fillOpacity } : {}),
+    locked: !!(annot.annotationFlags & 128),      // Bit 8: Locked
+    printable: !!(annot.annotationFlags & 4),       // Bit 3: Print
+    readOnly: !!(annot.annotationFlags & 64),       // Bit 7: ReadOnly
+    // Bit 2: Hidden. Only set when on, so a markup that was never hidden
+    // keeps the model (and the external editor fingerprint) it had (docs/MARKUP-LAYERS.md).
+    ...(annot.annotationFlags & 2 ? { hidden: true } : {}),
+    marked: false
+  };
+
+  switch (annot.subtype) {
+    case 'Highlight':
+    case 'Underline':
+    case 'StrikeOut':
+    case 'Squiggly': {
+      // Map PDF subtype to our type
+      const typeMap = {
+        'Highlight': 'textHighlight',
+        'Underline': 'textUnderline',
+        'StrikeOut': 'textStrikethrough',
+        'Squiggly': 'textSquiggly'
+      };
+      const markupType = typeMap[annot.subtype] || 'highlight';
+
+      // Extract rects from quadPoints for per-line markup
+      const rects = [];
+      if (annot.quadPoints && annot.quadPoints.length >= 8) {
+        for (let i = 0; i < annot.quadPoints.length; i += 8) {
+          const xs = [annot.quadPoints[i], annot.quadPoints[i+2], annot.quadPoints[i+4], annot.quadPoints[i+6]];
+          const ys = [annot.quadPoints[i+1], annot.quadPoints[i+3], annot.quadPoints[i+5], annot.quadPoints[i+7]];
+          const qMinX = Math.min(...xs);
+          const qMaxX = Math.max(...xs);
+          const qMinY = Math.min(...ys);
+          const qMaxY = Math.max(...ys);
+          rects.push(convertRect([qMinX, qMinY, qMaxX, qMaxY]));
+        }
+      }
+
+      // Calculate overall bounding box
+      let minX, maxX, minY, maxY;
+      if (rects.length > 0) {
+        minX = Math.min(...rects.map(r => r.x));
+        maxX = Math.max(...rects.map(r => r.x + r.width));
+        minY = Math.min(...rects.map(r => r.y));
+        maxY = Math.max(...rects.map(r => r.y + r.height));
+      } else {
+        const fallback = convertRect(rect);
+        minX = fallback.x;
+        maxX = fallback.x + fallback.width;
+        minY = fallback.y;
+        maxY = fallback.y + fallback.height;
+      }
+
+      return createAnnotation({
+        ...baseProps,
+        type: markupType,
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        rects: rects.length > 0 ? rects : undefined,
+        color: colorArrayToHex(annot.color, '#FFFF00'),
+        fillColor: colorArrayToHex(annot.color, '#FFFF00'),
+        // Proefleescorrecties (#508): /IT, /NM, /Subj, gemarkeerde tekst en
+        // leesrichting, alleen als het bestand ze heeft.
+        ...textEditPropsFromPdf(annot, extraColors, convertPoint, viewport.rotation || 0)
+      });
+    }
+
+    case 'Caret':
+      // Invoegteken (#508): vak = /Rect min /RD, tekst uit de eigen /Contents.
+      // Hoort bij '/Caret' in handledSubtypes van saver.js.
+      return createAnnotation({
+        ...baseProps,
+        ...caretPropsFromPdf(annot, extraColors, convertRect, viewport.rotation || 0),
+      });
+
+    // Only the hyperlinks this app made come back as markups; every other
+    // /Link stays a plain PDF link (link-layer.js).
+    case 'Link': {
+      if (extraColors.opsSubtype !== 'hyperlink') return null;
+      const linkRect = convertRect(rect);
+      // A link to another PDF (Set Batch Link, /GoToR) keeps its relative
+      // file and page; PDF.js reports its target as an unsafe URL.
+      const linkFile = isSafeRelativePdfPath(extraColors.opsLinkFile) ? extraColors.opsLinkFile : '';
+      const linkUrl = linkFile ? '' : (annot.url || annot.unsafeUrl || '');
+      return createAnnotation({
+        ...baseProps,
+        type: 'hyperlink',
+        ...linkRect,
+        linkUrl: linkUrl && normalizeHyperlinkUrl(linkUrl) ? linkUrl : '',
+        linkPage: linkUrl ? null : (extraColors.opsLinkPage ?? null),
+        ...(linkFile ? { linkFile } : {}),
+        ...hyperlinkLookFromPdf(annot, extraColors),
+        opacity: 1,
+      });
+    }
+
+    case 'Square': {
+      if (extraColors.opsSubtype === 'count') {
+        const marker = convertRect(rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'count',
+          x: marker.x + marker.width / 2,
+          y: marker.y + marker.height / 2,
+          categoryId: extraColors.opsCountCategory || null,
+          number: extraColors.opsCountNumber ?? 0,
+          markerStyle: extraColors.opsMarkerStyle || 'dot',
+          symbolId: extraColors.opsSymbolId || undefined,
+          ...(Number.isFinite(extraColors.opsSymbolSize) ? { symbolSize: extraColors.opsSymbolSize } : {}),
+          color: colorArrayToHex(annot.color, '#e11d48'),
+          strokeColor: colorArrayToHex(annot.color, '#e11d48'),
+          ...(extraColors.opsCountShowNumber === false ? { showNumber: false } : {}),
+        });
+      }
+      const squareImgEntry = findImageEntryForAnnotation(stampImageMap, annot, 'square-image');
+      const squareImageData = squareImgEntry?.dataUrl ?? null;
+      if (squareImageData) {
+        const imageRect = convertRect(rect);
+        const imageId = generateImageId();
+        const img = new Image();
+        img.src = squareImageData;
+        imageCache.set(imageId, img);
+        return createAnnotation({
+          ...baseProps,
+          type: 'image',
+          // In welke ruimte de pixels staan ('pdf' of 'visual') — bepaalt of
+          // de saver pagina-/Rotate-compensatie in de appearance schrijft.
+          apImageSpace: squareImgEntry.space,
+          x: imageRect.x,
+          y: imageRect.y,
+          width: imageRect.width,
+          height: imageRect.height,
+          imageId,
+          imageData: squareImageData,
+          originalWidth: imageRect.width,
+          originalHeight: imageRect.height,
+          lockAspectRatio: true,
+        });
+      }
+
+      // Parametric symbol: stored as Square + private OPS metadata
+      if (extraColors.opsSubtype === 'parametricSymbol') {
+        // Gedraaid: /Rect is de omhullende. Met twee punten herstelt
+        // syncTwoPointGeometry hieronder de maat alsnog uit OPS_TwoPoint.
+        const psRect = extraColors.rotation ? echteVormMaat(convertRect(annot.rect)) : convertRect(annot.rect);
+        const symbolId = extraColors.opsSymbolId || '';
+        let params = {};
+        try { if (extraColors.opsParams) params = JSON.parse(extraColors.opsParams); } catch (_) {}
+        const symbol = createAnnotation({
+          ...baseProps,
+          type: 'parametricSymbol',
+          x: psRect.x,
+          y: psRect.y,
+          width: psRect.width,
+          height: psRect.height,
+          symbolId,
+          params,
+          ifcCategory: extraColors.opsIfcCategory || ifcCategoryForParametric(symbolId),
+          color: colorArrayToHex(annot.color, '#000000'),
+          strokeColor: colorArrayToHex(annot.color, '#000000'),
+          lineWidth: annot.borderStyle?.width || 1,
+          rotation: extraColors.rotation || 0,
+        });
+        if (extraColors.opsTwoPoint?.length === 4) {
+          const [startX, startY] = convertPoint(
+            extraColors.opsTwoPoint[0], extraColors.opsTwoPoint[1],
+          );
+          const [endX, endY] = convertPoint(
+            extraColors.opsTwoPoint[2], extraColors.opsTwoPoint[3],
+          );
+          syncTwoPointGeometry(
+            symbol, startX, startY, endX, endY,
+            extraColors.opsTwoPointBand || psRect.height,
+          );
+        }
+        return symbol;
+      }
+      // Maskeer (wipeout): Square + OPS_Subtype 'mask' — restore as the
+      // dedicated type so the fixed white-cover rendering applies again.
+      if (extraColors.opsSubtype === 'mask') {
+        const mkRect = extraColors.rotation ? echteVormMaat(convertRect(annot.rect)) : convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'mask',
+          x: mkRect.x,
+          y: mkRect.y,
+          width: mkRect.width,
+          height: mkRect.height,
+          rotation: extraColors.rotation || 0,
+          color: colorArrayToHex(annot.color, '#9a9a9a'),
+          strokeColor: colorArrayToHex(annot.color, '#9a9a9a'),
+          fillColor: '#ffffff',
+          lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 0.75,
+          borderStyle: 'dash-dot',
+          opacity: 1,
+        });
+      }
+      // Redaction mark: Square + OPS_Subtype 'redaction' — restore the pending
+      // mark (rendered as a red hatched overlay; overlayColor is the black-out
+      // colour used when the redaction is applied).
+      if (extraColors.opsSubtype === 'redaction') {
+        const rdRect = convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'redaction',
+          x: rdRect.x,
+          y: rdRect.y,
+          width: rdRect.width,
+          height: rdRect.height,
+          overlayColor: extraColors.ic || '#000000',
+        });
+      }
+      // Check for scheduleTable custom type
+      if (extraColors.opsSubtype === 'scheduleTable') {
+        const stRect = convertRect(annot.rect);
+        const stComment = String((annot.contentsObj && annot.contentsObj.str) || annot.contents || '');
+        let scheduleData = [];
+        try {
+          if (extraColors.opsScheduleData) scheduleData = JSON.parse(extraColors.opsScheduleData);
+        } catch (e) { /* ignore parse errors */ }
+        // Generic table content (placed schedule, measurement legend).
+        let table = {};
+        try {
+          const td = extraColors.opsTableData ? JSON.parse(extraColors.opsTableData) : null;
+          if (td && Array.isArray(td.columns) && Array.isArray(td.rows)) {
+            table = { title: String(td.title ?? ''), columns: td.columns.map(String),
+              rows: td.rows.filter(r => r && Array.isArray(r.cells)).map(r => ({ ...r, cells: r.cells.map(c => String(c ?? '')) })),
+              ...(td.brand === 'oculith' ? { brand: 'oculith' } : {}),
+              ...(td.source && typeof td.source === 'object' && !Array.isArray(td.source) ? { tableSource: td.source } : {}) };
+          }
+        } catch (e) { /* ignore parse errors */ }
+        return createAnnotation({
+          ...baseProps,
+          type: 'scheduleTable',
+          x: stRect.x,
+          y: stRect.y,
+          width: stRect.width,
+          height: stRect.height,
+          scheduleData,
+          ...table,
+          // A comment written on the table (the default text is no comment).
+          ...(stComment && stComment !== 'Schedule Table' ? { text: stComment } : {}),
+          groupByMode: extraColors.opsGroupBy || 'type',
+          color: '#000000',
+          lineWidth: 0.5,
+          opacity: 1,
+        });
+      }
+      // Check for scaleRegion custom type
+      if (extraColors.opsSubtype === 'scaleRegion') {
+        const srRect = convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'scaleRegion',
+          x: srRect.x,
+          y: srRect.y,
+          width: srRect.width,
+          height: srRect.height,
+          scaleString: extraColors.opsScaleString || '',
+          units: extraColors.opsUnits || '',
+          // Toegewezen tekeningtype (regelset-id); undefined = standaard.
+          tekeningtypeId: extraColors.opsTekeningtype || undefined,
+          label: extraColors.opsLabel || annot.contentsObj?.str || '',
+          color: colorArrayToHex(annot.color, '#ff9800'),
+          lineWidth: extraColors.opsLineWidth || 1.5,
+          opacity: annot.opacity ?? 1,
+          borderStyle: 'dashed',
+        });
+      }
+      // Check for viewport or scaleBar custom types
+      if (extraColors.opsSubtype === 'viewport') {
+        const vpRect = convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'viewport',
+          x: vpRect.x,
+          y: vpRect.y,
+          width: vpRect.width,
+          height: vpRect.height,
+          name: annot.contentsObj?.str || 'Viewport',
+          color: colorArrayToHex(annot.color, '#0066cc'),
+          lineWidth: extraColors.opsLineWidth || 1.5,
+          opacity: annot.opacity ?? 0.6,
+          pixelsPerUnit: extraColors.opsPixelsPerUnit ?? null,
+          unit: extraColors.opsUnit ?? '',
+          scaleRatio: extraColors.opsScaleRatio ?? '',
+        });
+      }
+      if (extraColors.opsSubtype === 'scaleBar') {
+        const sbRect = convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'scaleBar',
+          x: sbRect.x,
+          y: sbRect.y,
+          width: sbRect.width,
+          height: sbRect.height,
+          color: colorArrayToHex(annot.color, '#000000'),
+          lineWidth: extraColors.opsLineWidth || 1,
+          opacity: annot.opacity ?? 1,
+          pixelsPerUnit: extraColors.opsPixelsPerUnit ?? null,
+          unit: extraColors.opsUnit ?? '',
+          divisions: extraColors.opsDivisions || 5,
+          totalUnits: extraColors.opsTotalUnits ?? null,
+          rotation: extraColors.rotation || 0,
+        });
+      }
+
+      const sqRect = convertRect(annot.rect);
+      let sqX = sqRect.x, sqY = sqRect.y, sqW = sqRect.width, sqH = sqRect.height;
+      let sqRotation = 0;
+      if (extraColors.rotation !== undefined && extraColors.rotation !== 0) {
+        sqRotation = Math.round(extraColors.rotation);
+        // /Rect is de omhullende van de gedraaide rechthoek, niet zijn maat.
+        ({ x: sqX, y: sqY, width: sqW, height: sqH } = echteVormMaat(sqRect));
+      } else if (extraColors.matrixAngle !== undefined && Math.abs(extraColors.matrixAngle) > 1) {
+        sqRotation = -Math.round(extraColors.matrixAngle);
+        // Rect is the expanded axis-aligned bounding box; recover original size from BBox
+        if (extraColors.bboxWidth && extraColors.bboxHeight) {
+          const pdfRectW = Math.abs(rect[2] - rect[0]);
+          const vScale = pdfRectW > 0 ? sqRect.width / pdfRectW : 1;
+          sqW = extraColors.bboxWidth * vScale;
+          sqH = extraColors.bboxHeight * vScale;
+          const cx = sqRect.x + sqRect.width / 2;
+          const cy = sqRect.y + sqRect.height / 2;
+          sqX = cx - sqW / 2;
+          sqY = cy - sqH / 2;
+        }
+      }
+      // /RD: de vorm ligt binnen /Rect, zoals de appearance hem tekent.
+      ({ x: sqX, y: sqY, width: sqW, height: sqH } = metVormInzet(
+        { x: sqX, y: sqY, width: sqW, height: sqH }, extraColors, annot, sqRect, rect,
+        !!sqRotation, !!extraColors.borderCloudy));
+      const sqProps = {
+        ...baseProps,
+        // Square met /BE-wolkrand = ons bestaande 'cloud'-type (rechthoekwolk).
+        type: extraColors.borderCloudy ? 'cloud' : 'box',
+        x: sqX,
+        y: sqY,
+        width: sqW,
+        height: sqH,
+        color: colorArrayToHex(annot.color, '#000000'),
+        strokeColor: colorArrayToHex(annot.color, '#000000'),
+        fillColor: extraColors.ic || null,
+        lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+        borderStyle: mapBorderStyle(annot, extraColors)
+      };
+      if (sqProps.type === 'box' && extraColors.durableMarkupId) sqProps.id = extraColors.durableMarkupId;
+      if (sqRotation) sqProps.rotation = sqRotation;
+      if (extraColors.cross && sqProps.type === 'box') sqProps.cross = true;
+      // Vorm zonder rand (#431): strokeColor 'none' met de lijndikte-instelling.
+      Object.assign(sqProps, randloosUitExtra(extraColors));
+      // Onzichtbaar vlak (#435): hulplijn op het scherm, geen streek bij opslaan.
+      if (onzichtbaarVlakUitExtra(extraColors)) sqProps.onzichtbaarVlak = true;
+      return createAnnotation(sqProps);
+    }
+
+    case 'Circle': {
+      const crRect = convertRect(annot.rect);
+      let crX = crRect.x, crY = crRect.y, crW = crRect.width, crH = crRect.height;
+      let crRotation = 0;
+      if (extraColors.rotation !== undefined && extraColors.rotation !== 0) {
+        crRotation = Math.round(extraColors.rotation);
+        // /Rect is de omhullende van de gedraaide ellips, niet zijn maat.
+        ({ x: crX, y: crY, width: crW, height: crH } = echteVormMaat(crRect));
+      } else if (extraColors.matrixAngle !== undefined && Math.abs(extraColors.matrixAngle) > 1) {
+        crRotation = -Math.round(extraColors.matrixAngle);
+        if (extraColors.bboxWidth && extraColors.bboxHeight) {
+          const pdfRectW = Math.abs(rect[2] - rect[0]);
+          const vScale = pdfRectW > 0 ? crRect.width / pdfRectW : 1;
+          crW = extraColors.bboxWidth * vScale;
+          crH = extraColors.bboxHeight * vScale;
+          const cx = crRect.x + crRect.width / 2;
+          const cy = crRect.y + crRect.height / 2;
+          crX = cx - crW / 2;
+          crY = cy - crH / 2;
+        }
+      }
+      ({ x: crX, y: crY, width: crW, height: crH } = metVormInzet(
+        { x: crX, y: crY, width: crW, height: crH }, extraColors, annot, crRect, rect,
+        !!crRotation, !!extraColors.borderCloudy));
+      const crProps = {
+        ...baseProps,
+        type: 'circle',
+        x: crX,
+        y: crY,
+        width: crW,
+        height: crH,
+        color: colorArrayToHex(annot.color, '#000000'),
+        strokeColor: colorArrayToHex(annot.color, '#000000'),
+        fillColor: extraColors.ic || null,
+        lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+        borderStyle: mapBorderStyle(annot, extraColors)
+      };
+      if (extraColors.opsSubtypePresent) {
+        crProps.pdfCircleSubtypePresent = true;
+        crProps.pdfCircleSubtype = typeof extraColors.opsSubtype === 'string'
+          && extraColors.opsSubtype.length <= 64 ? extraColors.opsSubtype : '';
+      } else if (extraColors.durableMarkupId) {
+        crProps.id = extraColors.durableMarkupId;
+      }
+      if (crRotation) crProps.rotation = crRotation;
+      if (extraColors.cross) crProps.cross = true;
+      Object.assign(crProps, randloosUitExtra(extraColors)); // zonder rand (#431)
+      // Onzichtbaar vlak (#435): hulplijn op het scherm, geen streek bij opslaan.
+      if (onzichtbaarVlakUitExtra(extraColors)) crProps.onzichtbaarVlak = true;
+      return createAnnotation(crProps);
+    }
+
+    case 'Line':
+      if (annot.lineCoordinates && annot.lineCoordinates.length >= 4) {
+        // Use original /L coords from pdf-lib (PDF.js normalizeRect destroys direction)
+        const lc = extraColors.lineCoords || annot.lineCoordinates;
+        const [lsx, lsy] = convertPoint(lc[0], lc[1]);
+        const [lex, ley] = convertPoint(lc[2], lc[3]);
+
+        // Wall segment: /Line centreline + OPS thickness/material metadata.
+        if (extraColors.opsSubtype === 'wall') {
+          return createAnnotation({
+            ...baseProps,
+            type: 'wall',
+            startX: lsx,
+            startY: lsy,
+            endX: lex,
+            endY: ley,
+            dikteMm: extraColors.opsDikteMm ?? 100,
+            hatchPattern: extraColors.opsHatchPattern || 'none',
+            hatchColor: extraColors.opsHatchColor || undefined,
+            // undefined → the material's own density (WALL_MATERIALS.dens)
+            hatchScale: extraColors.opsHatchScale ?? undefined,
+            hatchAngle: extraColors.opsHatchAngle ?? 0,
+            isolatieType: extraColors.opsIsolatieType || undefined,
+            // Join per uiteinde uit (#476); zonder sleutel geen velden.
+            ...wandJoinUitExtra(extraColors),
+            // Explicit category wins; older files without it are IfcWall.
+            ifcCategory: extraColors.opsIfcCategory || ifcCategoryForAnnotationType('wall'),
+            color: colorArrayToHex(annot.color, '#000000'),
+            strokeColor: colorArrayToHex(annot.color, '#000000'),
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 0.7,
+          });
+        }
+
+        // Check if this is a measurement annotation (use pdf.js IT + colorMap fallback)
+        const isMeasureDist = extraColors.opsSubtype === 'measureDistance' ||
+                              extraColors.intent === 'LineDimension' ||
+                              extraColors.hasMeasure ||
+                              annot.it === 'LineDimension';
+        if (isMeasureDist) {
+          // Ligging, punten, hulplijnen, schaal en (bij een maat uit een ander
+          // programma) de overgenomen opmaak: zie maatlijn-uit-bestand.js.
+          const mdProps = {
+            ...baseProps,
+            ...maatlijnUitBestand({ annot, extra: extraColors, convertPoint }),
+          };
+          // Get measurement text from Contents, or auto-calculate using annotation's own scale
+          let mdText = (annot.contentsObj && annot.contentsObj.str) || annot.contents || baseProps.subject || '';
+          if (!mdText) {
+            if (mdProps.measureScale) {
+              const prec = mdProps.measurePrecision || 2;
+              const pixelDist = Math.sqrt((lex - lsx) ** 2 + (ley - lsy) ** 2);
+              const scaledVal = pixelDist * mdProps.measureScale;
+              const unit = mdProps.measureUnit || 'mm';
+              mdText = `${scaledVal.toFixed(prec)} ${unit}`;
+            } else {
+              const dist = calculateDistance(lsx, lsy, lex, ley, pageNum);
+              mdText = formatMeasurement(dist);
+            }
+          }
+          mdProps.measureText = mdText;
+          return createAnnotation(mdProps);
+        }
+
+        // Check for line endings (arrow heads)
+        const le = annot.lineEndings || [];
+        const { startHead, endHead } = koppenUitBestand(le, extraColors.opsLineHeads);
+        const isArrow = startHead !== 'none' || endHead !== 'none';
+
+        return createAnnotation({
+          ...baseProps,
+          ...(extraColors.durableMarkupId ? { id: extraColors.durableMarkupId } : {}),
+          type: isArrow ? 'arrow' : 'line',
+          startX: lsx,
+          startY: lsy,
+          endX: lex,
+          endY: ley,
+          color: colorArrayToHex(annot.color, '#000000'),
+          strokeColor: colorArrayToHex(annot.color, '#000000'),
+          fillColor: extraColors.ic || undefined,
+          // Zonder /BS en /Border: 1 (specificatie), niet de 0 van pdf.js.
+          lineWidth: lijnBreedteUitBestand(extraColors, annot, 2),
+          borderStyle: mapBorderStyle(annot, extraColors),
+          startHead: startHead,
+          endHead: endHead,
+          // Ours carry the size the appearance was drawn with; 12 for others.
+          headSize: extraColors.opsHeadSize || 12,
+          // Gesloten punt zonder /IC uit een ander programma: hol.
+          ...(pijlKopVullingUitBestand(extraColors) === false ? { headFill: false } : {}),
+        });
+      }
+      break;
+
+    case 'Ink':
+      // Freehand drawing
+      if (annot.inkLists && annot.inkLists.length > 0) {
+        const path = [];
+        const inkList = annot.inkLists[0];
+        for (let i = 0; i < inkList.length; i += 2) {
+          const [ipx, ipy] = convertPoint(inkList[i], inkList[i + 1]);
+          path.push({ x: ipx, y: ipy });
+        }
+        return createAnnotation({
+          ...baseProps,
+          type: 'draw',
+          path: path,
+          color: colorArrayToHex(annot.color, '#000000'),
+          strokeColor: colorArrayToHex(annot.color, '#000000'),
+          lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+          borderStyle: mapBorderStyle(annot, extraColors)
+        });
+      }
+      break;
+
+    case 'PolyLine':
+      if (annot.vertices && annot.vertices.length >= 4) {
+        const plPoints = [];
+        for (let i = 0; i < annot.vertices.length; i += 2) {
+          const [plx, ply] = convertPoint(annot.vertices[i], annot.vertices[i + 1]);
+          plPoints.push({ x: plx, y: ply });
+        }
+
+        // Textbox leader: PolyLine with our custom OPS_Subtype linked via IRT.
+        // Anchor (first vertex) is recomputed at render time; keep knee + tip.
+        if (extraColors.opsSubtype === 'textboxLeader' && plPoints.length >= 3 &&
+            extraColors.irtRectKey) {
+          // LE entry: ['/None', '/Circle' or '/OpenArrow' etc.]
+          const le = annot.lineEndings || [];
+          const endStyle = (le[1] === 'Circle') ? 'circle' : 'arrow';
+          return {
+            __textboxLeader: true,
+            page: pageNum,
+            irtRectKey: extraColors.irtRectKey,
+            leader: {
+              id: extraColors.opsLeaderId || (Date.now().toString(36) + Math.random().toString(36).substr(2, 6)),
+              kneeX: plPoints[1].x,
+              kneeY: plPoints[1].y,
+              tipX: plPoints[plPoints.length - 1].x,
+              tipY: plPoints[plPoints.length - 1].y,
+              endStyle,
+            },
+          };
+        }
+
+        // Check if this is an angle measurement
+        if (extraColors.opsSubtype === 'measureAngle' && plPoints.length >= 3) {
+          const point1 = plPoints[0];
+          const vertex = plPoints[1];
+          const point2 = plPoints[2];
+          const a1 = Math.atan2(point1.y - vertex.y, point1.x - vertex.x);
+          const a2 = Math.atan2(point2.y - vertex.y, point2.x - vertex.x);
+          let angleDeg = (a2 - a1) * (180 / Math.PI);
+          if (angleDeg < 0) angleDeg += 360;
+          if (angleDeg > 180) angleDeg = 360 - angleDeg;
+          return createAnnotation({
+            ...baseProps,
+            type: 'measureAngle',
+            point1, vertex, point2,
+            arcRadius: extraColors.opsArcRadius || 30,
+            measureValue: angleDeg,
+            measureText: angleDeg.toFixed(1) + '\u00B0',
+            color: colorArrayToHex(annot.color, '#ff0000'),
+            strokeColor: colorArrayToHex(annot.color, '#ff0000'),
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+          });
+        }
+
+        // Check if this is a perimeter measurement (use pdf.js IT + colorMap fallback)
+        const isMeasurePerim = extraColors.opsSubtype === 'measurePerimeter' ||
+                               extraColors.intent === 'PolyLineDimension' ||
+                               extraColors.hasMeasure ||
+                               annot.it === 'PolyLineDimension';
+        if (isMeasurePerim) {
+          let mpText = (annot.contentsObj && annot.contentsObj.str) || annot.contents || baseProps.subject || '';
+          if (!mpText) {
+            const perim = calculatePerimeter(plPoints, pageNum);
+            mpText = formatMeasurement(perim);
+          }
+          const mpProps = {
+            ...baseProps,
+            type: 'measurePerimeter',
+            points: plPoints,
+            color: colorArrayToHex(annot.color, '#ff0000'),
+            strokeColor: colorArrayToHex(annot.color, '#ff0000'),
+            lineWidth: lijnBreedteUitBestand(extraColors, annot, 1),
+            borderStyle: mapBorderStyle(annot, extraColors),
+            measureText: mpText,
+          };
+          // Read line endings from PDF LE array
+          const mpLe = annot.lineEndings || [];
+          if (mpLe.length >= 2) {
+            const mapHead = (h) => {
+              switch (h) {
+                case 'OpenArrow': return 'open';
+                case 'ClosedArrow': return 'closed';
+                case 'Diamond': return 'diamond';
+                case 'Circle': return 'circle';
+                case 'Square': return 'square';
+                case 'Slash': return 'slash';
+                case 'Butt': return 'butt';
+                case 'ROpenArrow': return 'openReversed';
+                case 'RClosedArrow': return 'closedReversed';
+                default: return 'none';
+              }
+            };
+            mpProps.startHead = mapHead(mpLe[0]);
+            mpProps.endHead = mapHead(mpLe[1]);
+          }
+          // Puntmaat, en holle punten bij een omtrekmaat uit een ander programma.
+          Object.assign(mpProps, meetlijnKoppenUitBestand(extraColors, mpProps.lineWidth));
+          if (extraColors.measureScale) {
+            mpProps.measureScale = extraColors.measureScale;
+            mpProps.measureUnit = extraColors.measureUnit || 'mm';
+            if (extraColors.measurePrecision !== undefined) {
+              mpProps.measurePrecision = extraColors.measurePrecision;
+            }
+          }
+          if (extraColors.opsPrecision != null) mpProps.measurePrecision = extraColors.opsPrecision;
+          // Label switched off when saved (/OPS_NoLabel, saver.js).
+          if (extraColors.opsNoLabel) mpProps.measureShowLabel = false;
+          if (extraColors.opsFontSize > 0) mpProps.fontSize = extraColors.opsFontSize;
+          if (extraColors.opsMeasureUnit) mpProps.measureUnit = extraColors.opsMeasureUnit;
+          if (Number.isFinite(extraColors.opsMeasureValue)) mpProps.measureValue = extraColors.opsMeasureValue;
+          return createAnnotation(mpProps);
+        }
+
+        // Check if this is a curved (spline) arrow — issue #267. Rebuild from
+        // the clicked control points (OPS_Points) so it reloads as editable.
+        if (extraColors.opsSubtype === 'splineArrow' && extraColors.opsPoints && extraColors.opsPoints.length >= 4) {
+          const saPts = [];
+          for (let i = 0; i < extraColors.opsPoints.length; i += 2) {
+            const [sx, sy] = convertPoint(extraColors.opsPoints[i], extraColors.opsPoints[i + 1]);
+            saPts.push({ x: sx, y: sy });
+          }
+          const saLe = annot.lineEndings || [];
+          return createAnnotation({
+            ...baseProps,
+            type: 'splineArrow',
+            points: saPts,
+            color: colorArrayToHex(annot.color, '#000000'),
+            strokeColor: colorArrayToHex(annot.color, '#000000'),
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+            borderStyle: mapBorderStyle(annot, extraColors),
+            ...(saLe.length >= 2 || extraColors.opsLineHeads
+              ? koppenUitBestand(saLe, extraColors.opsLineHeads)
+              : { startHead: 'none', endHead: 'open' }),
+            headSize: extraColors.opsHeadSize || 8,
+          });
+        }
+
+        // Check if this is a spline
+        if (extraColors.opsSubtype === 'spline' && extraColors.opsPoints && extraColors.opsPoints.length >= 6) {
+          const splineControlPts = [];
+          for (let i = 0; i < extraColors.opsPoints.length; i += 2) {
+            const [sx, sy] = convertPoint(extraColors.opsPoints[i], extraColors.opsPoints[i + 1]);
+            splineControlPts.push({ x: sx, y: sy });
+          }
+          return createAnnotation({
+            ...baseProps,
+            type: 'spline',
+            controlPoints: splineControlPts,
+            color: colorArrayToHex(annot.color, '#000000'),
+            strokeColor: colorArrayToHex(annot.color, '#000000'),
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+            borderStyle: mapBorderStyle(annot, extraColors),
+          });
+        }
+
+        return createAnnotation({
+          ...baseProps,
+          type: 'polyline',
+          points: plPoints,
+          color: colorArrayToHex(annot.color, '#000000'),
+          strokeColor: colorArrayToHex(annot.color, '#000000'),
+          lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+          borderStyle: mapBorderStyle(annot, extraColors)
+        });
+      }
+      break;
+
+    case 'Polygon':
+      if (annot.vertices && annot.vertices.length >= 6) {
+        // Calculate bounding box and points in viewport coordinates
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        const polyPoints = [];
+        for (let i = 0; i < annot.vertices.length; i += 2) {
+          const [pvx, pvy] = convertPoint(annot.vertices[i], annot.vertices[i + 1]);
+          polyPoints.push({ x: pvx, y: pvy });
+          minX = Math.min(minX, pvx);
+          maxX = Math.max(maxX, pvx);
+          minY = Math.min(minY, pvy);
+          maxY = Math.max(maxY, pvy);
+        }
+
+        // Systeemraster: /Polygon waarvan de /Vertices de CONTOUR zelf zijn —
+        // herstel als bewerkbaar raster. Het raster wordt bij het renderen
+        // opnieuw uit contour + parameters afgeleid; een verplaatsing in een
+        // ander programma zit al in de vertices verwerkt.
+        if (extraColors.opsSubtype === 'systeemraster' && polyPoints.length >= 3) {
+          const sgColor = colorArrayToHex(annot.color, '#000000');
+          // Boogsegmenten + systeem (plafond: panelen/randprofiel) via de
+          // pure vertaalhelper; muteert polyPoints (arc/bulge per node).
+          const sgSystem = systeemFromOps(polyPoints, {
+            arcFlags: extraColors.sgArcFlags,
+            arcBulges: extraColors.sgArcBulges,
+            sysType: extraColors.sgSysType,
+            edgeProfiel: extraColors.sgEdgeProfiel,
+            panelsJson: extraColors.sgPanelsJson,
+            edgesJson: extraColors.sgEdgesJson,
+          });
+          // Systeemtype: meegereisd snapshot bijregistreren (bestaand lokaal
+          // type met hetzelfde id wint) en de instance eraan koppelen.
+          let sgTypeId;
+          const sgTypeDef = systeemTypeFromJson(extraColors.sgTypeDefJson);
+          if (sgTypeDef) ensureSysteemType(sgTypeDef);
+          if (extraColors.sgTypeId || sgTypeDef) {
+            sgTypeId = extraColors.sgTypeId || sgTypeDef.id;
+          }
+          const sgResolvedType = sgTypeId ? getSysteemTypeById(sgTypeId) : null;
+          return createAnnotation({
+            ...baseProps,
+            type: 'systeemraster',
+            points: polyPoints,
+            system: sgSystem,
+            sparingen: sparingenFromJson(extraColors.sgSparingenJson),
+            systeemTypeId: sgTypeId,
+            ifcPredefinedType: sgResolvedType?.ifcPredefinedType
+              || extraColors.opsIfcPredefined
+              || (sgSystem.type === 'plafond' ? 'CEILING' : undefined),
+            x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+            plaatBreedteMm: extraColors.sgPlaatBreedteMm ?? 2000,
+            plaatHoogteMm: extraColors.sgPlaatHoogteMm ?? 2000,
+            originXMm: extraColors.sgOriginXMm ?? 0,
+            originYMm: extraColors.sgOriginYMm ?? 0,
+            equalizeX: extraColors.sgEqualizeX === true,
+            equalizeY: extraColors.sgEqualizeY === true,
+            randConditie: extraColors.sgRandConditie === 'minmaat' ? 'minmaat' : 'tonen',
+            minRandMm: extraColors.sgMinRandMm ?? 300,
+            rasterHoek: extraColors.sgRasterHoek ?? 0,
+            tagTonen: extraColors.sgTagTonen !== false,
+            tagFontSize: extraColors.sgTagFontSize ?? 10,
+            ifcCategory: sgResolvedType?.ifcCategory
+              || ifcCategoryForAnnotationType('systeemraster'),
+            color: sgColor,
+            strokeColor: sgColor,
+            lineWidth: extraColors.sgLineWidth ?? extraColors.borderWidth ?? 1,
+          });
+        }
+
+        // Betonbalk: /Polygon (omtrek in /Vertices) met ons OPS-lijnstuk —
+        // herstel als bewerkbare balk. De band wordt bij het renderen opnieuw
+        // uit start/eind + breedte afgeleid (incl. verse inter-balk-joins).
+        // Verplaatst in een ander programma? Dan wijkt de actuele /Rect af
+        // van OPS_BbRect en schuift het lijnstuk exact mee (zelfde patroon
+        // als de stavenreeks). LEGACY: de eerste vorm sloeg een
+        // hartlijn-polyline op (OPS_Hartlijn, mogelijk > 2 punten) — die
+        // wordt gesplitst in losse tweepunts-balken (extra exemplaren via
+        // __extraAnnotations, door de loader mee-gepusht). Ontbreken de
+        // keys, dan valt dit blok stil en laadt hij als gewone polygon.
+        const bbGeomSrc = (Array.isArray(extraColors.bbGeom) && extraColors.bbGeom.length === 4)
+          ? extraColors.bbGeom
+          : (Array.isArray(extraColors.bbHartlijn) && extraColors.bbHartlijn.length >= 4)
+            ? extraColors.bbHartlijn
+            : null;
+        if (extraColors.opsSubtype === 'betonbalk' && bbGeomSrc) {
+          let bbDx = 0, bbDy = 0;
+          const bbSavedRect = extraColors.bbRect;
+          if (Array.isArray(bbSavedRect) && bbSavedRect.length === 4 && Array.isArray(annot.rect)) {
+            // PDF-ruimte: verschuiving van de linkeronderhoek.
+            bbDx = annot.rect[0] - bbSavedRect[0];
+            bbDy = annot.rect[1] - bbSavedRect[1];
+          }
+          const bbPts = [];
+          for (let i = 0; i + 1 < bbGeomSrc.length; i += 2) {
+            const [bx, by] = convertPoint(bbGeomSrc[i] + bbDx, bbGeomSrc[i + 1] + bbDy);
+            bbPts.push({ x: bx, y: by });
+          }
+          if (bbPts.length < 2) break;
+          const bbColor = colorArrayToHex(annot.color, '#000000');
+          const bbShared = {
+            type: 'betonbalk',
+            breedteMm: extraColors.bbBreedteMm ?? 300,
+            hoogteMm: extraColors.bbHoogteMm ?? 400,
+            lijnstijl: extraColors.bbLijnstijl === 'gestippeld' ? 'gestippeld' : 'doorgetrokken',
+            // Hartlijn: alleen een EXPLICIETE OPS-waarde 1 zet hem aan.
+            // Oude exemplaren zonder sleutel volgen de nieuwe default (uit) —
+            // consistent met nieuw getekende balken in dezelfde tekening.
+            toonHartlijn: extraColors.bbHartlijnTonen === true,
+            tagTonen: extraColors.bbTagTonen === true,
+            ...(extraColors.bbTagTekst ? { tagTekst: extraColors.bbTagTekst } : {}),
+            tagOffsetX: extraColors.bbTagDx ?? 0,
+            tagOffsetY: extraColors.bbTagDy ?? 0,
+            ifcCategory: ifcCategoryForAnnotationType('betonbalk'),
+            color: bbColor,
+            strokeColor: bbColor,
+            lineWidth: extraColors.bbLineWidth ?? extraColors.borderWidth ?? 1,
+          };
+          const bbFirst = createAnnotation({
+            ...baseProps,
+            ...bbShared,
+            startX: bbPts[0].x, startY: bbPts[0].y,
+            endX: bbPts[1].x, endY: bbPts[1].y,
+          });
+          // Legacy meerpunts-hartlijn → elk vervolg-segment een eigen balk.
+          if (bbPts.length > 2) {
+            bbFirst.__extraAnnotations = [];
+            for (let i = 1; i < bbPts.length - 1; i++) {
+              bbFirst.__extraAnnotations.push(createAnnotation({
+                ...baseProps,
+                ...bbShared,
+                startX: bbPts[i].x, startY: bbPts[i].y,
+                endX: bbPts[i + 1].x, endY: bbPts[i + 1].y,
+              }));
+            }
+          }
+          return bbFirst;
+        }
+
+        // Check if this is a filled-area annotation (our private subtype).
+        if (extraColors.opsSubtype === 'filledArea') {
+          // Re-attach arc/bulge metadata to the outer points so rendering and
+          // hit-testing reproduce the original curves.
+          if (extraColors.opsArcFlags && extraColors.opsArcFlags.length === polyPoints.length) {
+            for (let i = 0; i < polyPoints.length; i++) {
+              if (extraColors.opsArcFlags[i]) {
+                polyPoints[i].arc = true;
+                polyPoints[i].bulge = (extraColors.opsArcBulges && extraColors.opsArcBulges[i] != null)
+                  ? extraColors.opsArcBulges[i]
+                  : 0.3;
+              }
+            }
+          }
+          const faProps = {
+            ...baseProps,
+            type: 'filledArea',
+            points: polyPoints,
+            color: colorArrayToHex(annot.color, '#000000'),
+            strokeColor: colorArrayToHex(annot.color, '#000000'),
+            fillColor: extraColors.ic || null,
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+            borderStyle: mapBorderStyle(annot, extraColors),
+            x: minX, y: minY,
+            width: maxX - minX, height: maxY - minY,
+            ...hatchUitExtra(extraColors),
+          };
+          if (extraColors.holes && extraColors.holes.length > 0) {
+            const holeArcFlags = extraColors.opsHoleArcFlags || [];
+            const holeArcBulges = extraColors.opsHoleArcBulges || [];
+            faProps.holes = extraColors.holes.map((hole, hi) => {
+              const flags = holeArcFlags[hi];
+              const bulges = holeArcBulges[hi];
+              return hole.map((pt, pi) => {
+                const [hx, hy] = convertPoint(pt.x, pt.y);
+                const out = { x: hx, y: hy };
+                if (flags && flags[pi]) {
+                  out.arc = true;
+                  out.bulge = (bulges && bulges[pi] != null) ? bulges[pi] : 0.3;
+                }
+                return out;
+              });
+            });
+          }
+          if (faProps.holes) {
+            // Het omhullende vak over ALLE ringen: een tweede deel kan naast
+            // de buitenring liggen en viel anders buiten het vak (#457).
+            const grens = vlakOmhullende(faProps.points, faProps.holes);
+            if (grens) {
+              faProps.x = grens.minX;
+              faProps.y = grens.minY;
+              faProps.width = grens.maxX - grens.minX;
+              faProps.height = grens.maxY - grens.minY;
+            }
+          }
+          Object.assign(faProps, randloosUitExtra(extraColors)); // zonder rand (#431)
+          return createAnnotation(faProps);
+        }
+
+        // Check if this is an area measurement (use pdf.js IT + colorMap fallback)
+        const isMeasureArea = extraColors.opsSubtype === 'measureArea' ||
+                              extraColors.intent === 'PolygonDimension' ||
+                              (extraColors.hasMeasure && !extraColors.opsSubtype) ||
+                              annot.it === 'PolygonDimension';
+        if (isMeasureArea) {
+          // Extra ringen uit onze eigen /OPS_Holes (PDF- naar app-coordinaten).
+          const maHoles = (extraColors.holes && extraColors.holes.length > 0)
+            ? extraColors.holes.map(hole => hole.map(pt => {
+                const [hx, hy] = convertPoint(pt.x, pt.y);
+                return { x: hx, y: hy };
+              }))
+            : null;
+          let maText = (annot.contentsObj && annot.contentsObj.str) || annot.contents || baseProps.subject || '';
+          if (!maText) {
+            // Zonder opgeslagen tekst zelf rekenen - inclusief de extra ringen,
+            // anders staat er de oppervlakte van alleen de buitenring (#457).
+            const area = calculateArea(polyPoints, maHoles || undefined, pageNum);
+            maText = formatMeasurement(area);
+          }
+          const maProps = {
+            ...baseProps,
+            type: 'measureArea',
+            points: polyPoints,
+            color: colorArrayToHex(annot.color, '#ff0000'),
+            strokeColor: colorArrayToHex(annot.color, '#ff0000'),
+            fillColor: extraColors.ic || 'none',
+            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+            borderStyle: mapBorderStyle(annot, extraColors),
+            measureText: maText,
+            // Arcering terug uit de eigen sleutels; zonder dit verliest een
+            // gearceerd meetvlak zijn arcering bij de volgende save.
+            ...hatchUitExtra(extraColors),
+          };
+          if (extraColors.measureScale) {
+            maProps.measureScale = extraColors.measureScale;
+            maProps.measureUnit = extraColors.measureAreaUnit || extraColors.measureUnit || 'mm';
+            const areaPrecision = extraColors.measureAreaPrecision !== undefined
+              ? extraColors.measureAreaPrecision : extraColors.measurePrecision;
+            if (areaPrecision !== undefined) maProps.measurePrecision = areaPrecision;
+          }
+          if (extraColors.opsPrecision != null) maProps.measurePrecision = extraColors.opsPrecision;
+          if (extraColors.opsMeasureUnit) maProps.measureUnit = extraColors.opsMeasureUnit;
+          if (extraColors.opsFontSize > 0) maProps.fontSize = extraColors.opsFontSize;
+          if (Number.isFinite(extraColors.opsMeasureValue)) maProps.measureValue = extraColors.opsMeasureValue;
+          if (maHoles) maProps.holes = maHoles;
+          Object.assign(maProps, randloosUitExtra(extraColors)); // zonder rand (#431)
+          // Ruimtevlak van een plattegrond: verborgen label, zaadpunt en naam.
+          Object.assign(maProps, plattegrondUitExtra(extraColors, convertPoint));
+          if (maProps.opsRuimteNaam && !maProps.measureName) maProps.measureName = maProps.opsRuimteNaam;
+          return createAnnotation(maProps);
+        }
+
+        // Determine type from OPS_Subtype custom key (this app's own marker,
+        // set when the annotation was created here) — or, for a /Polygon
+        // authored elsewhere (another editor) with a real /BE cloud border
+        // effect and no OPS_Subtype, fall back to extraColors.borderCloudy
+        // (read from /BE in color-extraction.js) so it still renders as a
+        // cloud instead of a plain straight-edged polygon. Square already
+        // does this same borderCloudy fallback above.
+        const polyType = extraColors.opsSubtype === 'cloudPolyline' ? 'cloudPolyline'
+                       : extraColors.opsSubtype === 'cloud' ? 'cloud'
+                       : extraColors.borderCloudy ? 'cloud'
+                       : 'polygon';
+
+        const polyProps = {
+          ...baseProps,
+          type: polyType,
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          sides: Math.floor(annot.vertices.length / 2),
+          // Preserve the real vertices so a generic /Polygon renders its actual
+          // shape instead of a regular N-gon synthesised from the bounding box
+          // (issue #286). cloud/cloudPolyline already relied on these points.
+          points: polyPoints,
+          color: colorArrayToHex(annot.color, '#000000'),
+          strokeColor: colorArrayToHex(annot.color, '#000000'),
+          fillColor: extraColors.ic || null,
+          lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+          borderStyle: mapBorderStyle(annot, extraColors),
+          ...(extraColors.cloudIntensity !== undefined ? { cloudIntensity: extraColors.cloudIntensity } : {})
+        };
+        Object.assign(polyProps, randloosUitExtra(extraColors)); // zonder rand (#431)
+
+        // Rechthoekige wolk: het vak terug, de punten weg (#434). Een wolk
+        // tekent en raakt op zijn vak, dus punten die niets meer zeggen dan
+        // dat vak horen niet in het model — anders schrijft de opslag na een
+        // maatwijziging de oude punten terug. /Vertices van vóór #434 zijn
+        // bovendien de INGESCHREVEN zeshoek van het vak: die maakte de wolk
+        // elke rondgang 13,4 % smaller. Alleen bij onze eigen sleutel: alleen
+        // deze app schreef die zeshoek; een echte zeshoek uit een ander
+        // programma blijft zoals hij is.
+        if (polyType === 'cloud') {
+          const vak = wolkVakUitHoeken(polyPoints)
+            || (extraColors.opsSubtype === 'cloud' ? wolkVakUitZeshoek(polyPoints) : null);
+          if (vak) {
+            Object.assign(polyProps, vak, { sides: 4 });
+            delete polyProps.points;
+          }
+        }
+
+        return createAnnotation(polyProps);
+      }
+      break;
+
+    case 'Text': {
+      // Sticky note annotation
+      const [txtVx, txtVy] = convertPoint(rect[0], rect[3]);
+
+      // Normalize PDF /Name to lowercase internal icon name
+      const pdfNameToIcon = {
+        'Comment': 'comment', 'Note': 'note', 'Help': 'help',
+        'Insert': 'insert', 'Key': 'key', 'NewParagraph': 'newparagraph',
+        'Paragraph': 'paragraph', 'Check': 'check', 'Circle': 'circle',
+        'Cross': 'cross', 'Star': 'star'
+      };
+      const rawName = annot.name || 'Comment';
+      const iconName = pdfNameToIcon[rawName] || rawName.toLowerCase();
+
+      return createAnnotation({
+        ...baseProps,
+        type: 'comment',
+        x: txtVx,
+        y: txtVy,
+        width: 24,
+        height: 24,
+        text: (annot.contentsObj && annot.contentsObj.str) || annot.contents || '',
+        color: colorArrayToHex(annot.color, '#FFFF00'),
+        fillColor: colorArrayToHex(annot.color, '#FFFF00'),
+        icon: iconName,
+        popupOpen: annot.open || false
+      });
+    }
+
+    case 'FileAttachment': {
+      // File Attachment markup (capture.js): a push-pin note with its file.
+      const props = fileAttachmentProps(annot);
+      if (!props) return null;
+      const [faX, faY] = convertPoint(rect[0], rect[3]);
+      return createAnnotation({
+        ...baseProps,
+        ...props,
+        x: faX,
+        y: faY,
+        text: (annot.contentsObj && annot.contentsObj.str) || annot.contents || '',
+        color: colorArrayToHex(annot.color, '#2563EB'),
+        fillColor: colorArrayToHex(annot.color, '#2563EB'),
+        attachedFile: { ...props.attachedFile, date: parsePdfDate(annot.modificationDate || annot.creationDate) },
+      });
+    }
+
+    case 'FreeText': {
+      // Extract font size, font family, bold/italic, and text color
+      let fontSize = 14;
+      let fontSizeFromPdf = false;
+      let textColor = '#000000';
+      let fontFamily = null;
+      let fontBold = false;
+      let fontItalic = false;
+
+      if (annot.defaultAppearanceData) {
+        if (annot.defaultAppearanceData.fontSize) { fontSize = annot.defaultAppearanceData.fontSize; fontSizeFromPdf = true; }
+        if (annot.defaultAppearanceData.fontColor) {
+          textColor = colorArrayToHex(annot.defaultAppearanceData.fontColor, '#000000');
+        }
+        if (annot.defaultAppearanceData.fontName) {
+          const fontInfo = mapPdfFontName(annot.defaultAppearanceData.fontName);
+          if (fontInfo) {
+            fontFamily = fontInfo.family;
+            if (fontInfo.bold) fontBold = true;
+            if (fontInfo.italic) fontItalic = true;
+          }
+        }
+      }
+      if (!fontFamily && annot.defaultAppearance) {
+        // Parse DA string "/FontRef size Tf"
+        const fontMatch = annot.defaultAppearance.match(/\/([^\s]+)\s+[\d.]+\s+Tf/);
+        if (fontMatch) {
+          const fontInfo = mapPdfFontName(fontMatch[1]);
+          if (fontInfo) {
+            fontFamily = fontInfo.family;
+            if (fontInfo.bold) fontBold = true;
+            if (fontInfo.italic) fontItalic = true;
+          }
+        }
+        if (!annot.defaultAppearanceData) {
+          const sizeMatch = annot.defaultAppearance.match(/(\d+(?:\.\d+)?)\s+Tf/);
+          if (sizeMatch) { fontSize = parseFloat(sizeMatch[1]); fontSizeFromPdf = true; }
+          const colorMatch = annot.defaultAppearance.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/);
+          if (colorMatch) {
+            textColor = colorArrayToHex([parseFloat(colorMatch[1]), parseFloat(colorMatch[2]), parseFloat(colorMatch[3])], '#000000');
+          }
+        }
+      }
+      // The text colour of /DS wins over /DA: the external editor keeps its line colour in
+      // /DA (see color-extraction.js).
+      if (extraColors.dsColor) textColor = extraColors.dsColor;
+      // Use font info from pdf-lib if available (more accurate - resolves reference names like "F8")
+      if (extraColors.fontFamily) fontFamily = extraColors.fontFamily;
+      if (extraColors.fontBold) fontBold = true;
+      if (extraColors.fontItalic) fontItalic = true;
+      // Use DS font-size as fallback if DA didn't provide one
+      if (!fontSizeFromPdf && extraColors.dsFontSize) fontSize = extraColors.dsFontSize;
+      let fontUnderline = extraColors.fontUnderline || false;
+      let fontStrikethrough = extraColors.fontStrikethrough || false;
+
+      // /Contents draagt de getypte tekst (met witregels, zonder de
+      // afbrekingen van de appearance); de appearance-regels zijn de
+      // terugval. Ook de WinAnsi-vervangtekens van de appearance wijzen
+      // /Contents als bron aan. Zie tekstvak-tekst.js.
+      const appearanceTekst = annot.textContent ? annot.textContent.join('\n') : '';
+      let text = kiesTekstvakTekst({
+        appearanceTekst,
+        contents: annot.contentsObj?.str || annot.contents || '',
+      });
+      // Inline opmaak uit /RC: alleen als de platte tekst (op witruimte na)
+      // overeenkomt met Contents — anders zijn de runs niet te vertrouwen.
+      let textRuns;
+      if (Array.isArray(extraColors.textRuns) && extraColors.textRuns.length) {
+        const rcText = extraColors.textRuns.map(l => l.map(r => r.text).join('')).join('\n');
+        // Strip ALL whitespace rather than collapsing it to one space: /Contents
+        // is often the authoring tool's own hand-wrapped plain-text fallback,
+        // which can hard-wrap mid-word with a hyphen ("on-\nsite") where /RC's
+        // unwrapped rich text has none ("on-site"). Collapsing left that lone
+        // wrap-space mismatched and silently discarded otherwise-valid runs
+        // (losing bold/italic/underline for the whole annotation) over a
+        // difference that isn't a real content difference.
+        const norm = (s) => String(s).replace(/\s+/g, '');
+        if (norm(rcText) === norm(text)) {
+          // Zelfde voorloopwit-regel als de platte tekst (tekstvak-tekst.js).
+          textRuns = runsZonderInspringing(extraColors.textRuns, appearanceTekst);
+          text = textRuns.map(l => l.map(r => r.text).join('')).join('\n');
+        }
+      }
+
+      // For FreeText annotations, annot.color (C entry) is the background/fill color per PDF spec
+      // Border color: IC entry or appearance stream stroke color (extracted via pdf-lib)
+      let borderColor = extraColors.ic || extraColors.apStrokeColor || '#000000';
+      if (borderColor === '#000000' && annot.borderColor) {
+        borderColor = colorArrayToHex(annot.borderColor, '#000000');
+      }
+
+      // Fill/background color = the FreeText /C entry. Use pdf-lib's view
+      // (extraColors.cColor — set ONLY when /C is actually present): pdf.js's
+      // annot.color DEFAULTS to black when /C is absent, which would paint a
+      // no-fill textbox black on reopen. We deliberately do NOT fall back to
+      // annot.backgroundColor — pdf.js reports a default WHITE there, which
+      // would turn a transparent textbox into an opaque white box that hides
+      // whatever is behind it. No /C ⇒ no fill (transparent).
+      const bgColor = extraColors.cColor || null;
+
+      // Border style: 1=SOLID, 2=DASHED, 3=BEVELED, 4=INSET, 5=UNDERLINE
+      const bsStyle = annot.borderStyle?.style;
+      const borderStyle = bsStyle === 2 ? 'dashed' : (bsStyle === 3 || bsStyle === 4 ? 'dotted' : 'solid');
+      // Zonder rand (#431): /W is 0, de lijndikte-instelling (die ook de
+      // binnenmarge van het tekstvak bepaalt) staat in de eigen sleutel.
+      const zonderRand = randloosUitExtra(extraColors);
+      const borderWidth = zonderRand ? zonderRand.lineWidth
+        : extraColors.borderWidth !== undefined ? extraColors.borderWidth : (annot.borderStyle?.width || 1);
+      // Tekstinzet uit /DS (randdikte + marge + 1, zie inzetUitDsMarge); zonder
+      // marge blijft het de app-regel (randdikte).
+      const dsInzet = extraColors.dsMargin != null ? inzetUitDsMarge(borderWidth, extraColors.dsMargin) : undefined;
+
+      // Weergaverotatie en doosmaat: zie tekstvak-rotatie.js.
+      const ftRotation = tekstvakRotatie({
+        extra: extraColors,
+        annotRotatie: annot.rotation,
+        paginaRotatie: viewport.rotation,
+        noRotate: !!(annot.annotationFlags & 16), // Bit 5: NoRotate
+      });
+      // pdf.js doesn't expose calloutLine; use pdf-lib extracted CL from extraColors
+      const calloutLine = extraColors.calloutLine || annot.calloutLine;
+      const isCallout = calloutLine && calloutLine.length >= 4;
+
+      // Rotation-aware viewport rect — its width/height already account for the
+      // page /Rotate (they SWAP vs the raw PDF Rect on 90/270 pages).
+      const ftRectVp = convertRect(annot.rect);
+      // De /Rect van een callout bevat ook de aanhaallijn (zie tekstvakMaat).
+      const ftMaat = tekstvakMaat({ rotatie: ftRotation, extra: extraColors, rect, rectVp: ftRectVp, callout: !!isCallout });
+      const ftWidth = ftMaat.width;
+      let ftHeight = ftMaat.height;
+      // Position: center of the Rect (bounding box center = rotated textbox center)
+      const cx = ftRectVp.x + ftRectVp.width / 2;
+      const cy = ftRectVp.y + ftRectVp.height / 2;
+      const ftX = cx - ftWidth / 2;
+      const ftY = cy - ftHeight / 2;
+
+      if (isCallout) {
+        // For callouts, Rect may include the leader line. Use /RD to get the actual text box.
+        // RD = [left, bottom, right, top] insets from Rect to text box
+        let coX = ftX, coY = ftY, coW = ftWidth, coH = ftHeight;
+        const rd = extraColors.rectDiff;
+        if (rd && rd[0] !== null) {
+          const rdVp = convertRect([rect[0] + rd[0], rect[1] + rd[1], rect[2] - rd[2], rect[3] - rd[3]]);
+          coX = rdVp.x;
+          coY = rdVp.y;
+          coW = rdVp.width;
+          coH = rdVp.height;
+        }
+        // Some authoring tools bake a Rect/RD box a little too tight for the
+        // annotation's own Contents. Other editors paint the file's own baked
+        // appearance stream regardless, so the shortfall never shows there;
+        // we reconstruct the layout from Contents/DA and drawTextboxContent
+        // silently drops lines past the box height — grow down to fit instead
+        // of truncating text other editors show in full.
+        const coNeededH = computeTextboxContentHeight({
+          text, textRuns, width: coW, fontSize,
+          lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth, textPadding: dsInzet,
+          fontFamily: fontFamily || 'Arial'
+        });
+        // An implausible /DS line-height (e.g. 4pt text with 18.4pt) is fitted
+        // into the authored box instead of growing the box over the drawing.
+        const coPas = pasRegelafstandAanDoos({
+          lineSpacing: extraColors.lineSpacing, fontSize, boxHeight: coH,
+          padding: dsInzet ?? borderWidth ?? 0, neededHeight: coNeededH, tolerantie: dsInzet != null ? tolerantieVoorDsInzet(dsInzet, fontSize, extraColors.lineSpacing) : 0,
+        });
+        coH = coPas.height;
+        // Callout stroke color: IC > AP stroke > borderColor fallback
+        const coStrokeColor = extraColors.ic || extraColors.apStrokeColor || borderColor;
+        // Fill color: C entry is the background for FreeText
+        const coFillColor = bgColor || extraColors.cColor || '#FFFFD0';
+        // Convert callout line points to viewport coordinates
+        const [clArrowVx, clArrowVy] = convertPoint(calloutLine[0], calloutLine[1]);
+        let clKneeVx, clKneeVy, clArmVx, clArmVy;
+        if (calloutLine.length >= 6) {
+          [clKneeVx, clKneeVy] = convertPoint(calloutLine[2], calloutLine[3]);
+          [clArmVx, clArmVy] = convertPoint(calloutLine[4], calloutLine[5]);
+        } else {
+          clKneeVx = clArrowVx; clKneeVy = clArrowVy;
+          [clArmVx, clArmVy] = convertPoint(calloutLine[2], calloutLine[3]);
+        }
+        return createAnnotation({
+          ...baseProps,
+          type: 'callout',
+          x: coX,
+          y: coY,
+          width: coW,
+          height: coH,
+          rotation: ftRotation,
+          text: text,
+          ...(textRuns ? { textRuns } : {}),
+          color: coStrokeColor,
+          strokeColor: coStrokeColor,
+          fillColor: coFillColor || '#FFFFD0',
+          textColor: textColor,
+          fontSize: fontSize,
+          borderStyle: borderStyle,
+          lineWidth: borderWidth,
+          // Binnenmarge uit /DS; zonder die opgave blijft het de randdikte.
+          textPadding: dsInzet,
+          fontFamily: fontFamily || 'Arial',
+          fontBold: fontBold,
+          fontItalic: fontItalic,
+          lineSpacing: coPas.lineSpacing || undefined,
+          fontUnderline: fontUnderline,
+          fontStrikethrough: fontStrikethrough,
+          arrowX: clArrowVx,
+          arrowY: clArrowVy,
+          kneeX: clKneeVx,
+          kneeY: clKneeVy,
+          armOriginX: clArmVx,
+          armOriginY: clArmVy,
+          // Ronde aanhaallijn: restore curved leader when the private key is set.
+          ...(extraColors.opsLeaderStyle === 'curved' ? { leaderStyle: 'curved' } : {}),
+          ...(extraColors.borderCloudy ? {
+            borderEffect: 'cloudy',
+            ...(extraColors.cloudIntensity !== undefined ? { cloudIntensity: extraColors.cloudIntensity } : {})
+          } : {}),
+          ...zonderRand,
+        });
+      }
+
+      // Typemachine-tekst (/IT /FreeTextTypewriter): het vak is precies zo
+      // breed als de tekst en breekt niet af, alleen op een harde
+      // regelovergang (noWrap, zie layoutTextboxLines). Dat is een waarneming
+      // aan zulke bestanden, geen regel uit de PDF-specificatie. Een fractie
+      // verschil in de tekstmeting liet hem anders naar twee regels groeien.
+      // De specificatie spelt de waarde FreeTextTypeWriter, veel producers
+      // FreeTextTypewriter: beide tellen.
+      const typemachine = /^FreeTextTypewriter$/i.test(annot.it || extraColors.intent || '');
+
+      // Same grow-to-fit as the callout branch above: don't silently drop
+      // lines other editors show in full just because the authored Rect is tight.
+      const ftNeededH = computeTextboxContentHeight({
+        text, textRuns, width: ftWidth, fontSize,
+        lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth, textPadding: dsInzet,
+        fontFamily: fontFamily || 'Arial',
+        ...(typemachine ? { noWrap: true } : {}),
+      });
+      const ftPas = pasRegelafstandAanDoos({
+        lineSpacing: extraColors.lineSpacing, fontSize, boxHeight: ftHeight,
+        padding: dsInzet ?? borderWidth ?? 0, neededHeight: ftNeededH, tolerantie: dsInzet != null ? tolerantieVoorDsInzet(dsInzet, fontSize, extraColors.lineSpacing) : 0,
+      });
+      ftHeight = ftPas.height;
+
+      const _tbAnn = createAnnotation({
+        ...baseProps,
+        type: 'textbox',
+        x: ftX,
+        y: ftY,
+        width: ftWidth,
+        height: ftHeight,
+        rotation: ftRotation,
+        text: text,
+        ...(textRuns ? { textRuns } : {}),
+        color: borderColor,
+        strokeColor: borderColor,
+        fillColor: bgColor,
+        textColor: textColor,
+        fontSize: fontSize,
+        borderStyle: borderStyle,
+        lineWidth: borderWidth,
+        // Binnenmarge uit /DS; zonder die opgave blijft het de randdikte.
+        textPadding: dsInzet,
+        fontFamily: fontFamily || 'Arial',
+        fontBold: fontBold,
+        fontItalic: fontItalic,
+        lineSpacing: ftPas.lineSpacing || undefined,
+        fontUnderline: fontUnderline,
+        fontStrikethrough: fontStrikethrough,
+        ...(typemachine ? { noWrap: true } : {}),
+        ...(extraColors.borderCloudy ? {
+          borderEffect: 'cloudy',
+          ...(extraColors.cloudIntensity !== undefined ? { cloudIntensity: extraColors.cloudIntensity } : {})
+        } : {}),
+        ...zonderRand,
+      });
+      // Stash raw PDF Rect so loader can resolve IRT-linked leader PolyLines.
+      // Cleared by loader after leader-attach pass.
+      try {
+        if (annot.rect && annot.rect.length >= 4) {
+          _tbAnn._pdfRectKey = `${annot.rect[0]},${annot.rect[1]},${annot.rect[2]},${annot.rect[3]}`;
+        }
+      } catch (_) {}
+      return _tbAnn;
+    }
+
+    case 'Stamp': {
+      // Vectorknipsel dat de app zelf opsloeg: weer een verplaatsbaar object,
+      // op de plek van de /Rect. De converter rekent die om naar de weergave-
+      // ruimte, dus ook op een gedraaid blad klopt de maat.
+      const knipsel = knipselUitExtra(extraColors, heeftKnipselBron);
+      if (knipsel) {
+        const kr = convertRect(annot.rect);
+        return createAnnotation({
+          ...baseProps,
+          type: 'vectorSnippet',
+          x: kr.x, y: kr.y, width: kr.width, height: kr.height,
+          ...knipsel,
+        });
+      }
+
+      // Stavenreeks (wapeningsstaven-reeks): een /Stamp met onze eigen
+      // OPS_SR*-parameters. De reekslijn komt uit OPS_SRGeom; alle overige
+      // geometrie (poten, punten, label) wordt bij het renderen opnieuw
+      // afgeleid uit die twee punten.
+      //
+      // VERPLAATST IN EEN ANDERE EDITOR: zo'n editor verschuift alleen /Rect
+      // (en laat onze custom keys staan). Door de actuele /Rect te vergelijken
+      // met de /Rect die WIJ schreven (OPS_SRRect) kennen we de verschuiving
+      // exact en passen we die op de reekslijn toe.
+      //
+      // Ontbreken de custom keys — bijvoorbeeld omdat een andere editor de
+      // annotatie herschreef — dan valt dit blok stil en wordt het gewoon een
+      // stamp die zijn appearance toont. Nooit crashen.
+      if (extraColors.opsSubtype === 'stavenreeks' && Array.isArray(extraColors.srGeom)) {
+        const g = extraColors.srGeom;
+        let dx = 0, dy = 0;
+        const savedRect = extraColors.srRect;
+        if (Array.isArray(savedRect) && savedRect.length === 4 && Array.isArray(annot.rect)) {
+          // PDF-ruimte: verschuiving van de linkeronderhoek.
+          dx = annot.rect[0] - savedRect[0];
+          dy = annot.rect[1] - savedRect[1];
+        }
+        const [srSX, srSY] = convertPoint(g[0] + dx, g[1] + dy);
+        const [srEX, srEY] = convertPoint(g[2] + dx, g[3] + dy);
+        const srColor = colorArrayToHex(annot.color, '#000000');
+        return createAnnotation({
+          ...baseProps,
+          type: 'stavenreeks',
+          startX: srSX, startY: srSY,
+          endX: srEX, endY: srEY,
+          count: extraColors.srCount ?? 3,
+          diameter: extraColors.srDiameter ?? 12,
+          barLengthMm: extraColors.srBarLengthMm ?? 0,
+          legDir: extraColors.srLegDir || 'down-left',
+          legLength: extraColors.srLegLength ?? STAVENREEKS_DEFAULTS.legLength,
+          lineTail: extraColors.srLineTail ?? STAVENREEKS_DEFAULTS.lineTail,
+          fontSize: extraColors.srFontSize ?? STAVENREEKS_DEFAULTS.fontSize,
+          labelSide: extraColors.srLabelSide === 'start' ? 'start' : 'end',
+          ifcCategory: ifcCategoryForAnnotationType('stavenreeks'),
+          color: srColor,
+          strokeColor: srColor,
+          lineWidth: extraColors.srLineWidth ?? 1,
+        });
+      }
+
+      // Image stamp - extracted from PDF structure via pdf-lib
+      const stRect = convertRect(annot.rect);
+      const x = stRect.x;
+      const y = stRect.y;
+      const w = stRect.width;
+      const h = stRect.height;
+
+      const gevondenBeeld = findImageEntryForAnnotation(stampImageMap, annot, 'stamp');
+      // Een tekststempel van de app: de uitsnede van de weergave is geen bron.
+      const eigenTekst = eigenTekststempel({
+        stampName: extraColors.stampName, opsStampText: extraColors.opsStampText,
+        beeldBron: gevondenBeeld ? (gevondenBeeld.source === 'render' ? 'render' : 'pdf') : null,
+      });
+      const stampImgEntry = eigenTekst ? null : gevondenBeeld;
+      const dataUrl = stampImgEntry?.dataUrl ?? null;
+
+      let stRotation = 0;
+      if (extraColors.rotation !== undefined && extraColors.rotation !== 0) {
+        stRotation = Math.round(extraColors.rotation);
+      } else if (extraColors.matrixAngle !== undefined && Math.abs(extraColors.matrixAngle) > 1) {
+        // Zelfde conventie als het FreeText-pad hierboven: de /Matrix-hoek is
+        // een hoek in PDF-ruimte, en de pagina-/Rotate draait het hele blad
+        // mee. Zichtbaar is dus het verschil van die twee. Zonder deze
+        // verrekening stond een stempel met matrix +90 op een /Rotate-90-blad
+        // (extern rechtop) hier een kwartslag gedraaid.
+        const stPageRot = (((viewport.rotation || 0) % 360) + 360) % 360;
+        stRotation = -(Math.round(extraColors.matrixAngle) - stPageRot);
+        while (stRotation > 180) stRotation -= 360;
+        while (stRotation < -180) stRotation += 360;
+        if (Math.abs(stRotation) <= 1) stRotation = 0;
+      }
+
+      // Dynamic stamp (docs/STAMPS.md): the design written by the saver,
+      // with the box inside a /Rect that holds it at its rotation.
+      const stampDesign = cleanStampDesign(extraColors.opsStampDesign);
+      if (stampDesign) {
+        const box = extraColors.opsStampDesign.box;
+        const okBox = Array.isArray(box) && box.length === 2 && box.every(v => Number.isFinite(v) && v > 0);
+        const bw = okBox ? box[0] : w, bh = okBox ? box[1] : h;
+        return createAnnotation({
+          ...baseProps, type: 'stamp',
+          x: x + (w - bw) / 2, y: y + (h - bh) / 2, width: bw, height: bh, rotation: stRotation,
+          stampName: extraColors.stampName || stampDesign.name, stampText: stampDesignText(stampDesign),
+          stampColor: stampDesign.color, color: stampDesign.color, strokeColor: stampDesign.color,
+          stampTemplateId: stampDesign.templateId, stampDesign,
+        });
+      }
+
+      // Reverse-map PDF standard names back to app stamp names
+      const pdfToAppName = {
+        'Approved': 'Approved', 'NotApproved': 'Rejected', 'Draft': 'Draft',
+        'Confidential': 'Confidential', 'Final': 'Final', 'ForComment': 'For Review',
+        'Expired': 'Void', 'AsIs': 'As Is', 'Experimental': 'Revised'
+      };
+      const pdfName = extraColors.stampPdfName || '';
+      const appStampName = extraColors.stampName || pdfToAppName[pdfName] || pdfName || 'Draft';
+      const stampText = eigenTekst?.stampText || annot.subject || annot.contentsObj?.str || annot.contents || appStampName.toUpperCase();
+      // Een teruggezette tekststempel tekent zijn kleur zelf: uit /C, anders
+      // die van de ingebouwde stempel.
+      const stampColor = eigenTekst
+        ? tekststempelKleur({ cKleur: annot.color ? colorArrayToHex(annot.color, null) : null, stampName: appStampName })
+        : (baseProps.color || '#ef4444');
+
+      const stampProps = {
+        ...baseProps,
+        type: 'stamp',
+        x, y, width: w, height: h,
+        stampName: appStampName,
+        stampText: stampText,
+        stampColor: stampColor,
+        color: stampColor,
+        strokeColor: stampColor,
+        rotation: stRotation,
+        // Pixelruimte van de geëxtraheerde bitmap ('pdf' of 'visual') — de
+        // saver kiest daarop of hij pagina-/Rotate-compensatie schrijft.
+        apImageSpace: stampImgEntry?.space
+      };
+
+      // IFC-classificatie van symboolstempels (NEN 1414 e.d.). Voorkeur:
+      // de opgeslagen OPS-sleutels; oudere bestanden zonder die sleutels
+      // worden via symbool-id of stempelnaam alsnog geclassificeerd.
+      if (extraColors.opsSymbolId) stampProps.symbolId = extraColors.opsSymbolId;
+      const nenStampInfo = nenIfcForStamp(extraColors.opsSymbolId, appStampName);
+      stampProps.ifcCategory = extraColors.opsIfcCategory || nenStampInfo?.ifcCategory || undefined;
+      stampProps.ifcPredefinedType = extraColors.opsIfcPredefined || nenStampInfo?.ifcPredefinedType || undefined;
+
+      // Attach AP stream image if available
+      if (dataUrl) {
+        const imageId = generateImageId();
+        const img = new Image();
+        img.src = dataUrl;
+        imageCache.set(imageId, img);
+        stampProps.imageId = imageId;
+        stampProps.imageData = dataUrl;
+        stampProps.originalWidth = w;
+        stampProps.originalHeight = h;
+        stampProps.lockAspectRatio = true;
+        // Non-destructive crop round-trip (issue #212). Always present (0 =
+        // no crop) so property-change undo snapshots contain the keys.
+        stampProps.cropLeft = extraColors.cropLeft || 0;
+        stampProps.cropTop = extraColors.cropTop || 0;
+        stampProps.cropRight = extraColors.cropRight || 0;
+        stampProps.cropBottom = extraColors.cropBottom || 0;
+        // Word-style adjustments round-trip (grayscale / brightness / contrast).
+        if (extraColors.grayscale) stampProps.grayscale = true;
+        if (extraColors.brightness !== undefined) stampProps.brightness = extraColors.brightness;
+        if (extraColors.contrast !== undefined) stampProps.contrast = extraColors.contrast;
+      }
+
+      // LINKED image: remember the source path and refresh the bitmap from
+      // disk (async, silent — the embedded version stays as fallback when
+      // the file is gone).
+      if (extraColors.opsLinkedPath) {
+        stampProps.linkedPath = extraColors.opsLinkedPath;
+      }
+      // Colour tint of an image compare-overlay. The extracted bitmap is the
+      // untinted original (the tint lives as a Multiply fill in the AP
+      // stream), so restoring the property re-applies the tint editably.
+      if (extraColors.opsTintColor) {
+        stampProps.tintColor = extraColors.opsTintColor;
+      }
+      // Stamps the app saved from an IMAGE annotation (Name 'Image', bitmap
+      // embedded) round-trip back to type 'image' so the image properties
+      // (size, aspect lock, linked file) stay editable after reopen.
+      if (dataUrl && (pdfName === 'Image' || stampProps.linkedPath)) {
+        stampProps.type = 'image';
+      }
+      const _stampAnn = createAnnotation(stampProps);
+      if (_stampAnn?.linkedPath) {
+        import('../../annotations/image-drop.js')
+          .then(m => m.refreshLinkedImage(_stampAnn, { silent: true }))
+          .catch(() => {});
+      }
+      return _stampAnn;
+    }
+  }
+
+  return null;
+}

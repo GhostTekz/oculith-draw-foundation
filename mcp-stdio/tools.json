@@ -1,0 +1,2338 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Open PDF"
+    },
+    "description": "Open a PDF file in a new tab of the running app. Returns once the document is loaded and the tab is active. A DWG or DXF opens the CAD import dialog instead (result `dialog: \"cad-import\"`).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "app_open_pdf"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Set zoom"
+    },
+    "description": "Set the page-view zoom in the LIVE app. scale=1.0 means 100%, 2.0 means 200%, etc.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "scale": {
+          "maximum": 32.0,
+          "minimum": 0.05,
+          "type": "number"
+        }
+      },
+      "required": [
+        "scale"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_zoom"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Zoom in"
+    },
+    "description": "Trigger one zoom-in step in the LIVE app (same as the toolbar +).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_zoom_in"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Zoom out"
+    },
+    "description": "Trigger one zoom-out step in the LIVE app (same as the toolbar -).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_zoom_out"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Capture page view"
+    },
+    "description": "Capture the LIVE app's current page view as a base64 PNG. Composites the PDF canvas with the annotation/highlight overlays (NOT the surrounding chrome — for that use OS-level screenshotting).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "default": 2000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_screenshot_view"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Move pointer"
+    },
+    "description": "Dispatch a synthetic mousemove at viewport CSS coordinates (x, y) inside the LIVE WebView. Returns the element under the cursor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "name": "app_mouse_move"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Click"
+    },
+    "description": "Dispatch a synthetic mouse click at (x, y). Sequence: mousemove -> mousedown -> mouseup -> click (or contextmenu for right). button: 'left' (default) | 'middle' | 'right'.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "default": "left",
+          "enum": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "type": "string"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "name": "app_mouse_click"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Drag"
+    },
+    "description": "Dispatch a synthetic drag from (x1,y1) to (x2,y2) using `steps` interpolated mousemove events. Sequence: mousedown(x1,y1) -> N x mousemove -> mouseup(x2,y2). button: 'left' (default) | 'middle' | 'right'.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "default": "left",
+          "enum": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "type": "string"
+        },
+        "steps": {
+          "default": 10,
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "x1": {
+          "type": "integer"
+        },
+        "x2": {
+          "type": "integer"
+        },
+        "y1": {
+          "type": "integer"
+        },
+        "y2": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "type": "object"
+    },
+    "name": "app_mouse_drag"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Scroll"
+    },
+    "description": "Dispatch a synthetic wheel event at (x, y) with delta (dx, dy) in CSS pixels. Set ctrlKey=true to test ctrl+wheel zoom-to-cursor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "altKey": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ctrlKey": {
+          "default": false,
+          "type": "boolean"
+        },
+        "dx": {
+          "default": 0,
+          "type": "integer"
+        },
+        "dy": {
+          "default": 0,
+          "type": "integer"
+        },
+        "metaKey": {
+          "default": false,
+          "type": "boolean"
+        },
+        "shiftKey": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "name": "app_scroll"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Press key"
+    },
+    "description": "Press a single key (with optional modifiers) on the focused element. Dispatches keydown then keyup. e.g. {key:'Escape'} or {key:'z', ctrl:true} for undo.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alt": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ctrl": {
+          "default": false,
+          "type": "boolean"
+        },
+        "key": {
+          "type": "string"
+        },
+        "meta": {
+          "default": false,
+          "type": "boolean"
+        },
+        "shift": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "app_key"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Type text"
+    },
+    "description": "Type a string into the focused element. For each character: keydown -> beforeinput -> (value splice) -> input -> keyup. Editable inputs receive value updates; non-editable elements receive only the key events.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "app_type"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get view state"
+    },
+    "description": "Probe the LIVE viewport state: render engine + timing chip, active document scale/page/viewMode, pdf-viewport singleton transform, pdf-canvas backing-store + CSS rect, high-zoom tile-overlay state (visible/hidden + position+size), pdf-container CSS rect + scroll offsets, and devicePixelRatio. Use this for any case where screen↔world coordinate mapping or zoom-state needs to be validated externally — e.g. after dispatching a zoom or scroll via `app_scroll`/`app_set_zoom`, call this to see where things landed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_get_viewport_state"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Go to page"
+    },
+    "description": "Navigate the active document to a 1-based page number, exactly as if the user picked the page in the page box or clicked its thumbnail.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "description": "1-based target page number.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "type": "object"
+    },
+    "name": "app_go_to_page"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Select tool"
+    },
+    "description": "Switch the LIVE app's active tool, exactly like clicking the ribbon button. Accepts any registered tool name, e.g. select, hand, line, arrow, draw, box, circle, polyline, spline, arc, filledArea, textbox, callout, comment, stamp, highlight, editText, measureDistance, measureArea, measurePerimeter, measureAngle, scaleRegion, trim, extend. Returns the tool that is actually active afterwards (PDF/A read-only mode can refuse the switch).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "description": "Registered tool name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_tool"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Click interface element"
+    },
+    "description": "Click an arbitrary DOM element in the LIVE app by CSS selector (usually '#button-id'). If the element lives on an inactive ribbon tab, the matching tab is activated first (the ribbon only renders the active tab's content). Returns { ok, found, disabled, clicked, activatedTab }. Disabled elements are reported but NOT clicked. Set searchTabs=false to probe only the current DOM (e.g. for dialogs) without touching the ribbon tabs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "searchTabs": {
+          "default": true,
+          "description": "Walk the ribbon tabs when the selector is not in the current DOM.",
+          "type": "boolean"
+        },
+        "selector": {
+          "description": "CSS selector of the element to click, e.g. '#dr-line'.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "app_click_element"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get current tool"
+    },
+    "description": "Return the LIVE app's currently active tool name (state.currentTool).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_get_current_tool"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Merge PDF files"
+    },
+    "description": "Merge one or more PDF files into the active document at the given position. The user's original file is not modified; the merged result opens as a working copy until saved. Returns { ok, position, mergedFiles, pagesInserted, pagesBefore, pagesAfter, filePath }; mergedFiles counts the files that really went in. A file that stays out makes ok false: a preview PDF of the CAD import is refused (reason preview-pdf), a file without pages is refused (no-pages), an unreadable file fails. Then error names the files, refused [{ file, reason }] and failed [{ file, error }] list them, and mergedFiles and pagesAfter show what did go in.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filePaths": {
+          "description": "Absolute paths of PDF files to merge into the current document.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "position": {
+          "description": "Where to insert the merged pages: 'end' (default), 'start', or 'after' the current page.",
+          "enum": [
+            "end",
+            "start",
+            "after"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePaths"
+      ],
+      "type": "object"
+    },
+    "name": "app_merge_pdf"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Ask assistant"
+    },
+    "description": "Submit a message into the app's assistant window as if the user typed it (opens the panel). Returns { ok }. The answer comes from a personal Claude key or the MCP relay (app_assistant_pending + app_assistant_answer).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "description": "The user message to submit.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "app_assistant_ask"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Take pending assistant question"
+    },
+    "description": "Take the oldest assistant question waiting for an MCP client to answer (the relay provider). Returns { ok, question:{ id, prompt, system, docName }|null }. When non-null, compute an answer and deliver it with app_assistant_answer — this is how an external Claude becomes the assistant's AI brain.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_assistant_pending"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Answer assistant question"
+    },
+    "description": "Answer a pending assistant question (id from app_assistant_pending). The text appears in the assistant window as the assistant's reply. Returns { ok, id }.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Question id from app_assistant_pending.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Answer text to show in the assistant window.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "app_assistant_answer"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get assistant conversation"
+    },
+    "description": "Return the LIVE assistant conversation: { ok, messages:[{ role, content }] }. Use to verify a delivered answer landed in the window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_assistant_history"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Create annotation"
+    },
+    "description": "Create an annotation on the LIVE app's active document WITHOUT synthetic mouse input. Builds the same object the interactive tool would, pushes it onto the document, records an undo step and redraws. Geometry goes in `props` (page coordinates at 100% zoom): line/arrow/measureDistance need startX/startY/endX/endY; box/circle/highlight/cloud/polygon/textbox/callout/scaleRegion need x/y/width/height; polyline/filledArea/measureArea/measurePerimeter need points:[{x,y},...]; spline needs controlPoints; draw needs path; comment needs x/y. Optional style props (color, strokeColor, fillColor, lineWidth, opacity, text, fontSize, scaleString, units, leaderStartX/Y, leaderEndX/Y, dimShowUnit (measureDistance: false shows the number only), dimLineOvershootMm / dimExtGapMm / dimExtOvershootMm (measureDistance: overshoot of the dimension line, gap and overshoot of the extension lines, in paper mm), measureShowLabel (measureArea: false hides its own label), ...) override the tool defaults. measure* annotations get measureText computed from the document scale automatically. Returns the new annotation id.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "description": "Markup layer to draw on, by id or name (see app_list_layers). Left out: the current layer, as with the interactive tool. An unknown layer is an error; create it first with app_create_layer.",
+          "type": "string"
+        },
+        "page": {
+          "description": "1-based target page. Defaults to the current page.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "props": {
+          "description": "Geometry + style properties for the annotation.",
+          "type": "object"
+        },
+        "type": {
+          "enum": [
+            "line",
+            "arrow",
+            "wall",
+            "box",
+            "mask",
+            "redaction",
+            "viewport",
+            "circle",
+            "highlight",
+            "cloud",
+            "polygon",
+            "polyline",
+            "cloudPolyline",
+            "spline",
+            "draw",
+            "filledArea",
+            "textbox",
+            "callout",
+            "comment",
+            "stamp",
+            "signature",
+            "image",
+            "parametricSymbol",
+            "measureDistance",
+            "measureArea",
+            "measurePerimeter",
+            "scaleRegion",
+            "count"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "props"
+      ],
+      "type": "object"
+    },
+    "name": "app_create_annotation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List annotations"
+    },
+    "description": "List the active document's annotations as compact JSON (id, type, page, core geometry, colors, text/measureText, and the markup layer when it is not the default layer). Optionally filter to one page or one layer.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "description": "Only annotations on this markup layer, by id or name.",
+          "type": "string"
+        },
+        "page": {
+          "description": "Only annotations on this 1-based page.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_list_annotations"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get annotation"
+    },
+    "description": "Return the full JSON-safe property set of one annotation by id (functions/DOM refs stripped). A grid line also reports `gridAlignment`: per end its group, whether it is locked, the number of linked ends and whether it can be locked.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "app_get_annotation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Update annotation"
+    },
+    "description": "Merge `props` onto an existing annotation (geometry, color, lineWidth, text, ...). Records a modify-undo step, recomputes measureText when measurement geometry changed, and redraws. `id` and `type` are immutable. `layer` moves the annotation to another markup layer; `props` may then be empty. Grid line (parametricSymbol `stramien`): `alignStart` / `alignEnd` true couples that end with the aligned ends of the other grid lines (dragging one end then moves them all), false unlocks it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "layer": {
+          "description": "Move the annotation to this markup layer, by id or name (see app_list_layers).",
+          "type": "string"
+        },
+        "props": {
+          "description": "Property patch to merge onto the annotation.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "props"
+      ],
+      "type": "object"
+    },
+    "name": "app_update_annotation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Delete annotation"
+    },
+    "description": "Delete an annotation by id (records a delete-undo step and redraws).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "app_delete_annotation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Select annotation"
+    },
+    "description": "Select one annotation by id so the properties panel and selection handles show it, exactly like clicking it with the select tool.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "app_select_annotation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Clear selection"
+    },
+    "description": "Clear the annotation selection and hide the properties panel.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_clear_selection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Undo"
+    },
+    "description": "Undo the last annotation/page edit on the active document (same as Ctrl+Z).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_undo"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Redo"
+    },
+    "description": "Redo the last undone edit on the active document (same as Ctrl+Y).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_redo"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List document tabs"
+    },
+    "description": "List all open document tabs: index, fileName, filePath, modified flag, active flag, pageCount, isUntitled, currentPage, annotationCount.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_list_tabs"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Switch document tab"
+    },
+    "description": "Activate the document tab at `index` (0-based, see app_list_tabs).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "type": "object"
+    },
+    "name": "app_switch_tab"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Close document tab"
+    },
+    "description": "Close the document tab at `index` (0-based). If the document has unsaved changes the call fails unless force=true (discard) or save=true (save-and-close) — it never opens a save dialog, so the bridge stays headless-safe. When save=true and the document carried digital signatures that no longer hold for the saved file, the result also contains `signaturesInvalidated: true`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "description": "Discard unsaved changes.",
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "save": {
+          "default": false,
+          "description": "Save unsaved changes, then close (same path as the UI dialog's Save choice).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "type": "object"
+    },
+    "name": "app_close_tab"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "New blank PDF"
+    },
+    "description": "Create a new blank PDF document in a new tab (page size in PDF points; A4 portrait = 595 x 842).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "pages": {
+          "default": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "widthPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "widthPt",
+        "heightPt"
+      ],
+      "type": "object"
+    },
+    "name": "app_new_blank_pdf"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Save PDF"
+    },
+    "description": "Save the active document with all annotations baked in. With `path`, saves to that file. Without `path`, saves in place — fails (instead of opening a file picker) when the document is untitled or has no real path. When the document carried digital signatures that no longer hold for the saved file, the result also contains `signaturesInvalidated: true`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Absolute target path. Omit to save in place.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_save_pdf"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Set view mode"
+    },
+    "description": "Switch the active document view: 'single' page, 'continuous' vertical scroll, or 'book' (two-page spread, page 1 on the right). 'book' is a continuous variant.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "single",
+            "continuous",
+            "book"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_view_mode"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Fit page"
+    },
+    "description": "Zoom the active document so the whole page fits the viewport (same as the Fit Page button). Returns the resulting zoom.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_fit_page"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Fit width"
+    },
+    "description": "Zoom the active document so the page width fills the viewport (same as the Fit Width button). Returns the resulting zoom.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_fit_width"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get page count"
+    },
+    "description": "Return the active document's page count and current page.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_get_page_count"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read existing page text"
+    },
+    "description": "Read existing PDF page text without mouse automation. Returns document-bound span IDs, readable merged text, page-space bounding boxes, PDF anchors, font family/size, rotation and fill colour when recoverable. Pass a page number or omit it for the current page. Text is never sent outside the local MCP connection.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "description": "1-based page number; defaults to the current page.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_page_text"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Replace existing page text"
+    },
+    "description": "Replace one existing PDF text span returned by app_get_page_text. Requires the exact expected text to reject stale IDs. Preserves the page artwork by refusing edits that cannot remove the original text in place; fits the replacement inside its original width and embeds a full fallback font when the subset lacks glyphs. Changes stay pending until app_save_pdf is called. One line per call; for translation, map translated lines to span IDs and call repeatedly.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Required only when the source fill colour could not be recovered.",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "type": "string"
+        },
+        "expectedText": {
+          "description": "Exact current text returned for that span.",
+          "type": "string"
+        },
+        "newText": {
+          "description": "Replacement text on one line (may be empty to delete).",
+          "type": "string"
+        },
+        "spanId": {
+          "description": "Opaque span ID from app_get_page_text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "spanId",
+        "expectedText",
+        "newText"
+      ],
+      "type": "object"
+    },
+    "name": "app_replace_text"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Set measurement scale"
+    },
+    "description": "Set the active document's measurement scale calibration (pixels per unit + unit, e.g. ~2.835 px/mm for 1:1 at 72 dpi) and recalculate every measurement annotation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "pixelsPerUnit": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "unit": {
+          "description": "Unit name, e.g. mm, cm, m, in, ft.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pixelsPerUnit",
+        "unit"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_measure_scale"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get quantity take-off"
+    },
+    "description": "Return take-off totals for the user's named schedules (Staten): per schedule the element count, the numeric column grand totals (e.g. area m2, length m, count), and per-group subtotals. Optionally target one schedule by id or name; otherwise all schedules are returned. Image/thumbnail columns are reported as counts, never as data-URLs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Target one schedule by its display name.",
+          "type": "string"
+        },
+        "scheduleId": {
+          "description": "Target one schedule by its id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_takeoff"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Place quantity schedule"
+    },
+    "description": "Build a quantities schedule (Staat) from the annotations in the open document and place it on the page as a table annotation. Without scheduleId a new schedule is created from a template (default 'area'); `config` then overrides its categories/fields/sort. The table contents are computed by the app from the live annotations - the caller supplies no cell values.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "description": "Schedule config: categories, fields, filters, sort, itemize, format. Overrides the template.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Display name for the schedule.",
+          "type": "string"
+        },
+        "page": {
+          "description": "Page to place the table on (default: current page).",
+          "type": "number"
+        },
+        "scheduleId": {
+          "description": "Reuse an existing schedule instead of creating one.",
+          "type": "string"
+        },
+        "templateId": {
+          "description": "Template for a new schedule: area, length, count, symbol, text, image or full. Default: area.",
+          "type": "string"
+        },
+        "x": {
+          "description": "Left edge in page points (default 40).",
+          "type": "number"
+        },
+        "y": {
+          "description": "Top edge in page points (default 40).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_place_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Set out structural layout"
+    },
+    "description": "Set out a structural floor plan in one undoable step: the grid (lettered and numbered grid lines with bubbles), columns on the grid intersections, beams along the grid lines, a span-direction arrow per floor bay carrying the real span, spot elevations, position tags (position number / section / level) and - unless switched off - a quantity schedule grouped by IFC category. Bay sizes are REAL millimetres; the app converts them to page points at `scale` and also calibrates the measuring scale so later measurements agree. Profiles: \"HE200B\", \"HEA 200\", \"IPE 300\", \"UNP 200\", \"Koker 100x100x5\", \"L 100x100x10\" (steel) or \"300x500\" (concrete b x h in mm). Use dryRun to see what would be placed without touching the drawing.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "baysX": {
+          "description": "Bay sizes left to right in mm: [5400,5400], '2x5400' or '5400 6000'."
+        },
+        "baysY": {
+          "description": "Bay sizes top to bottom in mm, same notations as baysX."
+        },
+        "beams": {
+          "description": "false to omit, or { profile, direction: x|y|both, prefix, levelMm, edgeOnly }."
+        },
+        "columns": {
+          "description": "false to omit, or { profile, prefix, levelMm, skip: [grid labels] }."
+        },
+        "dryRun": {
+          "description": "Only compute and report; draw nothing.",
+          "type": "boolean"
+        },
+        "floors": {
+          "description": "false to omit, or { direction: x|y|shortest, thicknessMm, levelMm, prefix, text }."
+        },
+        "gridBubbleMm": {
+          "description": "Grid bubble radius in PAPER mm (default 4).",
+          "type": "number"
+        },
+        "gridExtensionMm": {
+          "description": "How far a grid line runs past the outer bay, in mm (default 1500).",
+          "type": "number"
+        },
+        "labelStyleX": {
+          "description": "Label style for the vertical grid lines (default letters).",
+          "enum": [
+            "letters",
+            "numbers"
+          ],
+          "type": "string"
+        },
+        "labelStyleY": {
+          "description": "Label style for the horizontal grid lines (default numbers).",
+          "enum": [
+            "letters",
+            "numbers"
+          ],
+          "type": "string"
+        },
+        "labelsYFromBottom": {
+          "description": "Number the horizontal grid lines from the bottom up, as on a drawing (default true).",
+          "type": "boolean"
+        },
+        "levelMarkers": {
+          "description": "Place a spot elevation per floor bay when a level is given (default true).",
+          "type": "boolean"
+        },
+        "origin": {
+          "additionalProperties": false,
+          "description": "First grid intersection, in page points (top-left origin, 100% zoom).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        "page": {
+          "description": "Page to draw on (default: current page).",
+          "type": "number"
+        },
+        "scale": {
+          "description": "Drawing scale, e.g. '1:100' (default) or '1:50'.",
+          "type": "string"
+        },
+        "schedule": {
+          "description": "false to omit, or { name, x, y, itemize } for the quantity schedule."
+        },
+        "setMeasureScale": {
+          "description": "Also calibrate the document's measuring scale to this drawing scale (default true).",
+          "type": "boolean"
+        },
+        "tags": {
+          "description": "Tag each element with position number, section and level (default true).",
+          "type": "boolean"
+        },
+        "textHeightMm": {
+          "description": "Tag text height in PAPER mm (default 2.5).",
+          "type": "number"
+        }
+      },
+      "required": [
+        "origin",
+        "baysX",
+        "baysY"
+      ],
+      "type": "object"
+    },
+    "name": "app_structural_layout"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List app commands"
+    },
+    "description": "List EVERY function the app exposes: each ribbon button on every tab (label, tab, disabled/active state) plus every drawing tool. Use this to discover how a feature is called before running it with app_run_command. Command ids: 'ribbon:#<id>' (stable), 'ribbon:<tab>:<n>' (button without an id, only stable within one version), 'tool:<name>'. Optional `filter` narrows by text (matches id, label, title or tab).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "description": "Case-insensitive text filter, e.g. 'scale', 'snippet', 'export'.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_list_commands"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Run app command"
+    },
+    "description": "Run any command returned by app_list_commands: clicks the ribbon button (switching to its tab first) or activates the tool. Disabled buttons are refused.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "description": "Command id from app_list_commands, e.g. 'ribbon:#btn-vector-snippet' or 'tool:measureArea'.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "app_run_command"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Cut vector snippet"
+    },
+    "description": "Cut a rectangular area from a page of the active document as a VECTOR snippet (not a raster screenshot) and put it on the app's snippet clipboard. Coordinates are app points (top-left origin, 100% zoom). Paste it into any open document with app_snippet_paste.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "description": "Height in app points.",
+          "type": "number"
+        },
+        "page": {
+          "description": "Page to cut from (default: current page).",
+          "type": "number"
+        },
+        "width": {
+          "description": "Width in app points.",
+          "type": "number"
+        },
+        "x": {
+          "description": "Left edge in app points.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Top edge in app points.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "name": "app_snippet_cut"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Paste vector snippet"
+    },
+    "description": "Paste the vector snippet from the snippet clipboard into the active document at real size, as a movable annotation. It stays vector in the saved PDF.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "description": "Target page (default: current page).",
+          "type": "number"
+        },
+        "x": {
+          "description": "Left edge in app points (default 40).",
+          "type": "number"
+        },
+        "y": {
+          "description": "Top edge in app points (default 40).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_snippet_paste"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Import CAD drawing"
+    },
+    "description": "Import a DWG or DXF drawing as a vector PDF page, without opening the import dialog. Choose the space (model space or a layout), the scale, the paper size, the layers and what happens with the result: a new document, a new page after the current one, or an underlay on the current page. Settings that are left out take the value the import dialog remembered, otherwise its default. Returns the pages that were made, warnings about anything that could not be converted and the names of external files. Fails while the import dialog is open.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "description": "What part of the model space is converted.",
+          "enum": [
+            "extents",
+            "limits"
+          ],
+          "type": "string"
+        },
+        "colors": {
+          "description": "Colour mode.",
+          "enum": [
+            "file",
+            "black",
+            "gray",
+            "mono",
+            "single"
+          ],
+          "type": "string"
+        },
+        "fonts": {
+          "description": "Font replacements: [{ \"from\": \"name in the drawing\", \"family\": \"sans\" or \"mono\", \"bold\": false, \"italic\": false }].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "hatch": {
+          "enum": [
+            "all",
+            "solid_only",
+            "outline",
+            "none"
+          ],
+          "type": "string"
+        },
+        "images": {
+          "description": "Embed images.",
+          "type": "boolean"
+        },
+        "includeOffLayers": {
+          "description": "Include switched-off layers as hidden PDF layers instead of leaving them out.",
+          "type": "boolean"
+        },
+        "layersAsOcg": {
+          "description": "Keep the layers as PDF layers.",
+          "type": "boolean"
+        },
+        "layersOff": {
+          "description": "Layer names to leave out, on top of the layers the file switches off.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "layersOn": {
+          "description": "Layer names to include although the file switches them off.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lineweight": {
+          "description": "Line weights from the file, one fixed weight, or the colour table in pens.",
+          "enum": [
+            "file",
+            "fixed",
+            "pens"
+          ],
+          "type": "string"
+        },
+        "lineweightMm": {
+          "description": "Line weight in mm for lineweight fixed.",
+          "type": "number"
+        },
+        "marginMm": {
+          "description": "Margin around the drawing in mm, 0 to 200.",
+          "type": "number"
+        },
+        "maxImageMegapixels": {
+          "description": "Largest image that is embedded, in megapixels, 1 to 200.",
+          "type": "number"
+        },
+        "monoThreshold": {
+          "description": "Brightness threshold in percent for colors mono, 0 to 100.",
+          "type": "number"
+        },
+        "opacity": {
+          "description": "Opacity of an underlay, 0.05 to 1 (default 0.5). Only with target underlay.",
+          "type": "number"
+        },
+        "orientation": {
+          "enum": [
+            "auto",
+            "portrait",
+            "landscape"
+          ],
+          "type": "string"
+        },
+        "paper": {
+          "description": "Paper size. A layout keeps its own paper unless this is given.",
+          "enum": [
+            "auto",
+            "A4",
+            "A3",
+            "A3L",
+            "A2",
+            "A2L",
+            "A1",
+            "A1L",
+            "A0",
+            "Letter",
+            "Tabloid",
+            "custom"
+          ],
+          "type": "string"
+        },
+        "paperHeightMm": {
+          "description": "Height in mm for paper custom.",
+          "type": "number"
+        },
+        "paperWidthMm": {
+          "description": "Width in mm for paper custom.",
+          "type": "number"
+        },
+        "path": {
+          "description": "Absolute path of the .dwg or .dxf file.",
+          "type": "string"
+        },
+        "pens": {
+          "description": "Colour table for lineweight pens: [{ \"color\": \"#RRGGBB\", \"lineweightMm\": 0.35 }].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "placement": {
+          "enum": [
+            "center",
+            "lower_left",
+            "origin"
+          ],
+          "type": "string"
+        },
+        "reuseBlocks": {
+          "description": "Store repeated blocks once in the PDF.",
+          "type": "boolean"
+        },
+        "rotation": {
+          "description": "Rotate the drawing before placing it, in degrees.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "Denominator N of 1:N. 0 fits the drawing on the paper.",
+          "type": "number"
+        },
+        "searchPaths": {
+          "description": "Extra folders to look in for external references and images.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "singleColor": {
+          "description": "Colour #RRGGBB for colors single.",
+          "type": "string"
+        },
+        "space": {
+          "description": "\"model\" or the name of a layout (default: what the file suggests).",
+          "type": "string"
+        },
+        "target": {
+          "description": "new = a new document (default), append = a new page after the current page, underlay = on the current page. append without an open document becomes new.",
+          "enum": [
+            "new",
+            "append",
+            "underlay"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "description": "Convert text.",
+          "type": "boolean"
+        },
+        "units": {
+          "description": "Drawing unit; file = the unit in the file.",
+          "enum": [
+            "file",
+            "mm",
+            "cm",
+            "m",
+            "in",
+            "ft"
+          ],
+          "type": "string"
+        },
+        "window": {
+          "description": "Convert only this window: [x0, y0, x1, y1] in drawing units. Excludes area.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "xrefs": {
+          "description": "Load external references.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "app_import_cad"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Export to CAD drawing"
+    },
+    "description": "Export pages of the current document to DXF or DWG, without opening the export dialog. Reads the file on disk (save first); one page writes to `path`, several pages get `_p<page>` behind the name. Settings that are left out take the value the export dialog remembered, otherwise its default. Returns the files that were written with their object counts, warnings and, on a failure, a code (tooLarge, noModelSpace, modelSpaceAmbiguous, modelUnitsUnknown, failed). Fails while the export dialog is open.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allowLarge": {
+          "description": "Export a page with more objects than the limit anyway (default false: such a page fails with code tooLarge).",
+          "type": "boolean"
+        },
+        "annotations": {
+          "description": "Include the annotations on layers OPS_<type>.",
+          "type": "boolean"
+        },
+        "area": {
+          "description": "Export only this window: [x0, y0, x1, y1] in page points with the origin at the top left, as annotations are positioned.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "format": {
+          "description": "Output format; sets the extension of path.",
+          "enum": [
+            "dxf",
+            "dxf_binary",
+            "dwg"
+          ],
+          "type": "string"
+        },
+        "layers": {
+          "description": "PDF layers then line style, line style only, or one layer.",
+          "enum": [
+            "ocg_then_style",
+            "style",
+            "single"
+          ],
+          "type": "string"
+        },
+        "layersOff": {
+          "description": "Layer names (as the export makes them) to leave out.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "origin": {
+          "description": "Where (0,0) of the drawing is: the lower left of the page (default), of the area, or the original model coordinates of an imported page.",
+          "enum": [
+            "page",
+            "area",
+            "model"
+          ],
+          "type": "string"
+        },
+        "pages": {
+          "description": "\"current\" (default), \"all\" or a range like \"1-3,5\".",
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute path of the target file (.dxf or .dwg). Gives the format when format is left out.",
+          "type": "string"
+        },
+        "scale": {
+          "description": "Denominator N of 1:N for scaleMode custom (implies it).",
+          "type": "number"
+        },
+        "scaleMode": {
+          "description": "paper = paper size, measure = the measure scale of the app at the area or page (default), custom = 1:scale.",
+          "enum": [
+            "paper",
+            "measure",
+            "custom"
+          ],
+          "type": "string"
+        },
+        "units": {
+          "description": "Drawing unit of the output.",
+          "enum": [
+            "mm",
+            "cm",
+            "m",
+            "in"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "app_export_cad"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Print to PDF file"
+    },
+    "description": "Print the current document to a PDF file, without opening the print dialog. Takes the route of the \"Save as PDF\" target in that dialog: no printer and no driver, the app writes the print PDF itself, so text stays text and the sheet lies in the file exactly as chosen. Settings that are left out take the value the print dialog remembered, otherwise its default; `pages` always starts at all pages. Returns the sheet size and orientation per page, the scale that was used and warnings about pages that do not fit. Fails while the print dialog is open.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "autoRotate": {
+          "description": "true means orientation \"auto\"; false takes the orientation from Page Setup, otherwise portrait. May not contradict orientation.",
+          "type": "boolean"
+        },
+        "center": {
+          "description": "Centre the page on the sheet.",
+          "type": "boolean"
+        },
+        "content": {
+          "description": "\"document\" leaves the annotation layer out; watermarks and text edits stay, they are document content.",
+          "enum": [
+            "document",
+            "document-and-markups"
+          ],
+          "type": "string"
+        },
+        "orientation": {
+          "description": "Orientation of the sheet; \"auto\" follows the page, as Auto-rotate in the dialog does. Left out: what the next print would already get.",
+          "enum": [
+            "auto",
+            "portrait",
+            "landscape"
+          ],
+          "type": "string"
+        },
+        "pages": {
+          "description": "\"all\" (default), \"current\" or a range like \"1-3,5\".",
+          "type": "string"
+        },
+        "paper": {
+          "description": "Sheet size. \"page\" = every page on a sheet of its own size. Left out: the paper the Page Setup of this document asks for, otherwise \"page\".",
+          "enum": [
+            "page",
+            "A0",
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A0L",
+            "A1L",
+            "A2L",
+            "A3L",
+            "Letter",
+            "Legal",
+            "Tabloid"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute path of the PDF file to write (.pdf). A file that is open in the app is refused.",
+          "type": "string"
+        },
+        "scaling": {
+          "description": "fit = fit on the sheet, shrink = only shrink when the page does not fit, actual = real size, custom-scale = the percentage in zoom.",
+          "enum": [
+            "fit",
+            "shrink",
+            "actual",
+            "custom-scale"
+          ],
+          "type": "string"
+        },
+        "zoom": {
+          "description": "Page zoom in percent, 10 to 400. Implies scaling \"custom-scale\".",
+          "type": "number"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "app_print_to_pdf"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Print to printer"
+    },
+    "description": "Print the current document to a printer, without opening the print dialog. Same page selection, paper, scale, position and content as that dialog, and the same background job. Settings that are left out take the value the print dialog remembered, otherwise its default; `pages` always starts at all pages. Returns the printer, the sheet with its orientation, the scale that was used, the number of copies and warnings about pages that do not fit. Paper really comes out of the printer, so ask the user before calling this. Fails on an unknown printer and while the print dialog is open.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "autoRotate": {
+          "description": "true means orientation \"auto\"; false takes the orientation from Page Setup, otherwise portrait. May not contradict orientation.",
+          "type": "boolean"
+        },
+        "center": {
+          "description": "Centre the page on the sheet.",
+          "type": "boolean"
+        },
+        "content": {
+          "description": "\"document\" leaves the annotation layer out; watermarks and text edits stay, they are document content.",
+          "enum": [
+            "document",
+            "document-and-markups"
+          ],
+          "type": "string"
+        },
+        "copies": {
+          "description": "Number of copies, 1 to 999 (default: what the print dialog remembered).",
+          "type": "number"
+        },
+        "orientation": {
+          "description": "Orientation of the sheet; \"auto\" follows the page, as Auto-rotate in the dialog does. Left out: what the next print would already get.",
+          "enum": [
+            "auto",
+            "portrait",
+            "landscape"
+          ],
+          "type": "string"
+        },
+        "pages": {
+          "description": "\"all\" (default), \"current\" or a range like \"1-3,5\".",
+          "type": "string"
+        },
+        "paper": {
+          "description": "Sheet size. \"printer\" = the paper that is in the printer. Left out: the paper the Page Setup of this document asks for, otherwise \"printer\".",
+          "enum": [
+            "printer",
+            "A0",
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A0L",
+            "A1L",
+            "A2L",
+            "A3L",
+            "Letter",
+            "Legal",
+            "Tabloid"
+          ],
+          "type": "string"
+        },
+        "printer": {
+          "description": "Name of the print queue, exactly as app_list_printers reports it.",
+          "type": "string"
+        },
+        "scaling": {
+          "description": "fit = fit on the sheet, shrink = only shrink when the page does not fit, actual = real size, custom-scale = the percentage in zoom.",
+          "enum": [
+            "fit",
+            "shrink",
+            "actual",
+            "custom-scale"
+          ],
+          "type": "string"
+        },
+        "zoom": {
+          "description": "Page zoom in percent, 10 to 400. Implies scaling \"custom-scale\".",
+          "type": "number"
+        }
+      },
+      "required": [
+        "printer"
+      ],
+      "type": "object"
+    },
+    "name": "app_print"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List printers"
+    },
+    "description": "List the printers the app knows, with the system default printer and, per printer, the driver, the port and whether it writes to a file instead of to paper. Reads only: it never starts a job and changes nothing. The \"Save as PDF\" target of the print dialog is not a printer — use app_print_to_pdf for that.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_list_printers"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List markup layers"
+    },
+    "description": "List the markup layers of the active document in panel order: id, name, colour, visible, printable, locked, the number of markups on it, whether it is the current layer (where new markups land) and whether it is the default layer. Markups without a layer of their own are on the default layer. Reads only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_list_layers"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Create markup layer"
+    },
+    "description": "Create a markup layer in the active document, at the end of the layer list. Names are unique (case-insensitive). Returns the new layer. The layers are saved with the document as optional content groups, so other PDF readers can switch them too.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Layer colour as #rrggbb.",
+          "type": "string"
+        },
+        "current": {
+          "description": "Make it the current layer, so new markups land on it.",
+          "type": "boolean"
+        },
+        "locked": {
+          "description": "Visible, but its markups cannot be selected or moved (default false).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name of the new layer.",
+          "type": "string"
+        },
+        "printable": {
+          "description": "Printed and exported (default true).",
+          "type": "boolean"
+        },
+        "visible": {
+          "description": "Shown on screen (default true). A hidden layer is also not printed, not exported and not selectable.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "app_create_layer"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change markup layer"
+    },
+    "description": "Change a markup layer of the active document: switch it on or off, make it printable or not, lock or unlock it, rename it, set its colour, or make it the current layer. A layer that is switched off is not drawn, not selectable, not printed and not exported; its markups come back unchanged when it is switched on. Returns the layer and what changed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Layer colour as #rrggbb.",
+          "type": "string"
+        },
+        "current": {
+          "description": "true makes it the current layer.",
+          "type": "boolean"
+        },
+        "layer": {
+          "description": "The layer, by id or name (see app_list_layers).",
+          "type": "string"
+        },
+        "locked": {
+          "description": "Lock the layer: visible, but not selectable or movable.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "New name. The default layer cannot be renamed.",
+          "type": "string"
+        },
+        "printable": {
+          "description": "Print and export the layer.",
+          "type": "boolean"
+        },
+        "visible": {
+          "description": "Switch the layer on (true) or off (false).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "layer"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_layer"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Flatten vector snippet"
+    },
+    "description": "Mark a pasted vector snippet as flattened: it stays visible but is no longer selectable, and on the next save it is drawn into the page content instead of being stored as an annotation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "flattened": {
+          "description": "false un-flattens it again (default true).",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Annotation id of the vectorSnippet.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "app_snippet_flatten"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Symbol placement scale"
+    },
+    "description": "Get or set the placement scale for symbols from the symbol palette (1 = real size, 2 = twice as large). Applies to symbols placed from now on; symbols already on the drawing are unchanged. Range 0.1 to 10. Without `scale` it returns the current value.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "scale": {
+          "description": "New placement scale.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_symbol_scale"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Fill title block"
+    },
+    "description": "Read or fill the title block fields by NAME (projectnaam, adres, opdrachtgever, status, projectnr, fase, auteur, schaal, datum_eerste, wijziging, documenttype, kenmerk — whatever the title block defines). Without `fields` it lists the fields and their current values; with `fields` it fills them, e.g. {\"projectnaam\": \"Woonhuis\", \"schaal\": \"1:50\"}. Unknown names are reported, not silently ignored.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": true,
+          "description": "Field name to new value.",
+          "type": "object"
+        },
+        "page": {
+          "description": "Limit to one page (default: all pages).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_titleblock"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Draw floor plan"
+    },
+    "description": "Draw a building floor plan with the parts related to each other, instead of loose shapes stacked on top of one another. Four actions. \"wall\" draws ONE wall run with its openings: the wall is split at every door and window, so the opening really interrupts the wall (the hatch stops at the reveal) and the frame symbol sits in the gap at the wall's own thickness and angle; it returns the wall segment ids in order. Doors and windows are drawn as real frames: timber stiles (67 x 114 mm by default) with a rebate, double glazing or a 40 mm door leaf with its swing. With layers the run is a layered (cavity) wall: start/end are its outside face, every drawn layer gets its own wall segments cut to its own opening (the outer leaf overlaps the frame, the insulation closes against it, the inner leaf keeps a reveal with clearance), the frame stands in the cavity behind the outer leaf, and runs whose outside faces meet in a corner are mitred layer by layer. \"rooms\" derives the enclosed rooms from the walls on a page - net area (inside the wall faces), perimeter and a label point that always falls inside the room - and reports wall ends that leave the contour open instead of silently filling half an area; a door opening does not break the enclosure. With place:true it puts each room on the sheet as a quiet room area (thin grey outline, no hatch or fill, drawn behind the walls and frames) plus ONE movable room tag, remembering the seed point. The room itself carries the name and the optional number (kept on save and reopen); the tag shows the room's name, number and net area. Placing a room that is already on the sheet adds no second area, only a tag if it has none. A click never selects a room (walls, frames and dimensions always win); reach it through its tag. names:[{id or x,y, name, number}] sets name and number on placed rooms; rooms and inspect report id, name, number and tagIds of placed rooms. With refresh:true it re-derives them from the walls as they are now, so a room that grew because a wall moved updates its area and its tag, and the tag keeps its place relative to the room. \"dimensions\" places a dimension chain along a wall run (pier, opening, pier, ...) plus an overall dimension, measured the way a draughtsman does: every point is ANCHORED to the wall face on the side of the chain (for a facade built from separate layers, the face of the outermost layer), and the end points sit on the outer corner of the building, also where the own segment stops short at a butt joint. The dimensions show the number only, black and thin, with extension lines that start a small gap from the wall face and run just past the dimension line, and the dimension line runs a little past the outer extension lines (sizes in paper millimetres, so they do not change with the drawing scale); the default distances grow with the drawing scale so text never runs into the lines. With refresh:true every anchored dimension on the page is recomputed the same way, and a dimension whose wall disappeared is reported as detached rather than broken. With chainOf (the id of any dimension) plus addPoints and/or removePoints an existing dimension or chain is extended or shortened in place: a point between two extension lines splits that segment, a point outside makes the chain longer, removing a point merges two segments; the overall dimension follows, the new segments copy the style of their neighbour, and a point on a wall face is anchored to that wall. A single dimension extended this way becomes a chain. \"inspect\" reads back what is on the page: walls with their length and thickness, openings with width, sill and height, the rooms it finds, open contour ends and how many anchored dimensions there are. Coordinates are page points at 100% zoom; sizes are real millimetres, so the page needs a measurement scale (app_set_measure_scale) first. Everything one call creates or changes goes into a single undo step.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "What to do.",
+          "enum": [
+            "inspect",
+            "wall",
+            "rooms",
+            "dimensions"
+          ],
+          "type": "string"
+        },
+        "addPoints": {
+          "description": "dimensions with chainOf: points {x, y} in page points to add as extension lines, between or outside the existing ones.",
+          "type": "array"
+        },
+        "chainOf": {
+          "description": "dimensions: the id of a dimension (measureDistance) whose chain you want to extend or shorten, with addPoints and/or removePoints.",
+          "type": "string"
+        },
+        "end": {
+          "additionalProperties": true,
+          "description": "wall: end of the run as {x, y} in page points.",
+          "type": "object"
+        },
+        "insideSide": {
+          "description": "wall with layers: which side of start->end is inside (default right; a clockwise outline has the inside on the right).",
+          "enum": [
+            "left",
+            "right"
+          ],
+          "type": "string"
+        },
+        "insulation": {
+          "description": "wall: insulation sub-material when material is isolatie (steenwol, glaswol, pir, eps, kooltherm, pur).",
+          "type": "string"
+        },
+        "joinEnd": {
+          "description": "wall: false = the end of the run never joins another wall (see joinStart; default true).",
+          "type": "boolean"
+        },
+        "joinStart": {
+          "description": "wall: false = the start of the run never joins another wall: no mitre, no T, no trim; the end keeps a plain butt cap exactly where it is drawn (default true). Otherwise walls that touch are joined automatically: coincident end points are mitred; ends that just pass or fall short of a wall of the same material are trimmed to a closed corner; an end that stops on a continuing wall (on its centre line, on its face, just short of it or inside it) forms a T, where the same material flows into it and another material butts against its face with a seam. Later: app_update_annotation props noJoinStart / noJoinEnd.",
+          "type": "boolean"
+        },
+        "layers": {
+          "description": "wall: build-up of a layered (cavity) wall, from outside to inside, each {thicknessMm, material, insulation}; material none is an air cavity (not drawn). The run's start/end are then the outside face, thicknessMm and material of the run are ignored. Answer: layers[i].wallIds per drawn layer, per opening frame and layerOpeningsMm, corners = layers mitred at start/end.",
+          "type": "array"
+        },
+        "material": {
+          "description": "wall: hatch material id, e.g. nen47-metselwerk-baksteen, nen47-metselwerk-kunststeen, nen47-beton-gewapend, isolatie, none.",
+          "type": "string"
+        },
+        "maxOpeningMm": {
+          "description": "rooms/inspect: widest gap between two aligned wall ends that still counts as an opening rather than a hole in the contour (default 3000).",
+          "type": "number"
+        },
+        "minPierMm": {
+          "description": "wall: smallest piece of wall that must remain beside an opening (default 0).",
+          "type": "number"
+        },
+        "names": {
+          "description": "rooms: set the name and/or number of placed rooms, each {id (the room area) or x, y (a point inside), name, number}.",
+          "type": "array"
+        },
+        "offsetMm": {
+          "description": "dimensions: distance from the wall face to the chain, in mm (default 500 at 1:50; larger at smaller scales, so the text fits).",
+          "type": "number"
+        },
+        "openings": {
+          "description": "wall: the doors and windows in this run. Each: kind (door|window), widthMm (frame size, outside dimensions; in a single wall this is also the opening), alongMm (centre, measured from start along the wall), sillMm, heightMm, swing (left|right: the hinge side seen from the side the door opens away from), openSide (left|right of the wall direction) or openTo ({x, y}: a point in the room the door opens into; for a window its inside), windowType (fixed|turn|pivot|tilt), showSwing (window: true also draws the opening direction of a turn sash as a dashed quarter circle; default false, because in a plan it reads as a door). Frame, all optional: stileWidthMm (default 67), frameDepthMm (default 114, never deeper than the wall), framePositionMm (outside face of the wall to outside face of the frame; default: behind the outer leaf in a layered wall, centred in a single wall), overlapMm (outer leaf over the frame; default 20 in a layered wall), clearanceMm (reveal of the inner leaf; default 10 in a layered wall), leafThicknessMm (door leaf, default 40).",
+          "type": "array"
+        },
+        "page": {
+          "description": "1-based page (default: the current page).",
+          "type": "number"
+        },
+        "place": {
+          "description": "rooms: also put the rooms on the sheet instead of only reporting them.",
+          "type": "boolean"
+        },
+        "refresh": {
+          "description": "rooms/dimensions: recompute what is already on the sheet from the walls as they are now.",
+          "type": "boolean"
+        },
+        "removePoints": {
+          "description": "dimensions with chainOf: points {x, y} near the extension lines to remove (the measured point or anywhere along the extension line).",
+          "type": "array"
+        },
+        "seeds": {
+          "description": "rooms: points inside the rooms you want, each {x, y, name, number}; number is optional. Without seeds every room found is reported.",
+          "type": "array"
+        },
+        "showUnit": {
+          "description": "dimensions: also show the unit behind the number (default false: the number only, as on a building drawing).",
+          "type": "boolean"
+        },
+        "side": {
+          "description": "dimensions: which side of the run the chain goes, seen along its direction (default right). For an outline drawn clockwise on the sheet, left is outside.",
+          "enum": [
+            "left",
+            "right"
+          ],
+          "type": "string"
+        },
+        "start": {
+          "additionalProperties": true,
+          "description": "wall: start of the run as {x, y} in page points (the wall centre line; with layers the outside face of the wall).",
+          "type": "object"
+        },
+        "thicknessMm": {
+          "description": "wall: real wall thickness in mm (default 100).",
+          "type": "number"
+        },
+        "tolerance": {
+          "description": "dimensions with removePoints: how close (page points) a point must be to an extension line (default 6).",
+          "type": "number"
+        },
+        "totalOffsetMm": {
+          "description": "dimensions: distance from the wall face to the overall dimension, in mm (default offsetMm plus one line of text, at least 350).",
+          "type": "number"
+        },
+        "wallId": {
+          "description": "dimensions: a single wall annotation to dimension.",
+          "type": "string"
+        },
+        "wallIds": {
+          "description": "dimensions: the wall segments of one run, in order along the run (as returned by action \"wall\").",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "app_floorplan"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Draw facade element"
+    },
+    "description": "Draw and edit a facade element in a floor plan: a curtain wall or a window frame, as ONE object along a line with an outer frame, mullions on the field boundaries and a panel in every field. Everything is at real size (mm) from the measurement scale, so set one first with app_set_measure_scale. Actions: \"create\" places a new element, either loose along start/end (page points), or IN an existing wall (wallId plus fromMm or alongMm and lengthMm): the wall is then cut over the length of the element, like a door or window opening, and the element sits in the gap; offsetMm moves it across the wall build-up (+ = right of the wall direction). The division is fields (number of equal fields, centre-to-centre) or fieldWidthsMm (centre-to-centre widths that add up to the length); without either it divides itself into fields of about 1200 mm (curtain wall) or 900 mm (window frame). \"get\" returns one element (id) with its mullions and fields, or without id a summary of every element on the page. Edits (all need id): \"addMullion\" splits a field at atMm (from the start) or in the middle of field; \"removeMullion\" merges the two fields beside mullion (index) or the mullion nearest atMm; \"moveMullion\" moves it to toMm or by byMm; \"setMullionType\" swaps the type of mullion (index 0 and the last index are the outer frame; without mullion or atMm all intermediate mullions); \"setPanel\" swaps the panel of field, fieldIndexes or the field at atMm; \"divide\" divides again into fields or fieldWidthsMm. Mullions are numbered from 0 (frame at the start) to n (frame at the end); field i lies between mullion i and i+1. Fields never become narrower than 100 mm clear and the overall length stays the same, except for divide with fieldWidthsMm. Mullion types: curtain wall alu-50x150 (default), alu-50x200, alu-65x250; window frame hout-67x114 (default), hout-67x139, hout-90x114 (width x depth in mm). Panels: curtain wall glass, solid, door, open; window frame glass, turnSash, door, solid. A panel is a name or {type, hinge: start|end, swing: inside|outside} for a door or turn sash. Every call is a single undo step and returns the element as it is now.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "What to do.",
+          "enum": [
+            "create",
+            "get",
+            "addMullion",
+            "removeMullion",
+            "moveMullion",
+            "setMullionType",
+            "setPanel",
+            "divide"
+          ],
+          "type": "string"
+        },
+        "alongMm": {
+          "description": "create in a wall: distance from the wall start to the MIDDLE of the element, in mm (alternative to fromMm; without both the element is centred).",
+          "type": "number"
+        },
+        "atMm": {
+          "description": "Position along the element from its start, in mm: where addMullion splits, which mullion (nearest) or field setPanel/removeMullion/moveMullion/setMullionType means.",
+          "type": "number"
+        },
+        "byMm": {
+          "description": "moveMullion: shift in mm (+ = towards the end).",
+          "type": "number"
+        },
+        "end": {
+          "additionalProperties": true,
+          "description": "create (loose): end of the element as {x, y} in page points.",
+          "type": "object"
+        },
+        "field": {
+          "description": "addMullion: split this field in the middle; setPanel: the field index (0 = at the start).",
+          "type": "number"
+        },
+        "fieldIndexes": {
+          "description": "setPanel: several field indexes at once.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "fieldWidthsMm": {
+          "description": "create/divide: centre-to-centre field widths in mm, from the start.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "fields": {
+          "description": "create/divide: number of equal fields.",
+          "type": "number"
+        },
+        "frameType": {
+          "description": "create: type of the outer frame (both ends).",
+          "type": "string"
+        },
+        "fromMm": {
+          "description": "create in a wall: distance from the wall start to the START of the element, in mm.",
+          "type": "number"
+        },
+        "id": {
+          "description": "The facade element to read or edit (as returned by create or get).",
+          "type": "string"
+        },
+        "insideSide": {
+          "description": "create: which side of the drawing direction is inside (doors swing inside by default; default right).",
+          "enum": [
+            "right",
+            "left"
+          ],
+          "type": "string"
+        },
+        "lengthMm": {
+          "description": "create in a wall: length of the element = width of the gap, in mm (or give fieldWidthsMm).",
+          "type": "number"
+        },
+        "mullion": {
+          "description": "removeMullion/moveMullion/setMullionType: mullion index (0 = frame at the start).",
+          "type": "number"
+        },
+        "mullionType": {
+          "description": "create/addMullion/setMullionType: mullion type id, e.g. alu-50x150 or hout-67x114.",
+          "type": "string"
+        },
+        "offsetMm": {
+          "description": "create in a wall: position across the wall build-up, mm from the wall centre line, + = right of the wall direction (default 0).",
+          "type": "number"
+        },
+        "page": {
+          "description": "1-based page (default: the current page).",
+          "type": "number"
+        },
+        "panel": {
+          "description": "create: panel for every field not given in panels; setPanel: the new panel. A name (glass, solid, door, open, turnSash) or {type, hinge: start|end, swing: inside|outside}; an object without type only changes hinge/swing.",
+          "type": [
+            "string",
+            "object"
+          ]
+        },
+        "panels": {
+          "description": "create: the panel of each field, from the start (a name or {type, hinge, swing}).",
+          "type": "array"
+        },
+        "preset": {
+          "description": "create: which kind of element (default curtainWall).",
+          "enum": [
+            "curtainWall",
+            "windowFrame"
+          ],
+          "type": "string"
+        },
+        "start": {
+          "additionalProperties": true,
+          "description": "create (loose): start of the element as {x, y} in page points.",
+          "type": "object"
+        },
+        "toMm": {
+          "description": "moveMullion: new position from the start, in mm.",
+          "type": "number"
+        },
+        "wallId": {
+          "description": "create: put the element in this wall annotation; the wall is cut over the element's length.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "app_facade_element"
+  }
+]

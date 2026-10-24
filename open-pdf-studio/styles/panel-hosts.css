@@ -1,0 +1,344 @@
+/* plan-review panel hosts (docs/WORKSPACE-SPEC.md §1.4, §6, WP2):
+   36 px access bars with 20 px icons, a 36 px panel header "Title ▾",
+   a 5 px inner edge that resizes on drag and collapses on click, the bottom
+   host with its own access bar, and the 36 px vertical toolbar on the right.
+   Colours come from the Oculith tokens via the --theme-* mapping. */
+
+/* --- Hosts ------------------------------------------------------------- */
+.ws-host {
+  display: flex;
+  flex-shrink: 0;
+  min-height: 0;
+  background: var(--theme-panel-bg);
+  cursor: default;
+  user-select: none;
+}
+.ws-host-right.empty { display: none; }
+.ws-host-panel-wrap { display: flex; min-width: 0; min-height: 0; }
+.ws-host-panel-wrap[hidden] { display: none !important; }
+.ws-host-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--theme-panel-bg);
+}
+.ws-host-left .ws-host-panel { border-right: 1px solid var(--theme-panel-border); }
+.ws-host-right .ws-host-panel { border-left: 1px solid var(--theme-panel-border); }
+
+.ws-host-bottom {
+  flex-direction: column;
+  border-top: 1px solid var(--theme-border);
+  position: relative;
+  z-index: 40;
+}
+.ws-host-row { display: flex; flex: 1; min-height: 0; }
+.ws-host-bottom .ws-host-panel-wrap { flex: 1; }
+.ws-host-bottom .ws-host-panel { flex: 1; max-height: max(140px, calc(100vh - 330px)); }
+
+/* --- Access bars ------------------------------------------------------- */
+.ws-access-bar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: var(--theme-panel-tab-bg);
+}
+.ws-access-bar::-webkit-scrollbar { display: none; }
+.ws-access-left { border-right: 1px solid var(--theme-panel-border); }
+.ws-access-right { border-left: 1px solid var(--theme-panel-border); }
+.ws-access-bottom { border-right: 1px solid var(--theme-panel-border); }
+.ws-access-tab,
+.ws-access-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--theme-panel-tab-text);
+  cursor: pointer;
+}
+.ws-access-tab svg,
+.ws-access-toggle svg { width: 20px; height: 20px; stroke-width: 1.5; }
+.ws-access-tab:hover,
+.ws-access-toggle:hover {
+  background: var(--theme-panel-tab-hover);
+  color: var(--theme-panel-tab-hover-text);
+}
+.ws-access-tab.active {
+  background: color-mix(in srgb, var(--ox-accent) 24%, transparent);
+  color: var(--ox-accent);
+  box-shadow: inset 2px 0 0 var(--ox-accent);
+}
+.ws-access-right .ws-access-tab.active { box-shadow: inset -2px 0 0 var(--ox-accent); }
+.ws-access-tab:focus-visible,
+.ws-access-toggle:focus-visible { outline: 2px solid var(--theme-focus); outline-offset: -2px; }
+.ws-host-bottom.collapsed .ws-access-bottom {
+  flex: 0 0 36px;
+  flex-direction: row;
+  width: auto;
+  height: 36px;
+  border-right: 0;
+}
+
+/* --- Edges: drag = resize, click = collapse/expand ----------------------- */
+.ws-host-edge {
+  flex: 0 0 5px;
+  background: var(--theme-panel-resize);
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.ws-host-edge-bottom { flex-basis: 5px; height: 5px; cursor: row-resize; }
+.ws-host-edge:hover,
+.ws-host-edge.dragging,
+.ws-host-edge:focus-visible {
+  background: color-mix(in srgb, var(--ox-accent) 55%, var(--theme-panel-resize));
+  outline: none;
+}
+
+/* --- Panels: header + body ----------------------------------------------- */
+.ws-panel-slot { display: none; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.ws-panel-slot.active { display: flex; }
+.ws-panel-header {
+  flex: 0 0 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+}
+.ws-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--theme-text);
+  font-size: var(--ox-fs-md);
+  font-weight: 680;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ws-panel-title:hover { background: var(--theme-hover); }
+.ws-panel-title-chevron { display: flex; color: var(--theme-text-secondary); }
+.ws-panel-title-chevron svg { width: 14px; height: 14px; }
+.ws-panel-header-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.ws-panel-action {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--theme-panel-tab-text);
+  cursor: pointer;
+}
+.ws-panel-action svg { width: 16px; height: 16px; }
+.ws-panel-action:hover { background: var(--theme-hover); color: var(--theme-text); }
+
+.ws-panel-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+/* The existing panel bodies keep their markup; in a host they always show
+   (the host shows only the active slot) and lose their old title row. */
+.ws-panel-body > .left-panel-content {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.ws-panel-body > .left-panel-content > .left-panel-header:not(:has(> :nth-child(2))) { display: none; }
+.ws-panel-body > .left-panel-content > .left-panel-header > span:first-child { display: none; }
+.ws-links-panels { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.ws-links-panels > .left-panel-content { display: flex !important; flex-direction: column; flex: 1 1 50%; min-height: 0; }
+.ws-panel-body > .sp-panel { width: 100%; flex: 1; min-height: 0; }
+.ws-panel-body .properties-panel,
+.ws-panel-body .properties-panel-outer { width: 100%; min-width: 0; flex: 1; }
+.ws-panel-body > .element-visibility-panel { width: 100%; flex: 1; border-right: 0; }
+.ws-panel-body .ev-panel-header .ev-panel-title { display: none; }
+.ws-panel-body > .annotation-layers-panel { flex: 1; min-height: 0; overflow: auto; }
+
+.sp-hosted-floating {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 12px;
+  color: var(--theme-text-secondary);
+  font-size: var(--ox-fs-sm);
+}
+.sp-hosted-floating p { margin: 0; }
+.sp-hosted-floating button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs);
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  cursor: pointer;
+}
+
+/* Footer size slider (Thumbnails, Tool Chest). */
+.ws-panel-footer {
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-top: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-bg);
+  color: var(--theme-text-secondary);
+}
+.ws-panel-footer input[type='range'] { flex: 1; min-width: 0; accent-color: var(--ox-accent); }
+.ws-panel-footer-icon { display: flex; }
+.ws-panel-footer-icon svg { width: 14px; height: 14px; }
+.ws-panel-footer-icon.small svg { width: 11px; height: 11px; }
+.ws-panel-slot[data-panel='thumbnails'] .thumbnail-pages,
+.ws-panel-slot[data-panel='toolChest'] .sp-grid { zoom: var(--ws-panel-zoom, 1); }
+
+/* Markups List in the bottom host: its header row is its own PanelHeader
+   (search, filter, export; see oculith-workspace.css). */
+.ws-host-bottom .ws-panel-slot[data-panel='markupsList'] { position: relative; }
+
+/* --- Search panel ---------------------------------------------------------- */
+.ws-search-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ws-search-form { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--theme-panel-border); }
+.ws-search-form input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-input-border);
+  border-radius: var(--ox-r-xs);
+  background: var(--theme-input-bg);
+  color: var(--theme-text);
+}
+.ws-search-form button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-xs);
+  background: var(--theme-hover);
+  color: var(--theme-text);
+  cursor: pointer;
+}
+.ws-search-status { padding: 6px 10px; color: var(--theme-text-secondary); }
+.ws-search-results { flex: 1; min-height: 0; overflow-y: auto; }
+.ws-search-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font-size: var(--ox-fs-sm);
+  cursor: pointer;
+}
+.ws-search-row:hover { background: var(--theme-hover); }
+.ws-search-row.current { background: color-mix(in srgb, var(--ox-accent) 16%, transparent); }
+.ws-search-count { color: var(--theme-text-secondary); }
+
+/* --- Popup menu (tab context menu and panel ▾ menu) ------------------------ */
+.ws-menu-layer { position: fixed; z-index: 10050; }
+.ws-menu {
+  position: absolute;
+  min-width: 200px;
+  padding: 4px 0;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--ox-r-sm);
+  background: var(--theme-app-menu-bg);
+  box-shadow: var(--ox-shadow-2);
+  color: var(--theme-text);
+  font-size: var(--ox-fs-sm);
+}
+.ws-menu-layer > .ws-menu { position: relative; }
+.ws-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ws-menu-item:hover { background: var(--theme-app-menu-item-hover); color: var(--theme-app-menu-item-hover-text); }
+.ws-menu-item.disabled { opacity: 0.45; cursor: default; }
+.ws-menu-icon { display: flex; width: 16px; height: 16px; flex: 0 0 16px; }
+.ws-menu-icon svg { width: 16px; height: 16px; }
+.ws-menu-check { width: 12px; flex: 0 0 12px; color: var(--ox-accent); }
+.ws-menu-label { flex: 1; }
+.ws-menu-arrow { margin-left: 12px; color: var(--theme-text-secondary); }
+.ws-menu-sep { height: 1px; margin: 4px 0; background: var(--theme-border); }
+
+/* --- Right vertical toolbar (Markup | Draw | Measure) ---------------------- */
+.ws-vtoolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--theme-panel-border);
+  background: var(--theme-panel-tab-bg);
+  user-select: none;
+}
+.ws-vtoolbar-grip {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 100%;
+  color: var(--theme-text-secondary);
+  cursor: default;
+}
+.ws-vtoolbar-grip svg { width: 14px; height: 14px; }
+/* Buttons: components/Toolbar.jsx (.ox-toolbar, styles/toolbar.css), packed
+   tight so the overflow fit (verticalToolbarItems.js) is 34 px per button
+   and 9 px per separator. */
+.ws-vtoolbar .ox-toolbar { gap: 0; padding: 0; }
+.ws-vtoolbar .ox-toolbar-btn { color: var(--theme-ribbon-icon-stroke); }
+.ws-vtoolbar .ox-toolbar-btn:hover:not(:disabled) { background: var(--theme-hover); }
+.ws-vtoolbar .ox-toolbar-btn:disabled { opacity: 0.45; }
+.ws-vtoolbar .ox-toolbar-vertical .ox-toolbar-sep { flex: 0 0 1px; width: 22px; margin: 4px 0; background: var(--theme-border); }
+.ws-vtoolbar-more {
+  flex: 0 0 24px;
+  width: 34px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: default;
+}
+.ws-vtoolbar-more svg { width: 16px; height: 16px; }
+.ws-vtoolbar-more:hover { background: var(--theme-hover); }

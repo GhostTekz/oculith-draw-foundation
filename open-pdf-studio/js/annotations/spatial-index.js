@@ -1,0 +1,478 @@
+import { buildStavenreeks } from './stavenreeks.js';
+import { stavenreeksPxPerMm } from './stavenreeks-scale.js';
+import { betonbalkHalfWidthPx } from './betonbalk-scale.js';
+import { rotatedRectAabb } from '../utils/math.js';
+import { lineStyleBoundsMargin } from './rendering/line-style-draw.js';
+
+const CELL_SIZE = 200; // pixels per grid cell
+
+/**
+ * Grid-based spatial index for fast annotation lookup by viewport region.
+ *
+ * Divides 2D space into a uniform grid of CELL_SIZE x CELL_SIZE cells.
+ * Each annotation is registered in every cell its bounding box overlaps.
+ * Viewport queries collect all annotation IDs from the cells that overlap
+ * the query rectangle, providing O(visible-cells) lookup instead of O(n).
+ */
+class SpatialIndex {
+  constructor() {
+    /** @type {Map<string, Set<string>>} 'col_row_page' -> Set of annotation IDs */
+    this._cells = new Map();
+    /** @type {Map<string, {page: number, minCol: number, maxCol: number, minRow: number, maxRow: number}>} */
+    this._annBounds = new Map();
+    this._verouderd = true;
+  }
+
+  /**
+   * Add or update an annotation in the index.
+   * If the annotation already exists, it is removed first and re-inserted
+   * with its current geometry.
+   *
+   * @param {object} annotation - annotation object with at least { id, page } and geometry fields
+   */
+  update(annotation) {
+    if (!annotation || !annotation.id) return;
+
+    // Remove old entry if present
+    this.remove(annotation.id);
+
+    if (!annotation.page) return;
+
+    const bounds = this._getBounds(annotation);
+    if (!bounds) return;
+
+    const minCol = Math.floor(bounds.x / CELL_SIZE);
+    const minRow = Math.floor(bounds.y / CELL_SIZE);
+    const maxCol = Math.floor((bounds.x + bounds.width) / CELL_SIZE);
+    const maxRow = Math.floor((bounds.y + bounds.height) / CELL_SIZE);
+
+    this._annBounds.set(annotation.id, {
+      page: annotation.page,
+      minCol,
+      maxCol,
+      minRow,
+      maxRow,
+    });
+
+    for (let c = minCol; c <= maxCol; c++) {
+      for (let r = minRow; r <= maxRow; r++) {
+        const key = `${c}_${r}_${annotation.page}`;
+        let cell = this._cells.get(key);
+        if (!cell) {
+          cell = new Set();
+          this._cells.set(key, cell);
+        }
+        cell.add(annotation.id);
+      }
+    }
+  }
+
+  /**
+   * Remove an annotation from the spatial index.
+   *
+   * @param {string} id - annotation ID
+   */
+  remove(id) {
+    const entry = this._annBounds.get(id);
+    if (!entry) return;
+
+    for (let c = entry.minCol; c <= entry.maxCol; c++) {
+      for (let r = entry.minRow; r <= entry.maxRow; r++) {
+        const key = `${c}_${r}_${entry.page}`;
+        const cell = this._cells.get(key);
+        if (cell) {
+          cell.delete(id);
+          // Clean up empty cells to avoid memory leaks
+          if (cell.size === 0) {
+            this._cells.delete(key);
+          }
+        }
+      }
+    }
+
+    this._annBounds.delete(id);
+  }
+
+  /**
+   * Query all annotation IDs whose bounding boxes might overlap with the
+   * given viewport rectangle on a specific page.
+   *
+   * Note: this returns a superset (candidates). The caller should do a fine
+   * bounding-box check if exact overlap is needed.
+   *
+   * @param {number} page - 1-based page number
+   * @param {number} viewportX - left edge of the query rectangle (CSS pixels)
+   * @param {number} viewportY - top edge of the query rectangle (CSS pixels)
+   * @param {number} viewportW - width of the query rectangle
+   * @param {number} viewportH - height of the query rectangle
+   * @returns {Set<string>} set of annotation IDs that may overlap
+   */
+  query(page, viewportX, viewportY, viewportW, viewportH) {
+    const result = new Set();
+
+    if (!page || viewportW <= 0 || viewportH <= 0) return result;
+
+    const minCol = Math.floor(viewportX / CELL_SIZE);
+    const minRow = Math.floor(viewportY / CELL_SIZE);
+    const maxCol = Math.floor((viewportX + viewportW) / CELL_SIZE);
+    const maxRow = Math.floor((viewportY + viewportH) / CELL_SIZE);
+
+    for (let c = minCol; c <= maxCol; c++) {
+      for (let r = minRow; r <= maxRow; r++) {
+        const key = `${c}_${r}_${page}`;
+        const cell = this._cells.get(key);
+        if (cell) {
+          for (const id of cell) {
+            result.add(id);
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Query annotations and return only those that truly overlap with the
+   * given viewport rectangle (not just cell-level candidates).
+   *
+   * @param {number} page - 1-based page number
+   * @param {number} vx - viewport X
+   * @param {number} vy - viewport Y
+   * @param {number} vw - viewport width
+   * @param {number} vh - viewport height
+   * @param {Array<object>} annotations - full annotation array (to look up bounds)
+   * @returns {Array<object>} annotations that truly overlap the viewport
+   */
+  queryExact(page, vx, vy, vw, vh, annotations) {
+    const candidateIds = this.query(page, vx, vy, vw, vh);
+    if (candidateIds.size === 0) return [];
+
+    const annMap = new Map();
+    for (const ann of annotations) {
+      if (candidateIds.has(ann.id)) {
+        annMap.set(ann.id, ann);
+      }
+    }
+
+    const results = [];
+    for (const id of candidateIds) {
+      const ann = annMap.get(id);
+      if (!ann) continue;
+      const bounds = this._getBounds(ann);
+      if (!bounds) continue;
+
+      // AABB overlap test
+      if (
+        bounds.x < vx + vw &&
+        bounds.x + bounds.width > vx &&
+        bounds.y < vy + vh &&
+        bounds.y + bounds.height > vy
+      ) {
+        results.push(ann);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Rebuild the entire index from an array of annotations.
+   * Clears the existing index first.
+   *
+   * @param {Array<object>} annotations
+   */
+  rebuild(annotations) {
+    this.clear();
+    this._verouderd = false;
+    if (!annotations) return;
+    for (const ann of annotations) {
+      this.update(ann);
+    }
+  }
+
+  /**
+   * Markeer de index als verouderd zonder hem meteen te herbouwen. Een
+   * herbouw is O(n) en bouwt voor parametrische figuren de hele geometrie
+   * opnieuw op; dat hoort niet in de tekenlus thuis als niemand de index
+   * op dat moment bevraagt.
+   */
+  markStale() {
+    this._verouderd = true;
+  }
+
+  /** Herbouw alleen als er sinds de laatste herbouw iets is gewijzigd. */
+  zorgVoorActueel(annotations) {
+    if (this._verouderd) this.rebuild(annotations);
+  }
+
+  get isVerouderd() {
+    return !!this._verouderd;
+  }
+
+  /**
+   * Clear all data from the spatial index.
+   */
+  clear() {
+    this._cells.clear();
+    this._annBounds.clear();
+  }
+
+  /**
+   * Get the number of indexed annotations.
+   * @returns {number}
+   */
+  get size() {
+    return this._annBounds.size;
+  }
+
+  /**
+   * Check whether an annotation is in the index.
+   * @param {string} id
+   * @returns {boolean}
+   */
+  has(id) {
+    return this._annBounds.has(id);
+  }
+
+  /**
+   * Compute an axis-aligned bounding box for an annotation.
+   * Handles all annotation geometry variants:
+   * - Rect-based: x, y, width, height (box, circle, textbox, callout, image, stamp, redaction, comment, scaleBar)
+   * - Line-based: startX, startY, endX, endY (line, arrow, measureDistance)
+   * - Path-based: path[] (draw/freehand)
+   * - Points-based: points[] (polygon, polyline, cloud, cloudPolyline, measureArea, measurePerimeter)
+   * - Point-based: x, y (comment without width/height, text annotations)
+   * - Angle measurement: point1, vertex, point2
+   * - Highlight: quadPoints or rect fallback
+   *
+   * @param {object} annotation
+   * @returns {{x: number, y: number, width: number, height: number}|null}
+   */
+  _getBounds(annotation) {
+    return annotationBounds(annotation);
+  }
+
+  /**
+   * Compute bounding box from an array of {x, y} points with optional line-width padding.
+   */
+  _boundsFromPoints(points, lineWidth) {
+    return boundsFromPoints(points, lineWidth);
+  }
+}
+
+/**
+ * Axis-aligned bounding box van een annotatie — de enige plek waar die
+ * geometrie wordt afgeleid. Wordt gebruikt door de spatial index EN door de
+ * viewport-culling in de tekenlus, zodat beide dezelfde definitie hanteren.
+ *
+ * opties.goedkoop = true levert null voor typen waarvan de omhullende alleen
+ * met een volledige geometrie-opbouw te bepalen is (stavenreeks, betonbalk).
+ * De aanroeper leest dat als "kan ik niet goedkoop bepalen" en slaat het
+ * wegfilteren over — beter een keer te veel tekenen dan per beeldframe een
+ * parametrische figuur opnieuw opbouwen.
+ *
+ * @param {object} annotation
+ * @param {{goedkoop?: boolean}} [opties]
+ * @returns {{x: number, y: number, width: number, height: number}|null}
+ */
+// Een eigen lijnstijl (line-styles.js) reikt met evenwijdige lijnen, tekst en
+// symbolen buiten de hartlijn: de omhullende groeit met die marge.
+export function annotationBounds(annotation, opties) {
+    const b = _annotationBounds(annotation, opties);
+    if (!b || !annotation?.lineStyleId) return b;
+    const m = lineStyleBoundsMargin(annotation);
+    if (!m) return b;
+    return { x: b.x - m, y: b.y - m, width: b.width + 2 * m, height: b.height + 2 * m };
+}
+
+function _annotationBounds(annotation, opties) {
+    if (!annotation) return null;
+    const goedkoop = !!(opties && opties.goedkoop);
+    const type = annotation.type;
+
+    // Stavenreeks: the legs, dots and label extend well beyond the series
+    // line, so the generic line-based branch below (4 px padding) would make
+    // them unselectable. Use the element's full AABB instead.
+    // Figuren waarvan het getekende lijf een band rond een hartlijn is:
+    // hun werkelijke omvang volgt pas uit een (dure) schaalbewuste opbouw,
+    // en de generieke lijn-tak eronder zou een veel te krappe omhullende
+    // geven. In goedkope modus dus: geen antwoord, gewoon tekenen.
+    if (goedkoop && (type === 'stavenreeks' || type === 'betonbalk' || type === 'wall')) return null;
+
+    if (type === 'stavenreeks') {
+      const { aabb } = buildStavenreeks(annotation, { pxPerMm: stavenreeksPxPerMm(annotation) });
+      const pad = Math.max(annotation.lineWidth || 2, 4);
+      return {
+        x: aabb.x - pad,
+        y: aabb.y - pad,
+        width: aabb.width + pad * 2,
+        height: aabb.height + pad * 2,
+      };
+    }
+
+    // Betonbalk: de band steekt een halve (schaalbewuste) balkbreedte buiten
+    // start/eind uit — de generieke lijn-branch (4 px marge) zou het balklijf
+    // onaanklikbaar maken. Een eventuele tag krijgt een tekstregel-marge.
+    if (type === 'betonbalk'
+        && [annotation.startX, annotation.startY, annotation.endX, annotation.endY].every(Number.isFinite)) {
+      const bbHalf = betonbalkHalfWidthPx(annotation)
+        + (annotation.tagTonen ? (annotation.tagFontSize || 12) * 1.6 : 0)
+        + Math.max(annotation.lineWidth || 1, 2);
+      return {
+        x: Math.min(annotation.startX, annotation.endX) - bbHalf,
+        y: Math.min(annotation.startY, annotation.endY) - bbHalf,
+        width: Math.abs(annotation.endX - annotation.startX) + bbHalf * 2,
+        height: Math.abs(annotation.endY - annotation.startY) + bbHalf * 2,
+      };
+    }
+
+    // Vlak-annotaties met extra ringen: een tweede deel kan naast de
+    // buitenring liggen en valt dan buiten points[] én buiten de opgeslagen
+    // x/y/width/height. Zonder deze tak viel zo'n deel buiten de omhullende,
+    // en liet de viewport-culling het weg (GitHub #457).
+    if ((type === 'measureArea' || type === 'filledArea')
+        && Array.isArray(annotation.points) && annotation.points.length > 0
+        && Array.isArray(annotation.holes) && annotation.holes.length > 0) {
+      const alle = annotation.points.slice();
+      for (const ring of annotation.holes) if (Array.isArray(ring)) alle.push(...ring);
+      return boundsFromPoints(alle, annotation.lineWidth);
+    }
+
+    // Rect-based annotations (most common)
+    if (
+      annotation.x != null &&
+      annotation.y != null &&
+      annotation.width != null &&
+      annotation.height != null &&
+      annotation.width > 0 &&
+      annotation.height > 0
+    ) {
+      const basis = annotation.rotation
+        ? rotatedRectAabb(annotation)
+        : { x: annotation.x, y: annotation.y, width: annotation.width, height: annotation.height };
+      // Aanhaallijnen (tekstvak/aanhaalvak) steken buiten het tekstvak uit;
+      // zonder die punten zou de omhullende een deel van het object missen.
+      return metAanhaallijnen(basis, annotation);
+    }
+
+    // Line / arrow / measureDistance: startX, startY, endX, endY
+    if (annotation.startX != null && annotation.startY != null &&
+        annotation.endX != null && annotation.endY != null) {
+      const minX = Math.min(annotation.startX, annotation.endX);
+      const minY = Math.min(annotation.startY, annotation.endY);
+      const maxX = Math.max(annotation.startX, annotation.endX);
+      const maxY = Math.max(annotation.startY, annotation.endY);
+      // Add a small padding so zero-area lines are still selectable
+      const pad = Math.max(annotation.lineWidth || 2, 4);
+      return {
+        x: minX - pad,
+        y: minY - pad,
+        width: (maxX - minX) + pad * 2,
+        height: (maxY - minY) + pad * 2,
+      };
+    }
+
+    // Freehand / draw: path array of {x, y}
+    if (Array.isArray(annotation.path) && annotation.path.length > 0) {
+      return boundsFromPoints(annotation.path, annotation.lineWidth);
+    }
+
+    // Polygon / polyline / cloud / cloudPolyline / measureArea / measurePerimeter: points array
+    if (Array.isArray(annotation.points) && annotation.points.length > 0) {
+      return boundsFromPoints(annotation.points, annotation.lineWidth);
+    }
+
+    // Angle measurement: point1, vertex, point2
+    if (annotation.point1 && annotation.vertex && annotation.point2) {
+      const pts = [annotation.point1, annotation.vertex, annotation.point2];
+      return boundsFromPoints(pts, annotation.lineWidth);
+    }
+
+    // Text highlight / strikethrough / underline with quadPoints
+    if (Array.isArray(annotation.quadPoints) && annotation.quadPoints.length > 0) {
+      const allPts = [];
+      for (const quad of annotation.quadPoints) {
+        if (Array.isArray(quad)) {
+          for (const pt of quad) {
+            if (pt && pt.x != null && pt.y != null) allPts.push(pt);
+          }
+        }
+      }
+      if (allPts.length > 0) {
+        return boundsFromPoints(allPts, 0);
+      }
+    }
+
+    // Point-based annotations (comment without dimensions, text annotation)
+    if (annotation.x != null && annotation.y != null) {
+      // Use a default size for point-like annotations
+      const w = annotation.width || 24;
+      const h = annotation.height || 24;
+      return {
+        x: annotation.x,
+        y: annotation.y,
+        width: w,
+        height: h,
+      };
+    }
+
+    // Could not determine bounds
+    return null;
+  }
+
+/**
+ * Bounding box uit een reeks {x, y}-punten, met een marge voor de lijndikte.
+ *
+ * @param {Array<{x: number, y: number}>} points
+ * @param {number} [lineWidth=0]
+ * @returns {{x: number, y: number, width: number, height: number}|null}
+ */
+export function boundsFromPoints(points, lineWidth) {
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    for (const pt of points) {
+      if (pt == null || pt.x == null || pt.y == null) continue;
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+
+    if (minX === Infinity) return null;
+
+    const pad = Math.max((lineWidth || 0) / 2, 2);
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: (maxX - minX) + pad * 2,
+      height: (maxY - minY) + pad * 2,
+    };
+}
+
+// Rekt een omhullende op tot hij ook de knik- en pijlpunten van eventuele
+// aanhaallijnen omvat.
+function metAanhaallijnen(basis, annotation) {
+  const leaders = annotation.leaders;
+  if (!Array.isArray(leaders) || leaders.length === 0) return basis;
+  let left = basis.x, top = basis.y;
+  let right = basis.x + basis.width, bottom = basis.y + basis.height;
+  for (const l of leaders) {
+    if (!l) continue;
+    for (const [px, py] of [[l.kneeX, l.kneeY], [l.tipX, l.tipY]]) {
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      if (px < left) left = px;
+      if (px > right) right = px;
+      if (py < top) top = py;
+      if (py > bottom) bottom = py;
+    }
+  }
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/** Singleton spatial index instance for the application */
+export const spatialIndex = new SpatialIndex();
+
+/** Export the class for cases where multiple independent indices are needed */
+export { SpatialIndex, CELL_SIZE };

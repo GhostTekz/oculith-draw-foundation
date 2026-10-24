@@ -1,0 +1,30 @@
+/* Markups List: Formula columns with expressions and Custom Captions
+   (js/solid/components/left-panel/panels/FormulaCaptions.jsx). */
+.annotations-toolbar-btn.annotations-formulas-btn { width: auto; padding: 0 7px; font-size: 11px; }
+.annotation-cell-exprFormula { text-align: right; font-variant-numeric: tabular-nums; }
+.annotation-cell-exprFormula.uncalibrated { color: var(--ox-warn-ink); text-align: center; }
+.annotations-formula-totals {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 3px 8px;
+  border-top: 1px solid var(--theme-panel-border); color: var(--theme-text);
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.annotations-formula-total { white-space: nowrap; }
+.annotations-formula-warning, .formula-captions-warning { color: var(--ox-warn-ink); }
+
+.formula-captions-dialog { width: min(760px, calc(100vw - 32px)); }
+.formula-captions-body { display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow-y: auto; font-size: 12px; }
+.formula-captions-body h3 { margin: 6px 0 0; font-size: 12px; font-weight: 600; }
+.formula-captions-hint { margin: 0; color: var(--theme-panel-tab-text); font-size: 11px; }
+.formula-captions-grid { display: grid; gap: 4px 6px; align-items: center; }
+.formula-captions-grid > span { font-size: 11px; color: var(--theme-panel-tab-text); }
+.formula-captions-columns { grid-template-columns: minmax(90px, 1fr) minmax(160px, 2.2fr) 110px 70px 60px auto; }
+.formula-captions-captions { grid-template-columns: 170px minmax(200px, 1fr) auto; }
+.formula-captions-grid input, .formula-captions-grid select, .formula-captions-own input { min-width: 0; border-radius: var(--ox-r-xs); }
+.formula-captions-expression { font-family: var(--ox-font-mono, monospace); }
+.formula-captions-error { grid-column: 1 / -1; color: var(--ox-danger, #e5484d); font-size: 11px; }
+.formula-captions-body > .pref-btn { align-self: flex-start; }
+.formula-captions-totals { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.formula-captions-totals th, .formula-captions-totals td { padding: 2px 10px 2px 0; text-align: left; font-weight: normal; }
+.formula-captions-total { text-align: right !important; font-weight: 600 !important; }
+.formula-captions-own { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.formula-captions-message { margin-right: auto; font-size: 11px; color: var(--theme-panel-tab-text); }
