@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 // Annotatielagen (#468): markeringen groeperen op benoemde lagen.
 //
 // Een document heeft een lijst lagen (`doc.annotationLayers`), elk met een
@@ -337,10 +338,13 @@ export function assignLayer(anns, id) {
 }
 
 /** Aantal annotaties per laag-id (onbekende tellen bij de standaardlaag). */
-export function countByLayer(doc) {
+export function countByLayer(doc, { raw = false } = {}) {
   const lagen = getLayers(doc);
   const tel = new Map(lagen.map((l) => [l.id, 0]));
-  for (const a of Array.isArray(doc?.annotations) ? doc.annotations : []) {
+  const lijst = Array.isArray(doc?.annotations) ? doc.annotations : [];
+  // `raw`: buiten de store tellen (geen proxy per markering), voor wie niet
+  // gevolgd wordt maar zelf ververst, zoals het lagenpaneel.
+  for (const a of raw ? (lijst[$RAW] || lijst) : lijst) {
     if (!a || a.type === '__tool-defaults__') continue;
     const id = tel.has(layerIdOf(a)) ? layerIdOf(a) : DEFAULT_LAYER_ID;
     tel.set(id, tel.get(id) + 1);
@@ -442,8 +446,8 @@ export function layerDisplayName(laag, defaultName) {
  * De regels van het lagenpaneel: per laag de weergavenaam, het aantal
  * markeringen, de schakelaars en of het de huidige laag is.
  */
-export function layerRows(doc, defaultName) {
-  const tel = countByLayer(doc);
+export function layerRows(doc, defaultName, { raw = false } = {}) {
+  const tel = countByLayer(doc, { raw });
   const huidig = currentLayerId(doc);
   return getLayers(doc).map((l) => ({
     id: l.id,

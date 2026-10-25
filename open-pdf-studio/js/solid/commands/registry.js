@@ -30,6 +30,7 @@
 
 import { createSignal } from 'solid-js';
 import { state } from '../../core/state.js';
+import { undoDepth, redoDepth } from '../../core/undo-stacks.js';
 import { lucide } from '../data/lucideIcons.js';
 
 export const COMMAND_CATEGORIES = Object.freeze([
@@ -218,12 +219,12 @@ registerCommand({
 });
 registerCommand({
   id: 'edit.undo', label: 'common:undo', icon: lucide('undo-2'), shortcut: 'Ctrl+Z',
-  category: 'edit', enabled: () => (activeDoc()?.undoStack?.length || 0) > 0, keywords: ['back', 'revert'],
+  category: 'edit', enabled: () => undoDepth(activeDoc()) > 0, keywords: ['back', 'revert'],
   run: () => import('../../core/undo-manager.js').then((m) => m.undo()),
 });
 registerCommand({
   id: 'edit.redo', label: 'common:redo', icon: lucide('redo-2'), shortcut: 'Ctrl+Y',
-  category: 'edit', enabled: () => (activeDoc()?.redoStack?.length || 0) > 0, keywords: ['repeat'],
+  category: 'edit', enabled: () => redoDepth(activeDoc()) > 0, keywords: ['repeat'],
   run: () => import('../../core/undo-manager.js').then((m) => m.redo()),
 });
 registerCommand({

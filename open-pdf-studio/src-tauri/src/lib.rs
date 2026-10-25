@@ -41,6 +41,7 @@ pub mod startup_diagnostics;
 mod generated_backing;
 mod template_scope;
 mod reader_position_scope;
+mod file_range;
 pub mod worker_pool;
 
 pub struct StartupOpts {
@@ -462,6 +463,11 @@ fn get_username() -> String {
 }
 
 
+/// The app's context: its configuration and the editor's files.
+fn editor_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
 // Fallback commands for when plugins aren't available via global API
 
 #[tauri::command(async)]
@@ -491,6 +497,41 @@ async fn write_file_atomic(request: tauri::ipc::Request<'_>) -> Result<(), Strin
     };
     tauri::async_runtime::spawn_blocking(move || {
         atomic_file::write(std::path::Path::new(&path), &bytes).map_err(|e| e.to_string())
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// Incremental save (js/pdf/saver/incremental.js): append bytes to a PDF
+/// whose length, first and last bytes still match what the editor loaded.
+/// Body: the expected head, the expected tail, then the bytes to append;
+/// the lengths travel in headers. Errors with "append-mismatch" when the file
+/// changed on disk, so the caller can write the whole file instead.
+#[tauri::command]
+async fn append_file_atomic(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let header = |name: &str| -> Result<String, String> {
+        let raw = request.headers().get(name).ok_or(format!("Missing {name}"))?
+            .to_str().map_err(|e| e.to_string())?;
+        Ok(urlencoding::decode(raw).map_err(|e| e.to_string())?.into_owned())
+    };
+    let path = header("x-opds-path")?;
+    let parse = |v: String| v.parse::<u64>().map_err(|e| e.to_string());
+    let expected_len = parse(header("x-opds-expected-len")?)?;
+    let head_len = parse(header("x-opds-head-len")?)? as usize;
+    let tail_len = parse(header("x-opds-tail-len")?)? as usize;
+    let body = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        tauri::ipc::InvokeBody::Json(value) => {
+            serde_json::from_value::<Vec<u8>>(value.get("data").cloned().ok_or("Missing file data")?)
+                .map_err(|e| e.to_string())?
+        }
+    };
+    if head_len + tail_len > body.len() {
+        return Err("Malformed append request".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let (head, rest) = body.split_at(head_len);
+        let (tail, extra) = rest.split_at(tail_len);
+        atomic_file::append(std::path::Path::new(&path), expected_len, head, tail, extra)
+            .map_err(|e| e.to_string())
     }).await.map_err(|e| e.to_string())?
 }
 
@@ -2171,21 +2212,20 @@ async fn render_pdf_page(
                 p.render_with_annotations(&path, page_index, scale, extra_rot, &visibility, annot_appearance).await
             };
             match worker_render {
-                Ok((width, height, rgba)) => {
-                    let rgba_arc = std::sync::Arc::new(rgba);
+                Ok(bitmap) => {
+                    // The pool returns the wire format already; only the
+                    // pixmap cache needs its own copy of the pixels.
                     if let Some(generation) = pixmap_generation {
                         if let Ok(mut guard) = pixmap_cache.0.lock() {
                             if let Some(cache) = guard.as_mut() {
                                 cache.insert_if_generation(generation, cache_key.clone(), std::sync::Arc::new(pdfium_renderer::CachedPixmap {
-                                    width, height, rgba: rgba_arc.clone(),
+                                    width: bitmap.width, height: bitmap.height,
+                                    rgba: std::sync::Arc::new(bitmap.rgba().to_vec()),
                                 }));
                             }
                         }
                     }
-                    let mut data = Vec::with_capacity(8 + rgba_arc.len());
-                    data.extend_from_slice(&width.to_le_bytes());
-                    data.extend_from_slice(&height.to_le_bytes());
-                    data.extend_from_slice(&rgba_arc);
+                    let data = bitmap.into_framed();
                     if accept_render_generation(&path, response_generation, &pixmap_cache, &pool).await? {
                         return Ok(tauri::ipc::Response::new(data));
                     }
@@ -2327,6 +2367,8 @@ async fn render_pdf_page_region(
     spread: Option<bool>,
     annot_appearance: Option<Vec<String>>,
     annot_appearance_index: Option<Vec<u32>>,
+    render_lane: Option<String>,
+    render_generation: Option<u64>,
     bytes_cache: tauri::State<'_, PdfBytesCache>,
     pdfium_cache: tauri::State<'_, pdfium_renderer::PdfiumDocCache>,
     pixmap_cache: tauri::State<'_, pdfium_renderer::PixmapCacheState>,
@@ -2336,6 +2378,9 @@ async fn render_pdf_page_region(
         .map_err(|e| format!("OCG selection: {e}"))?;
     let annot_show = pdfium_renderer::AnnotShow::from_request(annot_appearance, annot_appearance_index);
     let extra_rot = rotation.unwrap_or(0);
+    // Optional lane + generation from the caller: a queued tile for a view
+    // the caller has left is dropped instead of rendered.
+    let ticket = worker_pool::RenderTicket::from_request(render_lane, render_generation);
 
     for _attempt in 0..MAX_RENDER_GENERATION_ATTEMPTS {
         let response_generation = pixmap_cache.snapshot_generation(&path)
@@ -2348,20 +2393,22 @@ async fn render_pdf_page_region(
         // except a dead worker: that crash must not be repeated in the GUI process.
         if let Some(p) = pool.get() {
             match p
-                .render_region_with_annotations(&path, page_index, scale, extra_rot, region_x_pt, region_y_pt, region_w_pt, region_h_pt, spread.unwrap_or(false), &visibility, annot_show.as_ref())
+                .render_region_with_annotations(&path, page_index, scale, extra_rot, region_x_pt, region_y_pt, region_w_pt, region_h_pt, spread.unwrap_or(false), &visibility, annot_show.as_ref(), ticket.as_ref())
                 .await
             {
-                Ok((width, height, rgba)) => {
-                    let mut data = Vec::with_capacity(8 + rgba.len());
-                    data.extend_from_slice(&width.to_le_bytes());
-                    data.extend_from_slice(&height.to_le_bytes());
-                    data.extend_from_slice(&rgba);
+                Ok(bitmap) => {
+                    let data = bitmap.into_framed();
                     if accept_render_generation(&path, response_generation, &pixmap_cache, &pool).await? {
                         return Ok(tauri::ipc::Response::new(data));
                     }
                     continue;
                 }
                 Err(e) => {
+                    // The caller discards this tile; rendering it in-proc
+                    // would only cost the time the pool just saved.
+                    if worker_pool::render_superseded(&e) {
+                        return Err(worker_pool::RENDER_SUPERSEDED.to_string());
+                    }
                     if worker_died(&e) {
                         return Err(format!("PDFium worker region render failed: {e}"));
                     }
@@ -2949,6 +2996,7 @@ async fn invalidate_pdf_cache(
     pixmap_cache: tauri::State<'_, pdfium_renderer::PixmapCacheState>,
     scene_cache: tauri::State<'_, TileSceneCache>,
     pool: tauri::State<'_, Arc<tokio::sync::OnceCell<worker_pool::WorkerPool>>>,
+    background: Option<bool>,
 ) -> Result<bool, String> {
     bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?.remove(&path);
     evict_display_list_path(&path, &handle_cache, &page_type_cache, &scene_cache)?;
@@ -2958,7 +3006,24 @@ async fn invalidate_pdf_cache(
     if let Some(handle) = removed {
         std::thread::spawn(move || drop(handle));
     }
-    if let Some(pool) = pool.get() {
+    // `background` (the saver, after releasing the workers' file handles):
+    // the workers' invalidation runs in the background, because a worker
+    // answers it only after the render it is busy with, and a save waited
+    // seconds for tiles of a heavy sheet (measured). Their next render opens
+    // the new file anyway; this only drops what they cached.
+    if background.unwrap_or(false) {
+        if pool.get().is_some() {
+            let cell = Arc::clone(pool.inner());
+            let path = path.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(pool) = cell.get() {
+                    if let Err(e) = pool.invalidate(&path).await {
+                        log::warn!("PDFium worker cache invalidation for a saved file failed: {e}");
+                    }
+                }
+            });
+        }
+    } else if let Some(pool) = pool.get() {
         let result = pool.invalidate(&path).await;
         // A render can race ahead of the per-worker invalidate request. Clear
         // any result it cached during the await and reject delayed inserts by
@@ -2968,6 +3033,23 @@ async fn invalidate_pdf_cache(
             std::thread::spawn(move || drop(handle));
         }
         result.map_err(|e| format!("PDFium worker cache invalidation: {e}"))?;
+    }
+    Ok(true)
+}
+
+/// Close the render workers' handles on `path` before the app replaces it.
+/// The workers read a document from its file on demand, and a volume without
+/// POSIX rename semantics refuses to replace a file that is still open. The
+/// next render reopens the file; `invalidate_pdf_cache` after the write
+/// still drops anything a render reopened in between.
+#[tauri::command]
+async fn release_pdf_worker_files(
+    path: String,
+    pool: tauri::State<'_, Arc<tokio::sync::OnceCell<worker_pool::WorkerPool>>>,
+) -> Result<bool, String> {
+    if let Some(pool) = pool.get() {
+        pool.invalidate(&path).await
+            .map_err(|e| format!("PDFium worker file release: {e}"))?;
     }
     Ok(true)
 }
@@ -2995,15 +3077,43 @@ async fn release_pdf_document(
     let had_doc = removed.is_some();
     // Closing a PDFium document waits for the global PDFium lock, which a CAD
     // export or print can hold for seconds: close it off the UI thread.
-    if let Some(handle) = removed {
-        std::thread::spawn(move || drop(handle));
-    }
-    if let Some(pool) = pool.get() {
-        pool.invalidate(&path).await
-            .map_err(|error| format!("PDFium worker document release: {error}"))?;
-    }
+    // PDFium frees with the C library's malloc, which keeps the memory unless
+    // asked (return_freed_memory): ask once the handle is gone.
+    std::thread::spawn(move || {
+        drop(removed);
+        return_freed_memory();
+    });
+    // The render workers let go in the background. Each one answers after
+    // the render it is busy with, and on a heavy sheet that is seconds per
+    // worker: closing the tab waited for all of them (once over 15 s). Nothing
+    // waits on this for correctness; a save that replaces the file uses
+    // release_pdf_worker_files, which still waits.
+    let pool = pool.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(pool) = pool.get() {
+            if let Err(error) = pool.invalidate(&path).await {
+                eprintln!("[release] PDFium worker document release: {error}");
+            }
+        }
+    });
     Ok(had_doc)
 }
+
+/// Hand memory freed through the C library's malloc (PDFium's parses, the
+/// bytes caches) back to the system; glibc otherwise keeps it for reuse.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn return_freed_memory() {
+    extern "C" {
+        fn malloc_trim(pad: usize) -> i32;
+    }
+    // Safety: malloc_trim only releases free heap memory.
+    unsafe {
+        malloc_trim(0);
+    }
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn return_freed_memory() {}
 
 /// Clear the entire PDF bytes cache AND parsed handle cache (call on app
 /// cleanup or memory pressure).
@@ -3206,6 +3316,7 @@ pub fn run(opts: StartupOpts) {
     let mut builder = tauri::Builder::default()
         .manage(OpenedFiles(Mutex::new(opened_files)))
         .manage(LockedFiles(Mutex::new(HashMap::new())))
+        .manage(file_range::FileRanges::default())
         .manage(print_instelling::PrinterDevmodes::default())
         .manage(PdfBytesCache(Mutex::new(HashMap::new())))
         .manage(DocHandleCache(Mutex::new(display_list_cache::GenerationCache::default())))
@@ -3475,11 +3586,15 @@ pub fn run(opts: StartupOpts) {
             read_file,
             write_file,
             write_file_atomic,
+            append_file_atomic,
             file_exists,
             open_url,
             is_dev_mode,
             lock_file,
             unlock_file,
+            file_range::file_range_open,
+            file_range::file_range_read,
+            file_range::file_range_close,
             is_default_pdf_app,
             open_default_apps_settings,
             get_printers,
@@ -3526,6 +3641,7 @@ pub fn run(opts: StartupOpts) {
             perf_enabled,
             get_page_dimensions,
             invalidate_pdf_cache,
+            release_pdf_worker_files,
             handtekening::certificaat::pdf_certificate_info,
             handtekening::verifieer::pdf_signature_list,
             handtekening::verifieer::pdf_signed_revision,
@@ -3577,7 +3693,7 @@ pub fn run(opts: StartupOpts) {
             read_clipboard_image_png,
             set_prtscn_hotkey,
         ])
-        .build(tauri::generate_context!())
+        .build(editor_context())
         .expect("error while building tauri application")
         .run(|_app, _event| {
             // macOS (en iOS) leveren een dubbelklik in Finder NIET als

@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 // Store voor het "Zichtbaarheid Elementen"-paneel (V1 — uitsluitend annotaties).
 //
 // Doel: een Revit-achtig Visibility/Graphics-paneel, maar dan alléén voor de
@@ -40,7 +41,10 @@ const _SKIP_TYPES = new Set(['__tool-defaults__']);
 // met tellers). Aanroepen na document open/wissel en na annotatie add/delete.
 export function refreshElementTypes() {
   const doc = getActiveDocument();
-  const anns = doc && Array.isArray(doc.annotations) ? doc.annotations : [];
+  // Raw: called after a change, never tracked; through the store every
+  // markup's type went through a proxy.
+  const tracked = doc && Array.isArray(doc.annotations) ? doc.annotations : [];
+  const anns = tracked[$RAW] || tracked;
   const counts = new Map();
   for (const a of anns) {
     if (!a || !a.type || _SKIP_TYPES.has(a.type)) continue;

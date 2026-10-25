@@ -23,7 +23,7 @@ import { getActiveDocument, state, getPageRotation } from '../core/state.js';
 import { isTauri, saveFileDialog, writeBinaryFile } from '../core/platform.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
 import { renderPageOffscreen, canvasToBytes } from './exporter.js';
-import { getCachedPdfBytes } from './loader.js';
+import { getPdfByteLength } from './loader.js';
 import { getCacheKey } from './page-manager.js';
 import { COMPRESS_PRESETS, COMPRESS_SAVE_OPTIONS, buildRasterPdf } from './compress-core.js';
 import i18next from '../i18n/config.js';
@@ -44,8 +44,7 @@ export function formatBytes(bytes) {
 /** Size of the currently loaded document in bytes (annotations included). */
 export function getCurrentDocumentSize() {
   try {
-    const bytes = getCachedPdfBytes(getCacheKey());
-    return bytes ? bytes.length : null;
+    return getPdfByteLength(getCacheKey());
   } catch {
     return null;
   }

@@ -17,6 +17,27 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_with(path, |file| file.write_all(bytes))
 }
 
+/// Append `extra` to the file at `path`, atomically: the result is staged
+/// beside it (current contents, then `extra`), synced, and moved over it.
+/// Refuses, leaving the file as it is, unless the file still has
+/// `expected_len` bytes and starts with `head` and ends with `tail` (the
+/// bytes the caller built its append on).
+pub fn append(path: &Path, expected_len: u64, head: &[u8], tail: &[u8], extra: &[u8]) -> io::Result<()> {
+    let current = fs::read(path)?;
+    if current.len() as u64 != expected_len
+        || head.len() > current.len()
+        || tail.len() > current.len()
+        || &current[..head.len()] != head
+        || &current[current.len() - tail.len()..] != tail
+    {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "append-mismatch: the file changed on disk"));
+    }
+    write_with(path, |file| {
+        file.write_all(&current)?;
+        file.write_all(extra)
+    })
+}
+
 fn write_with(path: &Path, write_bytes: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
     // Follow existing symlinks, like an ordinary write, instead of replacing the link.
     let target = match fs::canonicalize(path) {
@@ -109,6 +130,19 @@ mod tests {
         write(&path, b"original").unwrap();
         write(&path, b"complete replacement").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"complete replacement");
+        assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn append_adds_bytes_and_refuses_a_changed_file() {
+        let dir = TestDir::new();
+        let path = dir.0.join("document.pdf");
+        fs::write(&path, b"original").unwrap();
+        append(&path, 8, b"orig", b"nal", b"+more").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"original+more");
+        assert!(append(&path, 8, b"orig", b"nal", b"+x").is_err());
+        assert!(append(&path, 13, b"orix", b"ore", b"+x").is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"original+more");
         assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 1);
     }
 

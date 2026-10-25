@@ -393,7 +393,10 @@
     "summaryLatestStatus": "Alleen laatste status",
     "summaryEmpty": "Geen markeringen in de lijst om samen te vatten.",
     "summaryDone": "{{count}} markeringen samengevat als {{format}}.",
-    "pageLabel": "Paginalabel"
+    "pageLabel": "Paginalabel",
+    "sheetsRead": "{{loaded}} van {{total}} bladen gelezen",
+    "readAllSheets": "Alle bladen lezen",
+    "readingSheets": "Bladen lezen…"
   },
   "scaleBar": {
     "title": "Scale Bar",

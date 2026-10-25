@@ -42,9 +42,11 @@
 
 import { unwrap } from 'solid-js/store';
 import { state } from '../core/state.js';
+import { undoStackOf, redoStackOf } from '../core/undo-stacks.js';
 import { vingerafdruk } from './ext-interop.js';
 import { isAnnotationHiddenInView, metWeergaveDoorloop } from '../annotations/view-filters.js';
 import { sourceRenderRevision, sourceWriteActive } from './source-render-revision.js';
+import { pageAnnotations } from './page-annotations.js';
 
 const ANNOTATION_MODE_ENABLE = 1;
 
@@ -124,7 +126,7 @@ export function gedelegeerd(doc) {
 const VANGNET_MS = 1000;
 
 function geschiedenisSleutel(doc) {
-  const u = doc.undoStack || [], r = doc.redoStack || [];
+  const u = undoStackOf(doc), r = redoStackOf(doc);
   return [doc.annotations, doc.annotations?.length, u.length, u[u.length - 1], r.length, r[r.length - 1]];
 }
 
@@ -267,7 +269,7 @@ export async function apRenderParams(page) {
   if (!(doc._extBron instanceof Map) || !doc._extBron.size) return leeg;
   if (!s.idsPerPagina.has(pagina)) {
     try {
-      const annots = await page.getAnnotations();
+      const annots = await pageAnnotations(page);
       s.idsPerPagina.set(pagina, annots.map((a) => a.id).filter(Boolean));
     } catch {
       return leeg;

@@ -62,7 +62,7 @@ export function perfSnapshot() {
   }
   // Hidden windows get their timers stretched to a second by the web view:
   // timings taken then are not the app's speed.
-  return { ops: out, stalls: { ...stalls }, visible: typeof document === 'undefined' ? null : document.visibilityState, hiddenMs: Math.round(hiddenMs + (hiddenSince ? performance.now() - hiddenSince : 0)) };
+  return { ops: out, stalls: { ...stalls }, retained: perfRetained(), visible: typeof document === 'undefined' ? null : document.visibilityState, hiddenMs: Math.round(hiddenMs + (hiddenSince ? performance.now() - hiddenSince : 0)) };
 }
 
 /** Forget the timings (for a measured run that starts clean). */
@@ -118,4 +118,17 @@ export async function startPerf() {
   let enabled = false;
   try { enabled = await invoke('perf_enabled'); } catch { enabled = false; }
   if (enabled) setInterval(() => { perfFlush('every minute'); }, 60_000);
+}
+
+// Retention watch: weak references to objects that should be gone (a
+// closed document, its markups, its parses). perfSnapshot lists the ones a
+// garbage collection has not freed, to find what keeps memory alive.
+const watched = [];
+export function perfWatch(label, obj) {
+  if (!obj || typeof obj !== 'object' || typeof WeakRef === 'undefined') return;
+  watched.push({ label, ref: new WeakRef(obj), at: Date.now() });
+  if (watched.length > 200) watched.splice(0, watched.length - 200);
+}
+export function perfRetained() {
+  return watched.filter((w) => w.ref.deref() !== undefined).map((w) => `${w.label} (${Math.round((Date.now() - w.at) / 1000)} s)`);
 }

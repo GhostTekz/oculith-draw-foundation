@@ -10,6 +10,8 @@ import { voegAnnotatiesToe } from './annotaties-toevoegen.js';
 import { hasDurableMarkupId, uniqueDurableMarkupId } from '../../annotations/durable-markup-id.js';
 import { linkMarkupGroups } from '../markup-group-pdf.js';
 import { onthoudExtBron } from '../ext-interop.js';
+import { unwrap } from 'solid-js/store';
+import { timeSlicer } from '../../core/yield-to-main.js';
 
 // Convert one batch of pdf.js annotations and push them to doc.annotations,
 // detecting textbox-leader PolyLines (linked via IRT) and attaching them
@@ -21,7 +23,15 @@ import { onthoudExtBron } from '../ext-interop.js';
 // De hele reeks gaat pas aan het eind, in één keer, in doc.annotations (zie
 // annotaties-toevoegen.js): losse pushes lieten per annotatie alles opnieuw
 // rekenen wat de lijst leest.
-export async function convertAndPushAnnotations(annots, pageNum, viewport, stampImageMap, annotColorMap, doc) {
+// A sheet with tens of thousands of markups converts in slices that give the
+// event loop a turn (core/yield-to-main.js), so the page bitmap and input are
+// not held up for the whole conversion. Nothing reaches doc.annotations until
+// the last slice: the ID snapshot and the push below stay one synchronous
+// step. `onStep(name, ms)` receives the timings of the steps; the models
+// pushed are returned.
+export async function convertAndPushAnnotations(annots, pageNum, viewport, stampImageMap, annotColorMap, doc, { onStep } = {}) {
+  const t0 = performance.now();
+  const slice = timeSlicer();
   const textboxByRect = new Map();
   const byPdfId = new Map();
   const pendingLeaders = [];
@@ -32,6 +42,7 @@ export async function convertAndPushAnnotations(annots, pageNum, viewport, stamp
   // File Attachment markups: their bytes (capture-load.js).
   await loadFileAttachmentContents(annots, doc?.pdfDoc);
   for (const annot of annots) {
+    await slice();
     const statusReply = statusReplyFromPdfAnnotation(annot);
     if (statusReply) {
       pendingStatuses.push(statusReply);
@@ -70,12 +81,18 @@ export async function convertAndPushAnnotations(annots, pageNum, viewport, stamp
   // A reply whose markup is not on this page (or not a markup OcuDraw reads)
   // stays a note, as before threads existed.
   for (const orphan of applyCommentReplies(pendingReplies, byPdfId)) {
+    await slice();
     const converted = await convertPdfAnnotation(orphan.annot, pageNum, viewport, stampImageMap, annotColorMap);
     // A reply is saved Hidden (reply-dicts.js); as a stand-alone note it shows.
     if (converted) delete converted.hidden;
     if (converted && !converted.__textboxLeader) nieuw.push(converted);
   }
-  const usedIds = new Set(doc.annotations.map(ann => ann.id));
+  onStep?.('load.convertModels', performance.now() - t0);
+  onStep?.('load.convertSlices', slice.yields);
+  const t1 = performance.now();
+  // The raw array: through the store every element read made a proxy.
+  const usedIds = new Set();
+  for (const ann of unwrap(doc.annotations)) usedIds.add(ann.id);
   // A later annotation in this page must not collide with an earlier shape.
   for (const ann of nieuw) if (!hasDurableMarkupId(ann.type)) usedIds.add(ann.id);
   for (const ann of nieuw) {
@@ -98,5 +115,9 @@ export async function convertAndPushAnnotations(annots, pageNum, viewport, stamp
   // How each the external editor markup looked when read: the saver keeps it untouched
   // while the model still matches (ext-interop.js).
   if (doc) onthoudExtBron(doc, nieuw);
+  onStep?.('load.link', performance.now() - t1);
+  const t2 = performance.now();
   voegAnnotatiesToe(doc, nieuw);
+  onStep?.('load.push', performance.now() - t2);
+  return nieuw;
 }

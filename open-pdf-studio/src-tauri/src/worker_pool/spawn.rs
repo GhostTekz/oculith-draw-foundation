@@ -82,6 +82,12 @@ pub async fn spawn_worker(worker: Arc<WorkerState>, exe_path: &std::path::Path) 
         MmapOptions::new().len(SHM_SIZE).map(&file)
             .with_context(|| format!("mmap SHM {}", shm_path))?
     };
+    // Both sides have it mapped: the name can go. The mappings stay valid,
+    // and a worker or app that dies leaves no file behind (in a RAM-backed
+    // /tmp each one held 50 MB until the next reboot). Windows cannot remove
+    // a mapped file, so the name stays there as before.
+    #[cfg(unix)]
+    let _ = std::fs::remove_file(&shm_path);
 
     // Stash handles in the WorkerState
     *worker.child.lock().await = Some(child);
@@ -94,7 +100,32 @@ pub async fn spawn_worker(worker: Arc<WorkerState>, exe_path: &std::path::Path) 
     Ok(())
 }
 
+/// Remove the SHM files of app processes that are gone: an earlier build
+/// left one per worker behind whenever the app or a worker ended without
+/// cleaning up. Only files named for a process id that no longer runs.
+#[cfg(target_os = "linux")]
+fn remove_stale_shm_files() {
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        let Some(rest) = name.strip_prefix("pdfium-worker-").and_then(|r| r.strip_suffix(".shm")) else { continue };
+        let Some((pid, slot)) = rest.split_once('-') else { continue };
+        if pid.is_empty() || !pid.bytes().all(|b| b.is_ascii_digit()) || slot.parse::<u32>().is_err() {
+            continue;
+        }
+        if std::path::Path::new("/proc").join(pid).exists() {
+            continue;
+        }
+        let _ = std::fs::remove_file(entry.path());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn remove_stale_shm_files() {}
+
 pub async fn spawn_pool(n_workers: u32, exe_path: &std::path::Path) -> Result<Vec<Arc<WorkerState>>> {
+    remove_stale_shm_files();
     let mut workers = Vec::with_capacity(n_workers as usize);
     for slot in 0..n_workers {
         let w = Arc::new(WorkerState::new(slot));

@@ -170,6 +170,16 @@ export default function BehaviorTab(props) {
           </label>
         </div>
       </fieldset>
+
+      <fieldset class="pref-fieldset">
+        <legend>{t('behavior.saving')}</legend>
+        <div class="pref-row pref-checkbox-row">
+          <label class="pref-checkbox-label">
+            <input type="checkbox" checked={p.incrementalSave[0]()} onChange={e => p.incrementalSave[1](e.target.checked)} />
+            <span>{t('behavior.incrementalSave')}</span>
+          </label>
+        </div>
+      </fieldset>
     </>
   );
 }

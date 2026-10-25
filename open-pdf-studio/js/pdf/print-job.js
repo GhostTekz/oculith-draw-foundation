@@ -8,7 +8,7 @@ import { getActiveDocument, getPageRotation } from '../core/state.js';
 import { invoke, isNietInBrowser, readBinaryFile, writeBinaryFile } from '../core/platform.js';
 import { meldingTekst } from '../core/webfuncties.js';
 import { renderPageOffscreen, renderMarkeringenOffscreen, canvasToBytes } from './exporter.js';
-import { getCachedPdfBytes } from './loader.js';
+import { getCachedPdfBytes, getPdfBytes } from './loader.js';
 import { nativeOcgSelectionForDocument } from './native-ocg-selection.js';
 import { viewportOpties } from './getoonde-pagina.js';
 import {
@@ -151,7 +151,7 @@ async function markeringBeelden(pageNum, plaatsing, markeringen) {
 
 /** De bytes waaruit het document nu getoond wordt (zoals saver.js ze zoekt). */
 async function bronBytesVan(doc) {
-  let bytes = doc.filePath ? getCachedPdfBytes(doc.filePath) : undefined;
+  let bytes = doc.filePath ? await getPdfBytes(doc.filePath) : undefined;
   if (!bytes) bytes = getCachedPdfBytes(`__memory__${doc.id}`);
   if (!bytes && doc.filePath) bytes = await readBinaryFile(doc.filePath);
   if (!bytes) throw new Error('no source bytes');

@@ -9,6 +9,7 @@ pub mod routing;
 pub mod spawn;
 pub mod recovery;
 pub mod priority;
+pub mod supersede;
 
 use anyhow::{anyhow, Context, Result};
 use serde_json::json;
@@ -20,6 +21,7 @@ use crate::pdfium_renderer::AnnotShow;
 use priority::Priority;
 
 pub use state::{Status, WorkerState};
+pub use supersede::{RenderTicket, RENDER_SUPERSEDED};
 
 pub struct WorkerPool {
     pub workers: Vec<Arc<WorkerState>>,
@@ -29,6 +31,45 @@ pub struct WorkerPool {
     /// CAD-pagina's ruim 1 GB per worker; bij inactiviteit sturen we Trim.
     last_used_ms: std::sync::atomic::AtomicU64,
     trimmed: std::sync::atomic::AtomicBool,
+    /// Newest render generation per caller lane (see [`supersede`]).
+    supersede: supersede::SupersedeTable,
+}
+
+/// A bitmap read back from a worker, already in the IPC wire format of the
+/// render commands: `[width u32 LE][height u32 LE][RGBA bytes]`. It is built
+/// with one copy out of the shared memory, so a command can hand it to the
+/// webview without copying the pixels again.
+pub struct WorkerBitmap {
+    pub width: u32,
+    pub height: u32,
+    framed: Vec<u8>,
+}
+
+impl WorkerBitmap {
+    fn from_shm(width: u32, height: u32, rgba: &[u8]) -> Self {
+        let mut framed = Vec::with_capacity(8 + rgba.len());
+        framed.extend_from_slice(&width.to_le_bytes());
+        framed.extend_from_slice(&height.to_le_bytes());
+        framed.extend_from_slice(rgba);
+        Self { width, height, framed }
+    }
+
+    /// The RGBA pixels, without the size header.
+    pub fn rgba(&self) -> &[u8] {
+        &self.framed[8..]
+    }
+
+    /// The wire-format bytes (size header + RGBA).
+    pub fn into_framed(self) -> Vec<u8> {
+        self.framed
+    }
+
+    /// (width, height, RGBA) for callers that need bare pixels.
+    pub fn into_parts(self) -> (u32, u32, Vec<u8>) {
+        let mut rgba = self.framed;
+        rgba.drain(..8);
+        (self.width, self.height, rgba)
+    }
 }
 
 struct QueueDepthGuard(Arc<WorkerState>);
@@ -72,6 +113,12 @@ fn reported_render_error(error: &anyhow::Error) -> bool {
     message.contains(" render error: ")
         || message.contains("does not support selected OCG visibility")
         || message.contains("worker render queue deadline exceeded")
+        || message == RENDER_SUPERSEDED
+}
+
+/// Did the pool drop this request because its caller moved on?
+pub fn render_superseded(error: &anyhow::Error) -> bool {
+    error.to_string() == RENDER_SUPERSEDED
 }
 
 fn render_reply_metadata(reply: &serde_json::Value, request_id: u64, mapping_len: usize) -> Result<(u32, u32, usize)> {
@@ -116,6 +163,7 @@ impl WorkerPool {
             next_request_id: std::sync::atomic::AtomicU64::new(1),
             last_used_ms: std::sync::atomic::AtomicU64::new(now_ms()),
             trimmed: std::sync::atomic::AtomicBool::new(true),
+            supersede: supersede::SupersedeTable::default(),
         }
     }
 
@@ -252,6 +300,7 @@ impl WorkerPool {
         visibility: &[LayerVisibility],
     ) -> Result<(u32, u32, Vec<u8>)> {
         self.render_with_annotations(path, page_index, scale, rotation, visibility, None).await
+            .map(WorkerBitmap::into_parts)
     }
 
     /// As [`Self::render`], with the markups named in `annot_appearance`
@@ -264,7 +313,7 @@ impl WorkerPool {
         rotation: i32,
         visibility: &[LayerVisibility],
         annot_appearance: Option<&AnnotShow>,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+    ) -> Result<WorkerBitmap> {
         self.render_with_priority(path, page_index, scale, rotation, visibility, annot_appearance, Priority::Foreground).await
     }
 
@@ -279,7 +328,7 @@ impl WorkerPool {
         rotation: i32,
         visibility: &[LayerVisibility],
         annot_appearance: Option<&AnnotShow>,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+    ) -> Result<WorkerBitmap> {
         self.render_with_priority(path, page_index, scale, rotation, visibility, annot_appearance, Priority::Background).await
     }
 
@@ -292,7 +341,7 @@ impl WorkerPool {
         visibility: &[LayerVisibility],
         annot_appearance: Option<&AnnotShow>,
         priority: Priority,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+    ) -> Result<WorkerBitmap> {
         self.require_ocg_capability(visibility)?;
         self.require_annot_capability(annot_appearance)?;
         let queue_deadline = tokio::time::Instant::now() + match priority {
@@ -355,7 +404,7 @@ impl WorkerPool {
         annot_appearance: Option<&AnnotShow>,
         priority: Priority,
         queue_deadline: tokio::time::Instant,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+    ) -> Result<WorkerBitmap> {
         // Eén request tegelijk per worker: het draadprotocol heeft geen id-demux
         // en de SHM-regio wordt per response overschreven.
         let _priority = tokio::time::timeout_at(queue_deadline, worker.priority.acquire(priority))
@@ -431,9 +480,7 @@ impl WorkerPool {
             || u32::from_le_bytes(mmap[4..8].try_into().unwrap()) != h {
             return Err(anyhow!("worker {} SHM header disagrees with response", worker.slot));
         }
-        let rgba = mmap[HEADER..HEADER + shm_bytes].to_vec();
-
-        Ok((w, h, rgba))
+        Ok(WorkerBitmap::from_shm(w, h, &mmap[HEADER..HEADER + shm_bytes]))
     }
 
     /// Render a page REGION (tile) via the pool. Small tiles fit the 64 MB SHM
@@ -461,12 +508,14 @@ impl WorkerPool {
         self.render_region_with_annotations(
             path, page_index, scale, rotation,
             region_x_pt, region_y_pt, region_w_pt, region_h_pt,
-            spread, visibility, None,
-        ).await
+            spread, visibility, None, None,
+        ).await.map(WorkerBitmap::into_parts)
     }
 
     /// As [`Self::render_region`], with the /AP pass of
-    /// [`Self::render_with_annotations`].
+    /// [`Self::render_with_annotations`]. With a `ticket`, the request is
+    /// dropped with [`RENDER_SUPERSEDED`] if a newer generation on its lane
+    /// arrives before it reaches a worker.
     #[allow(clippy::too_many_arguments)]
     pub async fn render_region_with_annotations(
         &self,
@@ -481,9 +530,16 @@ impl WorkerPool {
         spread: bool,
         visibility: &[LayerVisibility],
         annot_appearance: Option<&AnnotShow>,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+        ticket: Option<&RenderTicket>,
+    ) -> Result<WorkerBitmap> {
         self.require_ocg_capability(visibility)?;
         self.require_annot_capability(annot_appearance)?;
+        if let Some(ticket) = ticket {
+            self.supersede.note(ticket);
+            if self.supersede.superseded(ticket) {
+                return Err(anyhow!(RENDER_SUPERSEDED));
+            }
+        }
         let queue_deadline = tokio::time::Instant::now() + FOREGROUND_QUEUE_TIMEOUT;
         let depths = self.depths();
         if depths.iter().all(|&depth| depth == usize::MAX) {
@@ -507,7 +563,7 @@ impl WorkerPool {
         let result = self.render_region_on_worker(
             worker.clone(), path, page_index, scale, rotation,
             region_x_pt, region_y_pt, region_w_pt, region_h_pt,
-            visibility, annot_appearance, queue_deadline,
+            visibility, annot_appearance, ticket, queue_deadline,
         ).await;
         drop(_queued);
         // Geen retry (de aanroeper valt terug op in-proc PDFium), maar een
@@ -534,14 +590,20 @@ impl WorkerPool {
         region_h_pt: f32,
         visibility: &[LayerVisibility],
         annot_appearance: Option<&AnnotShow>,
+        ticket: Option<&RenderTicket>,
         queue_deadline: tokio::time::Instant,
-    ) -> Result<(u32, u32, Vec<u8>)> {
+    ) -> Result<WorkerBitmap> {
         // Zelfde volledige-round-trip-serialisatie als render_on_worker.
         let _priority = tokio::time::timeout_at(queue_deadline, worker.priority.acquire(Priority::Foreground))
             .await.map_err(|_| anyhow!("worker render queue deadline exceeded"))?;
         let request_lock = worker.request_lock.clone();
         let _t_queue = std::time::Instant::now();
         let _exchange = request_lock.lock().await;
+        // Our turn on the worker. If the caller has since asked for a newer
+        // view on this lane, it discards this tile: free the worker for it.
+        if ticket.is_some_and(|ticket| self.supersede.superseded(ticket)) {
+            return Err(anyhow!(RENDER_SUPERSEDED));
+        }
         if worker.status() != Status::Ready {
             return Err(anyhow!("worker {} unavailable for region render", worker.slot));
         }
@@ -610,9 +672,7 @@ impl WorkerPool {
             || u32::from_le_bytes(mmap[4..8].try_into().unwrap()) != h {
             return Err(anyhow!("worker {} SHM header disagrees with response", worker.slot));
         }
-        let rgba = mmap[HEADER..HEADER + shm_bytes].to_vec();
-
-        Ok((w, h, rgba))
+        Ok(WorkerBitmap::from_shm(w, h, &mmap[HEADER..HEADER + shm_bytes]))
     }
 }
 
@@ -722,5 +782,13 @@ mod ocg_capability_tests {
             "worker 0 render error: OCG visibility override does not name a catalog group"
         )));
         assert!(!reported_render_error(&anyhow!("worker 0 EOF")));
+    }
+
+    #[test]
+    fn a_superseded_request_is_not_a_worker_failure() {
+        let dropped = anyhow!(RENDER_SUPERSEDED);
+        assert!(render_superseded(&dropped));
+        assert!(reported_render_error(&dropped));
+        assert!(!render_superseded(&anyhow!("worker 0 render error: {RENDER_SUPERSEDED}")));
     }
 }

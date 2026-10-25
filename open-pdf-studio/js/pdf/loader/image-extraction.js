@@ -2,6 +2,37 @@ import { PDFName, PDFArray } from 'pdf-lib';
 import { pdfNum, inflateBytes } from './pdf-helpers.js';
 import { findImageAnnotationSources, findImageForAnnotation } from './annotation-image-sources.mjs';
 
+// The pdf-lib path also runs in the pdf-lib worker (pdf-lib-worker.js),
+// which has no DOM: there the canvas is an OffscreenCanvas and an encoded
+// image is decoded with createImageBitmap.
+const HAS_DOM = typeof document !== 'undefined' && typeof document.createElement === 'function';
+
+/** Can the pdf-lib image path run here (a DOM, or OffscreenCanvas in a worker)? */
+export function imageDecodeAvailable() {
+  return HAS_DOM || (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function');
+}
+
+function newCanvas(width, height) {
+  if (HAS_DOM) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+  return new OffscreenCanvas(width, height);
+}
+
+async function canvasToPngDataUrl(canvas) {
+  if (typeof canvas.toDataURL === 'function') return canvas.toDataURL('image/png');
+  return blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' }));
+}
+
+// Something drawImage takes, from an encoded image (JPEG, JPEG 2000).
+async function decodeEncodedImage(blob) {
+  if (HAS_DOM) return loadImage(await blobToDataUrl(blob));
+  return createImageBitmap(blob);
+}
+
 // Hybrid stamp image extraction. Tries to extract each stamp via pdf-lib's
 // XObject reader first (clean — never bakes in overlapping annotations),
 // and falls back to the PDF.js render+crop method ONLY for stamps the
@@ -16,18 +47,32 @@ import { findImageAnnotationSources, findImageForAnnotation } from './annotation
 // the overlapping annotation's pixels appear glued to the stamp and travel
 // with it. The bake-in happens because page.render() with annotationMode:1
 // rasterizes ALL annotations onto the temp canvas before cropping.
-export async function extractStampImagesHybrid(page, viewport, stampAnnots, pageNum, pdfLibDoc) {
-  if (stampAnnots.length === 0 && !pdfLibDoc) return new Map();
+//
+// `opts.images`: the pdf-lib pass already done elsewhere (the pdf-lib
+// worker), as a Map of the same entries; pdfLibDoc is then not needed.
+// `opts.stampSheet(stamps)`: draws stamps from their own appearance
+// (stamp-sheet.js), resolving with a Map of the entries it made (or null);
+// the stamps it leaves out go to the sheet render.
+// `opts.onStep(name, ms)` gets the timings of the passes.
+// The rendered pictures are kept per PDF.js document and page: a page read
+// again (its colors after all, a flatten) does not render them again.
+export async function extractStampImagesHybrid(page, viewport, stampAnnots, pageNum, pdfLibDoc, opts = {}) {
+  const { images = null, onStep = null, stampSheet = null } = opts;
+  if (stampAnnots.length === 0 && !pdfLibDoc && !images) return new Map();
 
   // First pass: pdf-lib extraction (clean, no bake-in)
   let imageMap = new Map();
-  if (pdfLibDoc) {
+  if (images instanceof Map) {
+    imageMap = new Map(images);
+  } else if (pdfLibDoc) {
+    const t0 = performance.now();
     try {
       imageMap = await extractStampImages(pageNum, pdfLibDoc);
     } catch (e) {
       console.warn('[image-extraction] pdf-lib extraction failed:', e);
       imageMap = new Map();
     }
+    onStep?.('load.stampsPdfLib', performance.now() - t0);
   }
 
   // Identify stamps the pdf-lib path couldn't handle (key = rect string)
@@ -44,23 +89,83 @@ export async function extractStampImagesHybrid(page, viewport, stampAnnots, page
   // Second pass: PDF.js render+crop for the leftovers (still bakes in
   // overlapping annotations for these specific stamps — known limitation
   // for stamps with drawn appearance content).
-  if (missing.length > 0) {
+  const kept = renderedOf(page);
+  let toRender = missing;
+  if (kept && toRender.length > 0) {
+    toRender = toRender.filter((s) => {
+      const entry = kept.get(renderKey(s));
+      if (entry) imageMap.set(renderKey(s), entry);
+      return !entry;
+    });
+    if (toRender.length < missing.length) onStep?.('load.stampsKept', missing.length - toRender.length);
+  }
+  const keep = (map) => {
+    for (const [k, v] of map) {
+      imageMap.set(k, v);
+      kept?.set(k, v);
+    }
+  };
+  if (toRender.length > 0 && stampSheet) {
+    const t0 = performance.now();
     try {
-      const fallbackMap = await extractStampImagesViaPdfJs(page, viewport, missing);
-      for (const [k, v] of fallbackMap) {
-        imageMap.set(k, v);
+      const drawn = await stampSheet(toRender);
+      if (drawn instanceof Map && drawn.size) {
+        keep(drawn);
+        toRender = toRender.filter((s) => !drawn.has(renderKey(s)));
       }
+    } catch (e) {
+      console.warn('[image-extraction] stamp sheet failed:', e);
+    }
+    onStep?.('load.stampsSheet', performance.now() - t0);
+  }
+  if (toRender.length > 0) {
+    const t0 = performance.now();
+    try {
+      keep(await extractStampImagesViaPdfJs(page, viewport, toRender));
     } catch (e) {
       console.warn('[image-extraction] PDF.js fallback failed:', e);
     }
+    onStep?.('load.stampsRender', performance.now() - t0);
+    onStep?.('load.stampsRenderCount', toRender.length);
   }
 
   return imageMap;
 }
 
+// The key of a rendered stamp picture (extractStampImagesViaPdfJs).
+function renderKey(stamp) {
+  const rect = stamp.rect;
+  return stamp.id ? `id:${stamp.id}` : `rect:${rect[0]},${rect[1]},${rect[2]},${rect[3]}`;
+}
+
+// Rendered stamp pictures per PDF.js document (its transport: a reopened or
+// reloaded file is a new one) and page index, for the most recent pages.
+const RENDERED_PAGES = 16;
+const renderedPerDocument = new WeakMap();
+function renderedOf(page) {
+  const transport = page?._transport;
+  if (!transport) return null;
+  let pages = renderedPerDocument.get(transport);
+  if (!pages) { pages = new Map(); renderedPerDocument.set(transport, pages); }
+  const index = page._pageIndex ?? (page.pageNumber - 1);
+  let map = pages.get(index);
+  if (map) {
+    pages.delete(index);
+  } else {
+    map = new Map();
+  }
+  pages.set(index, map);
+  while (pages.size > RENDERED_PAGES) pages.delete(pages.keys().next().value);
+  return map;
+}
+
 // Extract stamp images by rendering the page with annotations via PDF.js,
 // then cropping each stamp's region from the rendered result.
-// Uses a high-resolution render (3x) for sharp images at all zoom levels.
+//
+// Only the part of the sheet that holds these stamps is rendered: one
+// render whose viewport is shifted so the union of their rectangles lands
+// on a canvas of just that size. A few stamps on a large sheet no longer
+// cost a whole-sheet raster; the crops are the same pixels as before.
 //
 // WARNING: this method bakes in any annotation that overlaps a stamp's
 // bounding box because PDF.js renders all annotations together. Prefer
@@ -71,48 +176,67 @@ export async function extractStampImagesViaPdfJs(page, viewport, stampAnnots) {
   if (stampAnnots.length === 0) return imageMap;
 
   try {
-    // Render at up to 2x for quality, but cap total pixels so a very large
-    // sheet (A0/A1 bouwtekening) doesn't allocate a multi-hundred-MB canvas
-    // just to crop a few stamp thumbnails. Same guard philosophy as the
-    // MAX_PIXELS cap in crop-margins.js. The cropping loop below uses
-    // hiResViewport.convertToViewportPoint(), so it adapts to whatever scale
-    // we end up rendering at — crop coordinates stay correct at any scale.
+    // Render at up to 2x for quality, but cap the pixels of the rendered
+    // area (~20 MP, matches crop-margins.js) so a large union does not
+    // allocate a multi-hundred-MB canvas just to crop a few thumbnails.
     //
-    // CRITICAL: the canvas pixel dimensions must exactly match the viewport
-    // dimensions — do NOT apply additional DPR scaling, otherwise crop
-    // coordinates will be wrong (causing tiled/repeated images).
-    const MAX_PIXELS = 20_000_000; // ~20 MP, matches crop-margins.js
+    // CRITICAL: no extra DPR scaling on the canvas, otherwise the crop
+    // coordinates no longer match the viewport (tiled/repeated images).
+    const MAX_PIXELS = 20_000_000;
     const baseViewport = page.getViewport({ scale: 1 });
-    const basePixels = baseViewport.width * baseViewport.height;
+    const boxOf = (vp, rect) => {
+      const [x1, y1] = vp.convertToViewportPoint(rect[0], rect[1]);
+      const [x2, y2] = vp.convertToViewportPoint(rect[2], rect[3]);
+      return { x0: Math.min(x1, x2), y0: Math.min(y1, y2), x1: Math.max(x1, x2), y1: Math.max(y1, y2) };
+    };
+    const stamps = stampAnnots.filter(s => Array.isArray(s.rect) && s.rect.length >= 4);
+    if (!stamps.length) return imageMap;
+
+    // The union in scale-1 viewport space, clipped to the sheet.
+    let u = null;
+    for (const s of stamps) {
+      const b = boxOf(baseViewport, s.rect);
+      u = u ? { x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) } : b;
+    }
+    u = {
+      x0: Math.max(0, u.x0), y0: Math.max(0, u.y0),
+      x1: Math.min(baseViewport.width, u.x1), y1: Math.min(baseViewport.height, u.y1),
+    };
+    const unionPixels = Math.max(0, u.x1 - u.x0) * Math.max(0, u.y1 - u.y0);
+    if (!(unionPixels > 0)) return imageMap;
     let hiResScale = 2;
-    if (basePixels > 0 && basePixels * hiResScale * hiResScale > MAX_PIXELS) {
-      hiResScale = Math.max(1, Math.sqrt(MAX_PIXELS / basePixels));
+    if (unionPixels * hiResScale * hiResScale > MAX_PIXELS) {
+      hiResScale = Math.max(0.25, Math.sqrt(MAX_PIXELS / unionPixels));
     }
     const hiResViewport = page.getViewport({ scale: hiResScale });
 
-    // Canvas pixel size must EXACTLY match viewport dimensions.
-    // Do NOT apply DPR scaling — it causes crop coordinate mismatch (tiled images).
+    // Whole device pixels for the shift, so a crop lands on the same pixels
+    // as in a whole-sheet render at this scale.
+    const ox = Math.floor(u.x0 * hiResScale);
+    const oy = Math.floor(u.y0 * hiResScale);
+    const width = Math.ceil(u.x1 * hiResScale) - ox;
+    const height = Math.ceil(u.y1 * hiResScale) - oy;
+    if (!(width > 0) || !(height > 0)) return imageMap;
+    const regionViewport = page.getViewport({ scale: hiResScale, offsetX: -ox, offsetY: -oy });
+
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = Math.floor(hiResViewport.width);
-    tempCanvas.height = Math.floor(hiResViewport.height);
+    tempCanvas.width = width;
+    tempCanvas.height = height;
 
     await page.render({
       canvasContext: tempCanvas.getContext('2d'),
-      viewport: hiResViewport,
+      viewport: regionViewport,
       annotationMode: 1,
     }).promise;
 
-    // Crop each stamp's region from the high-res rendered canvas
-    for (const stamp of stampAnnots) {
+    // Crop each stamp's region from the rendered area
+    for (const stamp of stamps) {
       const rect = stamp.rect; // PDF coordinates [x1, y1, x2, y2]
-      // Convert PDF coordinates to high-res canvas pixel coordinates
-      const [vx1, vy1] = hiResViewport.convertToViewportPoint(rect[0], rect[1]);
-      const [vx2, vy2] = hiResViewport.convertToViewportPoint(rect[2], rect[3]);
-
-      const cropX = Math.round(Math.min(vx1, vx2));
-      const cropY = Math.round(Math.min(vy1, vy2));
-      const cropW = Math.round(Math.abs(vx2 - vx1));
-      const cropH = Math.round(Math.abs(vy2 - vy1));
+      const b = boxOf(hiResViewport, rect);
+      const cropX = Math.round(b.x0) - ox;
+      const cropY = Math.round(b.y0) - oy;
+      const cropW = Math.round(b.x1 - b.x0);
+      const cropH = Math.round(b.y1 - b.y0);
 
       if (cropW > 0 && cropH > 0) {
         const cropCanvas = document.createElement('canvas');
@@ -133,6 +257,9 @@ export async function extractStampImagesViaPdfJs(page, viewport, stampAnnots) {
         imageMap.set(key, { kind: 'stamp', dataUrl, space: 'visual', source: 'render' });
       }
     }
+    // Free the backing store now rather than at the next GC.
+    tempCanvas.width = 0;
+    tempCanvas.height = 0;
   } catch (e) {
     console.warn('Failed to extract stamp images via PDF.js:', e);
   }
@@ -553,13 +680,10 @@ export async function decodeImageStream(context, streamObj) {
     // JPEG - browser handles decoding natively
     if (filter === '/DCTDecode') {
       const blob = new Blob([rawBytes], { type: 'image/jpeg' });
-      const jpegUrl = await blobToDataUrl(blob);
-      if (!sMaskBytes) return jpegUrl;
+      if (!sMaskBytes) return await blobToDataUrl(blob);
 
-      const jpegImg = await loadImage(jpegUrl);
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      const jpegImg = await decodeEncodedImage(blob);
+      const canvas = newCanvas(width, height);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(jpegImg, 0, 0, width, height);
       const imgData = ctx.getImageData(0, 0, width, height);
@@ -568,7 +692,7 @@ export async function decodeImageStream(context, streamObj) {
         px[j] = sMaskBytes[i];
       }
       ctx.putImageData(imgData, 0, 0);
-      return canvas.toDataURL('image/png');
+      return await canvasToPngDataUrl(canvas);
     }
 
     // JPEG2000
@@ -576,11 +700,8 @@ export async function decodeImageStream(context, streamObj) {
       const blob = new Blob([rawBytes], { type: 'image/jp2' });
       if (!sMaskBytes) return await blobToDataUrl(blob);
 
-      const jp2Url = await blobToDataUrl(blob);
-      const jp2Img = await loadImage(jp2Url);
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      const jp2Img = await decodeEncodedImage(blob);
+      const canvas = newCanvas(width, height);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(jp2Img, 0, 0, width, height);
       const imgData = ctx.getImageData(0, 0, width, height);
@@ -589,7 +710,7 @@ export async function decodeImageStream(context, streamObj) {
         px[j] = sMaskBytes[i];
       }
       ctx.putImageData(imgData, 0, 0);
-      return canvas.toDataURL('image/png');
+      return await canvasToPngDataUrl(canvas);
     }
 
     // FlateDecode - decompress (en maak een eventuele predictor ongedaan)
@@ -610,9 +731,7 @@ export async function decodeImageStream(context, streamObj) {
     }
 
     // Decode raw pixels to canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    const canvas = newCanvas(width, height);
     const ctx = canvas.getContext('2d');
     const imgData = ctx.createImageData(width, height);
     const px = imgData.data;
@@ -688,7 +807,7 @@ export async function decodeImageStream(context, streamObj) {
     }
 
     ctx.putImageData(imgData, 0, 0);
-    return canvas.toDataURL('image/png');
+    return await canvasToPngDataUrl(canvas);
   } catch (e) {
     console.warn('decodeImageStream error:', e);
     return null;

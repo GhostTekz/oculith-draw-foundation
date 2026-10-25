@@ -547,7 +547,10 @@
     "colComments": "Comments",
     "colType": "Type",
     "expandGroups": "Expand all groups",
-    "collapseGroups": "Collapse all groups"
+    "collapseGroups": "Collapse all groups",
+    "sheetsRead": "{{loaded}} of {{total}} sheets read",
+    "readAllSheets": "Read all sheets",
+    "readingSheets": "Reading sheets…"
   },
   "schedules": {
     "title": "Schedules",

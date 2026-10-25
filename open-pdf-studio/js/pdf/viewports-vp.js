@@ -28,7 +28,7 @@ import { PDFName, PDFArray, PDFDict, PDFNumber, PDFString, PDFHexString, PDFBool
 import { geerfd, rechthoek, doorsnede, naarAppRuimte, schaalUitMeasure, isEigenViewport,
   EIGEN_VIEWPORT_SLEUTEL, MAX_VIEWPORTS } from './pdf-viewports.js';
 import { measureVoorSchaal } from './pagina-schaal-vp.js';
-import { pixelsPerUnitFor } from '../annotations/scale-region.js';
+import { pixelsPerUnitFor } from '../annotations/scale-string.js';
 import { ratioFromPixelsPerUnit } from '../annotations/scale-entry.js';
 import { validPrecision } from '../annotations/measure-precision.js';
 import { pageUserUnit } from './page-user-unit.js';

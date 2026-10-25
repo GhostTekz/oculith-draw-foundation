@@ -5,6 +5,7 @@ import { destTopOffsetPt, isSafeLinkUrl, parseDestinationArray } from './link-de
 import i18next from '../i18n/config.js';
 import { viewportRectangle } from './pdfjs-record.js';
 import { parseRemotePdfLink } from './remote-link.js';
+import { pageAnnotations } from './page-annotations.js';
 
 /**
  * Link Layer Management Module
@@ -55,7 +56,7 @@ export function applyOverlayPointerEvents(root = document, tool = state.currentT
  */
 export async function createLinkLayer(page, viewport, container, pageNum, isCurrent = () => true) {
   // Get annotations from PDF page with intent 'display' to include link annotations
-  const annotations = await page.getAnnotations({ intent: 'display' });
+  const annotations = await pageAnnotations(page);
   if (!isCurrent()) return null;
 
   // Filter for link annotations

@@ -11,7 +11,7 @@
 // real text) and works identically for a scanned page (content is just one
 // big image either way).
 import { getActiveDocument } from "../core/state.js";
-import { getCachedPdfBytes } from "./loader.js";
+import { getPdfBytes } from "./loader.js";
 import { getCacheKey, reloadFromBytes } from "./page-manager.js";
 import { parsePageRange } from "./exporter.js";
 import { recordPageStructure } from "../core/undo-manager.js";
@@ -162,7 +162,7 @@ export async function straightenPages(x1, y1, x2, y2, applyTo, rangeStr) {
   if (!(Math.abs(angleDeg) > 0.01)) return { straightened: 0, angleDeg };
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = await getPdfBytes(cacheKey);
   if (!currentBytes) return { straightened: 0, angleDeg };
 
   const oldAnnotations = doc.annotations.map((a) => cloneAnnotation(a));

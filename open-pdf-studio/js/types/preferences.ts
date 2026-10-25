@@ -235,6 +235,7 @@ export interface Preferences {
   progressiveRender: boolean;
   originalMarkupAppearance: boolean;
   pdfiumWebRender: boolean;
+  incrementalSave: boolean;
 
   // Panels
   propertiesPanelVisible: boolean;

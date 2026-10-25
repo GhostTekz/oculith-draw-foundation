@@ -12,7 +12,7 @@
 import { getActiveDocument, getPageRotation } from '../../core/state.js';
 import { redrawAnnotations, redrawContinuous } from '../../annotations/rendering.js';
 import { annotationCtx } from '../../ui/dom-elements.js';
-import { getCachedPdfBytes } from '../../pdf/loader.js';
+import { getPdfBytes } from '../../pdf/loader.js';
 import { knipselAlsMiniPdf, appVakNaarPdfVak, paginaRotatie } from '../../pdf/vector-embed.js';
 import { bewaar } from '../../annotations/vector-snippet-store.js';
 import { zetKnipselOpKlembord } from '../../annotations/vector-snippet-clipboard.js';
@@ -69,7 +69,7 @@ export async function knipselVanVak(vak, paginaNr) {
   const doc = getActiveDocument();
   if (!doc?.filePath) return { fout: 'geen bestand' };
 
-  const bronBytes = getCachedPdfBytes(doc.filePath);
+  const bronBytes = await getPdfBytes(doc.filePath);
   if (!bronBytes) return { fout: 'bronbytes niet in de cache' };
 
   paginaNr = paginaNr || doc.currentPage || 1;

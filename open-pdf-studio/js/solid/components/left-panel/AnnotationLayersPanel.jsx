@@ -50,7 +50,7 @@ export default function AnnotationLayersPanel() {
     // The counts read every annotation: untracked, layersVersion is the
     // trigger (every list update bumps it), so a change does not re-subscribe
     // the panel to each markup (#491).
-    return untrack(() => layerRows(getActiveDocument(), naam));
+    return untrack(() => layerRows(getActiveDocument(), naam, { raw: true }));
   };
   const gekozenRij = () => rows().find((r) => r.id === gekozen()) || null;
   const gekozenIndex = () => rows().findIndex((r) => r.id === gekozen());

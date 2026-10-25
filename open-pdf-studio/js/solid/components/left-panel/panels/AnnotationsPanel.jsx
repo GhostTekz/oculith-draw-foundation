@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createEffect, createMemo, onMount, onCleanup } from 'solid-js';
 import { activeTab, panelShown } from '../../../stores/leftPanelStore.js';
-import { items, countText, emptyMessage, sortMode, setSortMode, columnSort, setColumnSort, filterMode, setFilterMode, searchQuery, setSearchQuery, hiddenStatuses, toggleHiddenStatus, replaceHiddenStatuses, collapsedGroups, toggleGroup, expandAllGroups, collapseAllGroups, toggleThread, columnFilters, setColumnFilters, allMarkupsHidden, setAllMarkupsHidden, expandedMarkupGroups, toggleMarkupGroup } from '../../../stores/panels/annotationsStore.js';
+import { items, countText, emptyMessage, sortMode, setSortMode, columnSort, setColumnSort, filterMode, setFilterMode, searchQuery, setSearchQuery, hiddenStatuses, toggleHiddenStatus, replaceHiddenStatuses, collapsedGroups, toggleGroup, expandAllGroups, collapseAllGroups, toggleThread, columnFilters, setColumnFilters, allMarkupsHidden, setAllMarkupsHidden, expandedMarkupGroups, toggleMarkupGroup, sheetsPending } from '../../../stores/panels/annotationsStore.js';
 import { FILTERABLE_COLUMNS, activeColumnFilters, toggleColumnFilterValue, setColumnFilterValues, normalizeColumnFilters } from '../../../../ui/panels/markup-column-filter.js';
 import { showAnnotationMenu, showMultiAnnotationMenu } from '../../../stores/contextMenuStore.js';
 import { openDialog } from '../../../stores/dialogStore.js';
@@ -126,6 +126,18 @@ export default function AnnotationsPanel() {
   });
 
   const [menuOpen, setMenuOpen] = createSignal(false);
+  // A large drawing reads its sheets when shown; this reads the rest.
+  const [readingAll, setReadingAll] = createSignal(false);
+  async function readAllSheets() {
+    if (readingAll()) return;
+    setReadingAll(true);
+    try {
+      const { ensureAllAnnotations } = await import('../../../../pdf/loader.js');
+      await ensureAllAnnotations();
+    } finally {
+      setReadingAll(false);
+    }
+  }
   const [columnsOpen, setColumnsOpen] = createSignal(false);
   // In the bottom panel host the columns menu opens upwards. The host's panel
   // body clips its overflow, so the menu is placed fixed above the button and
@@ -2340,7 +2352,17 @@ export default function AnnotationsPanel() {
       </div>
       <CaptureThumbTip />
       <FormulaTotalsBar items={items} />
-      <div class="annotations-list-count">{countText()}</div>
+      <div class="annotations-list-count">
+        {countText()}
+        <Show when={sheetsPending()}>{(sheets) => (
+          <>
+            {' · '}{t('markupsList.sheetsRead', { loaded: sheets().loaded, total: sheets().total })}{' '}
+            <button type="button" class="annotations-read-all" disabled={readingAll()} onClick={readAllSheets}>
+              {readingAll() ? t('markupsList.readingSheets') : t('markupsList.readAllSheets')}
+            </button>
+          </>
+        )}</Show>
+      </div>
       <Show when={exportMessage()}><div role="status" class="annotations-list-count">{exportMessage()}</div></Show>
     </div>
   );

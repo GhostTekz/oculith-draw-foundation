@@ -309,6 +309,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
   // Webversie: pagina's rasteren met PDFium (WebAssembly) i.p.v. PDF.js, zodat
   // ze eruitzien als in de bureaubladversie (pdf/pdfium-web/).
   pdfiumWebRender: true,
+  // Save appends only the changed objects to the file (pdf/saver/incremental.js)
+  // instead of rewriting it; anything it cannot prove safe still rewrites.
+  // On by default: a save of a 590 MB set writes kilobytes instead of the
+  // whole file. Profiles saved before get it turned on once
+  // (core/preferences.js, incrementalSaveTurnedOn).
+  incrementalSave: true,
 
   // Panels
   propertiesPanelVisible: true,

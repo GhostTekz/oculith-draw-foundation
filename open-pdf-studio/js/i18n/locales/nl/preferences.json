@@ -168,7 +168,9 @@
     "snapToMarkup": "Uitlijnen op markeringen",
     "navigation": "Navigatie",
     "wheelZoomWithoutCtrl": "Zoomen met muiswiel (zonder Ctrl ingedrukt)",
-    "dynamicScaling": "Markeringen automatisch schalen"
+    "dynamicScaling": "Markeringen automatisch schalen",
+    "saving": "Opslaan",
+    "incrementalSave": "Snel opslaan: wijzigingen achter aan het bestand toevoegen in plaats van het te herschrijven"
   },
   "fileAssoc": {
     "defaultPdfApplication": "Standaard PDF-toepassing",

@@ -4,10 +4,11 @@ use pdfium_render::prelude::*;
 use std::sync::OnceLock;
 use crate::protocol::LayerVisibility;
 
+/// Pixel size of a bitmap rendered straight into the caller's buffer
+/// (tightly packed RGBA, `width * height * 4` bytes from its start).
 pub struct RenderResult {
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
 }
 
 // Eén Pdfium-instantie voor de levensduur van de worker. Nodig om geladen
@@ -73,15 +74,16 @@ fn pdfium() -> Result<&'static Pdfium> {
     Ok(PDFIUM.get().expect("PDFIUM set above"))
 }
 
-/// Gecachet geladen document + open pagina-handle. Houdt de bytes levend voor
-/// de document-levensduur; VELDVOLGORDE = DROP-VOLGORDE: `page` leent uit
-/// `document`, `document` leent uit `_bytes`.
+/// Gecachet geladen document + open pagina-handle. VELDVOLGORDE =
+/// DROP-VOLGORDE: `page` leent uit `document`.
 ///
-/// Safety: `document` leent uit `_bytes` (heap-buffer verplaatst niet, ook
-/// niet als de struct move't) en uit PDFIUM ('static, nooit gedropt). `page`
+/// The document owns its source: an open file that PDFium reads on demand
+/// (the default view), or the modified byte copy of a selected-OCG render.
+/// A worker no longer holds a full copy of every source file in memory.
+///
+/// Safety: `document` leent uit PDFIUM ('static, nooit gedropt). `page`
 /// leent uit `document`; de entry zit in een Box zodat het document-adres
-/// stabiel is, ook als de cache-Vec verplaatst. De bytes leven per
-/// constructie langer dan document en pagina binnen deze struct.
+/// stabiel is, ook als de cache-Vec verplaatst.
 struct CachedDoc {
     path: String,
     mtime: Option<std::time::SystemTime>,
@@ -97,7 +99,6 @@ struct CachedDoc {
     /// handle heeft verse vlaggen.
     annot_applied: Option<(u32, u64)>,
     document: PdfDocument<'static>,
-    _bytes: Vec<u8>,
 }
 
 impl CachedDoc {
@@ -133,8 +134,8 @@ impl Renderer {
     fn get_or_load(&mut self, path: &str, requested: &[LayerVisibility]) -> Result<usize> {
         let visibility = ocg_render_copy::canonical_visibility(requested)?;
         let meta = std::fs::metadata(path).with_context(|| format!("stat {}", path))?;
-        let mtime = meta.modified().ok();
-        let len = meta.len();
+        let mut mtime = meta.modified().ok();
+        let mut len = meta.len();
 
         if let Some(i) = self.cache.iter().position(|c| c.path == path && c.mtime == mtime && c.len == len && c.visibility == visibility) {
             return Ok(i);
@@ -142,18 +143,32 @@ impl Renderer {
         // Verouderde versie van hetzelfde pad weggooien.
         self.cache.retain(|c| c.path != path);
 
-        let source = std::fs::read(path).with_context(|| format!("read {}", path))?;
-        let bytes = if visibility.is_empty() {
-            source
+        let document = if visibility.is_empty() {
+            // PDFium reads the file on demand through this handle; only the
+            // parts a render needs are paged in. Rust opens files with read,
+            // write and delete sharing on Windows, so an atomic save can
+            // still rename over the path; invalidate_path drops the handle.
+            let file = std::fs::File::open(path).with_context(|| format!("open {}", path))?;
+            // Key the entry on the file this handle reads, not on the path's
+            // earlier stat: a save between the two would otherwise cache new
+            // contents under the old key.
+            if let Ok(opened) = file.metadata() {
+                mtime = opened.modified().ok();
+                len = opened.len();
+            }
+            pdfium()?
+                .load_pdf_from_reader(file, None)
+                .map_err(|e| anyhow!("PDFium parse: {}", e))?
         } else {
-            ocg_render_copy::render_copy(&source, &visibility)?
+            // The selected-OCG view renders a modified copy, which needs the
+            // whole source once; the source bytes are freed after the copy.
+            let source = std::fs::read(path).with_context(|| format!("read {}", path))?;
+            let bytes = ocg_render_copy::render_copy(&source, &visibility)?;
+            drop(source);
+            pdfium()?
+                .load_pdf_from_byte_vec(bytes, None)
+                .map_err(|e| anyhow!("PDFium parse: {}", e))?
         };
-        // Safety: zie CachedDoc — buffer-adres is stabiel en de bytes blijven
-        // in dezelfde struct levend zolang het document bestaat.
-        let bytes_ref: &'static [u8] = unsafe { std::slice::from_raw_parts(bytes.as_ptr(), bytes.len()) };
-        let document = pdfium()?
-            .load_pdf_from_byte_slice(bytes_ref, None)
-            .map_err(|e| anyhow!("PDFium parse: {}", e))?;
 
         if self.cache.len() >= DOC_CACHE_CAP {
             self.cache.remove(0);
@@ -166,13 +181,12 @@ impl Renderer {
             page: None,
             annot_applied: None,
             document,
-            _bytes: bytes,
         }));
         Ok(self.cache.len() - 1)
     }
 
-    /// Sluit alle open pagina-handles (de dure parse-state); documenten en
-    /// bytes blijven. De volgende render op die pagina betaalt eenmalig de
+    /// Sluit alle open pagina-handles (de dure parse-state); documenten
+    /// blijven. De volgende render op die pagina betaalt eenmalig de
     /// her-parse. Aangeroepen bij pool-inactiviteit om het werkgeheugen van
     /// zware CAD-pagina's (ruim 1 GB per open handle) terug te geven.
     pub fn trim(&mut self) {
@@ -182,7 +196,8 @@ impl Renderer {
     }
 
     /// Do not rely on mtime/length after an atomic rewrite: either can match
-    /// the previous file even when the bytes differ.
+    /// the previous file even when the bytes differ. Dropping the entry also
+    /// closes the worker's handle on the file.
     pub fn invalidate_path(&mut self, path: &str) {
         self.cache.retain(|entry| entry.path != path);
     }
@@ -237,6 +252,7 @@ impl Renderer {
         rotation: i32,
         visibility: &[LayerVisibility],
         annot_appearance: Option<AnnotShow>,
+        out: &mut [u8],
     ) -> Result<RenderResult> {
         let idx = self.get_or_load(path, visibility)?;
         // Laad (of hergebruik) de pagina vóór de keuze-check: een verse handle
@@ -272,28 +288,37 @@ impl Renderer {
                 other => return Err(anyhow!("unsupported rotation {}", other)),
             };
 
+            // The bitmap is rendered straight into `out` (the shared memory
+            // region), so its size must be known first. full_page_size is the
+            // size the former target-width + maximum-height config produced;
+            // a fixed size of exactly that renders the same page.
+            let (bitmap_w, bitmap_h) = full_page_size(w_pt, h_pt, target_w, target_h, matches!(
+                rot,
+                PdfPageRenderRotation::Degrees90 | PdfPageRenderRotation::Degrees270
+            ));
+            if bitmap_w <= 0 || bitmap_h <= 0 {
+                self.release_other_cheap_pages(idx);
+                return Err(anyhow!("PDFium render: invalid bitmap {}x{}", bitmap_w, bitmap_h));
+            }
+
+            // FPDF_REVERSE_BYTE_ORDER (set_reverse_byte_order) makes PDFium
+            // write RGBA itself, so no channel swap runs afterwards.
             let config = PdfRenderConfig::new()
-                .set_target_width(target_w)
-                .set_maximum_height(target_h)
+                .set_fixed_size(bitmap_w, bitmap_h)
                 .rotate(rot, true)
                 .render_form_data(true)
                 .render_annotations(annot_appearance.is_some())
                 .use_lcd_text_rendering(true)
-                .set_format(PdfBitmapFormat::BGRA);
+                .set_format(PdfBitmapFormat::BGRA)
+                .set_reverse_byte_order(true);
 
             if let Some(show) = annot_appearance {
                 if !annot_ready {
                     apply_annotation_appearance(page, show.names, show.indices)?;
                 }
             }
-            let bitmap = page.render_with_config(&config)
-                .map_err(|e| anyhow!("PDFium render: {}", e))?;
-
-            RenderResult {
-                width: bitmap.width() as u32,
-                height: bitmap.height() as u32,
-                rgba: bitmap.as_rgba_bytes(),
-            }
+            render_into(page, &config, bitmap_w, bitmap_h, out)
+                .map_err(|e| anyhow!("PDFium render: {}", e))?
         };
         // De getekende pagina blijft open voor de volgende tegel of zoom.
         // Andere documenten met een goedkope parse laten hun handle los.
@@ -324,6 +349,7 @@ impl Renderer {
         region_h_pt: f32,
         visibility: &[LayerVisibility],
         annot_appearance: Option<AnnotShow>,
+        out: &mut [u8],
     ) -> Result<RenderResult> {
         if rotation != 0 {
             return Err(anyhow!("render_region: rotation {} not supported", rotation));
@@ -366,21 +392,16 @@ impl Renderer {
                 .map_err(|e2| anyhow!("invalid transform: {}", e2))?
                 .render_annotations(annot_appearance.is_some())
                 .use_lcd_text_rendering(true)
-                .set_format(PdfBitmapFormat::BGRA);
+                .set_format(PdfBitmapFormat::BGRA)
+                .set_reverse_byte_order(true);
 
             if let Some(show) = annot_appearance {
                 if !annot_ready {
                     apply_annotation_appearance(page, show.names, show.indices)?;
                 }
             }
-            let bitmap = page.render_with_config(&config)
-                .map_err(|e| anyhow!("PDFium region render: {}", e))?;
-
-            RenderResult {
-                width: bitmap.width() as u32,
-                height: bitmap.height() as u32,
-                rgba: bitmap.as_rgba_bytes(),
-            }
+            render_into(page, &config, bitmap_w, bitmap_h, out)
+                .map_err(|e| anyhow!("PDFium region render: {}", e))?
         };
         if annot.is_some() && !annot_ready {
             self.cache[idx].annot_applied = annot;
@@ -388,6 +409,37 @@ impl Renderer {
         self.release_other_cheap_pages(idx);
         Ok(result)
     }
+}
+
+/// Pixel size pdfium-render gives a page scaled to `target_w` px wide and at
+/// most `target_h` px tall, turned a quarter or not (`set_target_width` +
+/// `set_maximum_height` + `rotate(.., true)`, same f32 arithmetic). A quarter
+/// turn swaps the output axes and applies the height cap to the new width.
+fn full_page_size(w_pt: f32, h_pt: f32, target_w: i32, target_h: i32, quarter_turn: bool) -> (i32, i32) {
+    let mut scale = target_w as f32 / w_pt;
+    if h_pt * scale > target_h as f32 {
+        scale = target_h as f32 / h_pt;
+    }
+    let (out_w, out_h) = if quarter_turn { (h_pt, w_pt) } else { (w_pt, h_pt) };
+    ((out_w * scale).round() as i32, (out_h * scale).round() as i32)
+}
+
+/// Render `page` into the front of `out` as tightly packed RGBA. The PDFium
+/// bitmap wraps `out` itself, so the pixels are never copied afterwards; the
+/// bitmap is cleared to white before the page is drawn.
+fn render_into(
+    page: &PdfPage,
+    config: &PdfRenderConfig,
+    width: i32,
+    height: i32,
+    out: &mut [u8],
+) -> std::result::Result<RenderResult, PdfiumError> {
+    {
+        // BGRA rows are 4-byte aligned, so the stride is exactly width * 4.
+        let mut bitmap = PdfBitmap::from_bytes(width, height, PdfBitmapFormat::BGRA, out)?;
+        page.render_into_bitmap_with_config(&mut bitmap, config)?;
+    }
+    Ok(RenderResult { width: width as u32, height: height as u32 })
 }
 
 #[cfg(test)]
@@ -398,6 +450,16 @@ mod tests {
     #[ignore]
     fn renders_a4_at_scale_1() {
         let _r = Renderer::new();
+    }
+
+    #[test]
+    fn full_page_size_matches_the_target_width_and_height_cap() {
+        // A4 at 1.5: the width fits, the height follows the aspect ratio.
+        assert_eq!(full_page_size(595.0, 842.0, 893, 1263, false), (893, 1263));
+        // A quarter turn swaps the axes of the output.
+        assert_eq!(full_page_size(595.0, 842.0, 893, 1263, true), (1263, 893));
+        // A height cap below the aspect height scales the page down.
+        assert_eq!(full_page_size(100.0, 200.0, 100, 100, false), (50, 100));
     }
 
     #[test]

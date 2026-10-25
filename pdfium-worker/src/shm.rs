@@ -9,9 +9,8 @@ pub const PAYLOAD_CAP: usize = SHM_SIZE - HEADER_SIZE;
 
 /// Check BEFORE rendering whether an RGBA bitmap of `width`x`height` px fits
 /// in the SHM region, so an oversized render becomes a clean error instead of
-/// a full rasterisation whose result is thrown away (pdfium-render's
-/// `as_rgba_bytes` copies the buffer twice: ~2.5x the bitmap size in peak
-/// memory, and a failed Rust allocation aborts the worker process).
+/// a full rasterisation whose result is thrown away. The worker renders into
+/// the region itself, so a bitmap that does not fit cannot be drawn at all.
 /// Computed in u128 so absurd sizes cannot overflow (an overflow would panic
 /// in a debug build). Non-positive sizes count as 0 bytes; PDFium rejects
 /// those itself with a clean error.
@@ -71,8 +70,33 @@ impl Shm {
         Ok(Self { mmap })
     }
 
+    /// The payload area after the header. A render writes its RGBA pixels
+    /// here directly; `write_header` then publishes the size.
+    pub fn payload_mut(&mut self) -> &mut [u8] {
+        &mut self.mmap[HEADER_SIZE..]
+    }
+
+    /// Write width + height to the header for a bitmap already in the
+    /// payload. Returns the payload byte count.
+    ///
+    /// No flush: the app maps the same file and sees these pages at once.
+    /// Flushing would only write the bitmap to disk (on Windows, on every
+    /// render) for no reader.
+    pub fn write_header(&mut self, width: u32, height: u32) -> Result<u64> {
+        let bytes = u64::from(width) * u64::from(height) * 4;
+        if bytes > PAYLOAD_CAP as u64 {
+            anyhow::bail!("bitmap too large for SHM: {} bytes > {} (cap)", bytes, PAYLOAD_CAP);
+        }
+        self.mmap[0..4].copy_from_slice(&width.to_le_bytes());
+        self.mmap[4..8].copy_from_slice(&height.to_le_bytes());
+        // zero-fill the rest of the header (slots 8..32 reserved)
+        self.mmap[8..HEADER_SIZE].fill(0);
+        Ok(bytes)
+    }
+
     /// Write width + height to header, copy rgba into payload starting at
     /// offset HEADER_SIZE. Returns total payload bytes written.
+    #[cfg(test)]
     pub fn write_bitmap(&mut self, width: u32, height: u32, rgba: &[u8]) -> Result<u64> {
         if rgba.len() > PAYLOAD_CAP {
             anyhow::bail!(
@@ -89,7 +113,6 @@ impl Shm {
         }
         let end = HEADER_SIZE + rgba.len();
         self.mmap[HEADER_SIZE..end].copy_from_slice(rgba);
-        self.mmap.flush_async().context("flush SHM after write")?;
         Ok(rgba.len() as u64)
     }
 }

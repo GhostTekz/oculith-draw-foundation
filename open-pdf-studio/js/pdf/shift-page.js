@@ -5,7 +5,7 @@
 // and only its content is wrapped in that transform (shift-page-content.js)
 // — nothing is rasterized and nothing on the page dictionary is lost.
 import { getActiveDocument } from "../core/state.js";
-import { getCachedPdfBytes } from "./loader.js";
+import { getPdfBytes } from "./loader.js";
 import { getCacheKey, reloadFromBytes } from "./page-manager.js";
 import { recordPageStructure } from "../core/undo-manager.js";
 import { showLoading, hideLoading } from "../ui/chrome/dialogs.js";
@@ -42,7 +42,7 @@ export async function shiftPages(dxMm, dyMm, applyTo, fromPage = 1) {
   const { dx, dy } = offset;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = await getPdfBytes(cacheKey);
   if (!currentBytes) return { shifted: 0, reason: "no-pages" };
 
   const oldAnnotations = doc.annotations.map((a) => cloneAnnotation(a));

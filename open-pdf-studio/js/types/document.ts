@@ -87,7 +87,9 @@ export interface DocumentState {
    *  searchable text layer on save (see js/pdf/ocr.js, saver/ocr-text-layer.js). */
   ocrResults: Record<number, OcrWord[]>;
   bookmarks: Bookmark[];
+  /** Kept outside the store (core/undo-stacks.js); read with undoStackOf(). */
   undoStack: UndoCommand[];
+  /** Kept outside the store (core/undo-stacks.js); read with redoStackOf(). */
   redoStack: UndoCommand[];
   savedUndoStackLength: number;
   selectedAnnotation: Annotation | null;
@@ -125,6 +127,8 @@ export interface DocumentState {
   _annotationPagesReady: Set<number>;
   _sharedPdfLibDoc: any;
   _sharedPdfLibDocPromise: Promise<any> | null;
+  /** The open-time pdf-lib reads (pdf/loader.js pdfLibSource). */
+  _pdfLibSource: any;
   _pagesNeedingColorUpdate: Set<number>;
   _annotationLoadId: number;
   _isLoading: boolean;

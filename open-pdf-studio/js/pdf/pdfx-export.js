@@ -36,7 +36,7 @@ import { getActiveDocument } from '../core/state.js';
 import { edition } from '../editions/active.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
 import { isTauri, readBinaryFile, writeBinaryFile, saveFileDialog } from '../core/platform.js';
-import { getCachedPdfBytes } from './loader.js';
+import { getPdfBytes } from './loader.js';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import { showMessage } from '../bridge.js';
 import i18next from '../i18n/config.js';
@@ -221,8 +221,8 @@ export function enrichForPdfX(pdfDocLib, { conformance = 'X-3', title = 'Documen
 // included (save first to include recent edits).
 async function getCurrentPdfBytes(activeDoc) {
   const currentPath = activeDoc?.filePath;
-  let bytes = currentPath ? getCachedPdfBytes(currentPath) : undefined;
-  if (!bytes && activeDoc) bytes = getCachedPdfBytes(`__memory__${activeDoc.id}`);
+  let bytes = currentPath ? await getPdfBytes(currentPath) : undefined;
+  if (!bytes && activeDoc) bytes = await getPdfBytes(`__memory__${activeDoc.id}`);
   if (!bytes && currentPath) bytes = await readBinaryFile(currentPath);
   return bytes;
 }

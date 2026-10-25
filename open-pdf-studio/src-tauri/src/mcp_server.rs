@@ -625,7 +625,8 @@ fn handle_tools_list() -> Value {
                     "type": "object",
                     "properties": {
                         "reset": { "type": "boolean", "description": "Clear the timings after reading them." },
-                        "flush": { "type": "boolean", "description": "Also write the summary to the app log." }
+                        "flush": { "type": "boolean", "description": "Also write the summary to the app log." },
+                        "release": { "type": "array", "items": { "type": "string", "enum": ["pdf-lib", "pdfjs-pages", "list"] }, "description": "Memory experiments: let go of this data on the active document (rebuilt on next use)." }
                     },
                     "additionalProperties": false
                 }
@@ -639,7 +640,8 @@ fn handle_tools_list() -> Value {
                         "x": { "type": "number", "description": "Cursor clientX in CSS pixels (viewport-relative)." },
                         "y": { "type": "number", "description": "Cursor clientY in CSS pixels (viewport-relative)." },
                         "deltaY": { "type": "number", "description": "WheelEvent.deltaY. Default -120 (one notch zoom-in)." },
-                        "ctrlKey": { "type": "boolean", "description": "Whether ctrlKey is set (default true → zoom). Set false to test plain wheel pan/scroll." }
+                        "ctrlKey": { "type": "boolean", "description": "Whether ctrlKey is set (default true → zoom). Set false to test plain wheel pan/scroll." },
+                        "steps": { "type": "integer", "minimum": 1, "maximum": 60, "description": "Notches in one spin, one per animation frame (default 1)." }
                     },
                     "required": ["x", "y"],
                     "additionalProperties": false

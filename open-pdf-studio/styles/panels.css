@@ -1806,3 +1806,16 @@
 .measurements-raceway-over {
   color: var(--ox-danger);
 }
+
+/* "Read all sheets" in the Markups List count (large drawings read sheets
+   when shown). */
+.annotations-read-all {
+  font: inherit;
+  padding: 0 var(--ox-s-1, 4px);
+  border: 1px solid var(--theme-panel-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.annotations-read-all:disabled { opacity: 0.6; cursor: default; }

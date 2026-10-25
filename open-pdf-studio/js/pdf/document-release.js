@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 // Vrijgeven van wat een gesloten document in het geheugen vasthield.
 //
 // closeTab() haalde het document alleen uit state.documents. Wat er per
@@ -15,6 +16,9 @@
 // (saveTargetPath) telt ook als gebruik. De uitvoering (geefDocumentVrij)
 // laadt de cache-modules pas op dat moment, zodat deze module zonder DOM
 // te testen is.
+
+import { clearUndoHistory } from '../core/undo-stacks.js';
+import { forgetPdfLibReads } from './pdf-lib-session.js';
 
 /** Gebruikt een van de overgebleven documenten dit pad nog? */
 export function padNogInGebruik(overgebleven, pad) {
@@ -210,5 +214,45 @@ export async function geefDocumentVrij(gesloten, overgebleven) {
   for (const pad of plan.paden) await geefPadVrij(pad);
   // Pas nu de tijdelijke werkbestanden zelf: niets leest er nog uit.
   try { await ruimWerkbestandenOp(gesloten, plan.werkbestanden); } catch (e) { console.warn('[release] werkbestanden opruimen:', e); }
+  await laatZwareDelenLos(gesloten, overgebleven);
   return plan;
+}
+
+// Een gesloten document mag niets groots meer vasthouden: wat er nog naar
+// verwijst (een cache, een paneel, een belofte) hield anders zijn markeringen,
+// de pdf-lib-ontleding van het hele bestand en zijn ongedaan-geschiedenis
+// vast. Op het apparaat groeide het webproces zo met elk geopend en weer
+// gesloten document (1 naar 5 GB over vijf tekeningen).
+// The undo history lives outside the store (core/undo-stacks.js) and is
+// emptied apart.
+const ZWARE_VELDEN = ['annotations', 'selectedAnnotations', 'textEdits', 'ocrResults',
+  '_sharedPdfLibDoc', '_sharedPdfLibDocPromise', '_pdfLibSource', '_extBron', '_pdfLibWaiters', '_saveBaseline', '_rangeSource'];
+async function laatZwareDelenLos(gesloten, overgebleven) {
+  if (!gesloten || (overgebleven || []).includes(gesloten)) return;
+  try {
+    const { perfWatch } = await import('../core/perf.js');
+    const raw = (v) => (v && v[$RAW]) || v;
+    perfWatch('closed document', raw(gesloten));
+    perfWatch('closed document markups', raw(gesloten.annotations));
+    perfWatch('closed document pdf-lib parse', gesloten._sharedPdfLibDoc);
+    perfWatch('closed document PDF.js', gesloten.pdfDoc);
+  } catch { /* geen meting */ }
+  try {
+    const rendering = await import('../annotations/rendering.js');
+    rendering.forgetDocumentDrawState(gesloten);
+  } catch { /* geen tekenmodule geladen */ }
+  try { clearUndoHistory(gesloten); } catch { /* geen geschiedenis */ }
+  // Its pdf-lib worker goes with it, requests still running included.
+  try { forgetPdfLibReads(gesloten, { now: true }); } catch { /* geen lezing */ }
+  for (const veld of ZWARE_VELDEN) {
+    try {
+      if (Array.isArray(gesloten[veld])) gesloten[veld] = [];
+      else if (gesloten[veld] != null) gesloten[veld] = null;
+    } catch { /* alleen-lezen veld */ }
+  }
+  try { gesloten.pdfDoc = null; } catch { /* alleen-lezen */ }
+  if (!(overgebleven || []).length) {
+    // Geen document meer: de Markups List mag zijn rijen loslaten.
+    try { (await import('../ui/panels/annotations-list.js')).updateAnnotationsList(); } catch { /* lijst niet geladen */ }
+  }
 }

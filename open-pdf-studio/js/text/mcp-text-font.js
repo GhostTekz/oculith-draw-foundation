@@ -1,5 +1,7 @@
-import fontkit from '@pdf-lib/fontkit';
 import { embedOcrFont, loadDefaultOcrFontBytes } from '../pdf/saver/ocr-text-layer.js';
+
+// fontkit (about 0.5 MB) loads with the first report, not with the editor.
+const loadFontkit = () => import('@pdf-lib/fontkit').then((m) => m.default);
 
 const latinFonts = {
   regular: 'LiberationSans-Regular.ttf',
@@ -27,6 +29,7 @@ function covers(font, text) {
 
 /** Choose a bundled full font that really has every requested glyph. */
 export async function embedMcpTextFont(pdfDocLib, text, { bold = false, italic = false } = {}) {
+  const fontkit = await loadFontkit();
   const variant = bold && italic ? 'boldItalic' : bold ? 'bold' : italic ? 'italic' : 'regular';
   let embedded = embeddedFonts.get(pdfDocLib);
   if (!embedded) { embedded = new Map(); embeddedFonts.set(pdfDocLib, embedded); }

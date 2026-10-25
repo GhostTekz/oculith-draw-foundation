@@ -8,6 +8,7 @@
 // without any visible sign.
 
 import { geldigeSchaal } from './schaal-op-punt.js';
+import { pageTextContent } from '../pdf/page-text-content.js';
 
 // Patterns ordered from most specific (labelled) to least specific (bare 1:N).
 // The labelled pattern avoids false positives from dimensions like "2:3".
@@ -86,7 +87,8 @@ export async function detectScaleInDocument(doc, pageNum) {
   if (!doc?.pdfDoc) return null;
 
   const page = await doc.pdfDoc.getPage(pageNum || doc.currentPage);
-  const textContent = await page.getTextContent();
+  // The text layer reads the same page: one PDF.js request for both.
+  const textContent = await pageTextContent(page);
   return findScaleInText(textContent.items);
 }
 

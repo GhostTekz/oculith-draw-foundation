@@ -5,6 +5,7 @@
 // PDF user space is 1/72 inch on paper. A drawing at 1:N shows one real unit
 // as (72 * inchesPerUnit / N) points.
 
+import { $RAW } from 'solid-js/store';
 import { geldigeDocumentSchaal, schaalOpPunt, paginaSchaal } from './schaal-op-punt.js';
 
 export const SCALE_UNITS = ['mm', 'cm', 'm', 'in', 'ft'];
@@ -158,7 +159,12 @@ export function normalizeRatioInput(input) {
  */
 export function pageScaleStatus(doc, pageNum, legacyScale = null) {
   if (!doc) return null;
-  const annotations = Array.isArray(doc.annotations) ? doc.annotations : [];
+  // The length through the store (a markup added or removed counts), the
+  // scan over the raw array: through the store it touched every markup's
+  // proxy, and this runs for the status bar on every change.
+  const tracked = Array.isArray(doc.annotations) ? doc.annotations : [];
+  void tracked.length;
+  const annotations = tracked[$RAW] || tracked;
   const regions = annotations.some(a => a.page === pageNum
     && (a.type === 'scaleRegion' || a.type === 'viewport'))
     || (Array.isArray(doc.pdfViewports?.[pageNum])

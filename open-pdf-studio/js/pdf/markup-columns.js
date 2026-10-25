@@ -1,26 +1,34 @@
-import { readMarkupTextColumn, readMarkupSecondTextColumn } from './markup-text-column.js';
-import { readMarkupChoiceColumn } from './markup-choice-column.js';
-import { readMarkupSecondChoiceColumn } from './markup-second-choice-column.js';
-import { readMarkupNumberColumn } from './markup-number-column.js';
-import { readMarkupSecondNumberColumn } from './markup-second-number-column.js';
-import { readMarkupCheckmarkColumn } from './markup-checkmark-column.js';
-import { readMarkupFormulaColumn } from './markup-formula-column.js';
-import { readMarkupStatusSet } from './markup-status-set.js';
-import { readFormulaCaptions } from './formula-captions-pdf.js';
+// The Markups List columns and status set a PDF brings, from the catalog
+// fields the loader read at open (pdf-lib-catalog.js). A value the user set
+// meanwhile is kept.
+
+import { readCatalogFields } from './pdf-lib-catalog.js';
+
+/** Fill the column fields `doc` does not have yet from `catalog`. */
+export function applyMarkupColumns(doc, catalog) {
+  if (!doc || !catalog) return;
+  if (!doc.markupTextColumnName) doc.markupTextColumnName = catalog.textColumnName;
+  if (!doc.markupTextColumn2Name) doc.markupTextColumn2Name = catalog.textColumn2Name;
+  if (!doc.markupChoiceColumn) doc.markupChoiceColumn = catalog.choiceColumn;
+  if (!doc.markupChoiceColumn2) doc.markupChoiceColumn2 = catalog.choiceColumn2;
+  if (!doc.markupNumberColumn) doc.markupNumberColumn = catalog.numberColumn;
+  if (!doc.markupNumberColumn2) doc.markupNumberColumn2 = catalog.numberColumn2;
+  if (!doc.markupCheckmarkColumn) doc.markupCheckmarkColumn = catalog.checkmarkColumn;
+  if (!doc.markupFormulaColumn) doc.markupFormulaColumn = catalog.formulaColumn;
+  if (doc.formulaCaptions == null) doc.formulaCaptions = catalog.formulaCaptions;
+  if (!doc.markupStatusSet && doc.markupStatusSet !== false) doc.markupStatusSet = catalog.statusSet;
+}
 
 /** Wait for source metadata before editing a column or exporting a summary. */
 export async function ensureMarkupColumnsReady(doc) {
   if (!doc) return;
-  const source = doc._sharedPdfLibDoc || await doc._sharedPdfLibDocPromise;
-  if (!source) return;
-  if (!doc.markupTextColumnName) doc.markupTextColumnName = readMarkupTextColumn(source);
-  if (!doc.markupTextColumn2Name) doc.markupTextColumn2Name = readMarkupSecondTextColumn(source);
-  if (!doc.markupChoiceColumn) doc.markupChoiceColumn = readMarkupChoiceColumn(source);
-  if (!doc.markupChoiceColumn2) doc.markupChoiceColumn2 = readMarkupSecondChoiceColumn(source);
-  if (!doc.markupNumberColumn) doc.markupNumberColumn = readMarkupNumberColumn(source);
-  if (!doc.markupNumberColumn2) doc.markupNumberColumn2 = readMarkupSecondNumberColumn(source);
-  if (!doc.markupCheckmarkColumn) doc.markupCheckmarkColumn = readMarkupCheckmarkColumn(source);
-  if (!doc.markupFormulaColumn) doc.markupFormulaColumn = readMarkupFormulaColumn(source);
-  if (doc.formulaCaptions == null) doc.formulaCaptions = readFormulaCaptions(source);
-  if (!doc.markupStatusSet && doc.markupStatusSet !== false) doc.markupStatusSet = readMarkupStatusSet(source);
+  // Only a read that is under way or done (loader.js); this does not start one.
+  const source = doc._pdfLibSource;
+  if (source) {
+    applyMarkupColumns(doc, source.catalog || (await source.ready)?.catalog);
+    return;
+  }
+  // A pdf-lib document parsed on this thread.
+  const parsed = doc._sharedPdfLibDoc || await doc._sharedPdfLibDocPromise;
+  if (parsed) applyMarkupColumns(doc, readCatalogFields(parsed));
 }

@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 // Spaces (the external editor Window ▸ Spaces): named, optionally nested regions of a page.
 // Every markup gets a computed, read-only "Space": the deepest space that
 // holds its anchor point, written as a path "Building ▸ Room ▸ Closet".
@@ -117,7 +118,18 @@ export function collectSpaces(doc) {
   const stored = (Array.isArray(doc?.spaces) ? doc.spaces : [])
     .map(normalizeSpace).filter(Boolean)
     .map((s) => ({ ...s, source: 'space' }));
-  const rooms = (Array.isArray(doc?.annotations) ? doc.annotations : []).map(roomSpace).filter(Boolean);
+  // Only area measurements can be rooms: that test on the raw list, then the
+  // candidates through the store (a room's edits still count). Through the
+  // store every markup went through a proxy, at 20,000 markups a real part
+  // of an open.
+  const lijst = Array.isArray(doc?.annotations) ? doc.annotations : [];
+  const ruw = lijst[$RAW] || lijst;
+  const rooms = [];
+  for (let i = 0, n = lijst.length; i < n; i++) {
+    if (ruw[i]?.type !== 'measureArea') continue;
+    const room = roomSpace(lijst[i]);
+    if (room) rooms.push(room);
+  }
   const seen = new Set();
   const all = [];
   for (const s of [...stored, ...rooms]) {

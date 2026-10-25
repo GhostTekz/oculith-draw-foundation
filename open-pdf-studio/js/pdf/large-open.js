@@ -3,6 +3,11 @@
 
 export const LARGE_PAGE_COUNT = 40;
 export const LARGE_FILE_BYTES = 48 * 1024 * 1024;
+// Read by byte range instead of whole at open (loader.js). Measured: a
+// 563 MB set took 13.4 s to read whole and opened in 5.7 s by range, while
+// a 50 MB set read whole in 0.25 s and its first sheet's markups came
+// slower by range (scattered objects, many small reads).
+export const RANGE_OPEN_BYTES = 192 * 1024 * 1024;
 const PAGE_TYPE_CHUNK = 8;
 
 export function isLargeOpen({ numPages = 0, byteLength = 0 } = {}) {

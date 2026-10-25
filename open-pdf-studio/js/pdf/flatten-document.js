@@ -13,7 +13,8 @@
 // and Markups List columns.
 import { getActiveDocument } from '../core/state.js';
 import { PDFDocument } from 'pdf-lib';
-import { getCachedPdfBytes, ensureAnnotationsForPage } from './loader.js';
+import { $RAW } from 'solid-js/store';
+import { getPdfBytes, ensureAnnotationsForPage } from './loader.js';
 import { getCacheKey, reloadFromBytes } from './page-manager.js';
 import { recordPageStructure } from '../core/undo-manager.js';
 import { cloneAnnotation } from '../annotations/factory.js';
@@ -21,6 +22,10 @@ import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
 import { getAnnotationDisplayName } from '../utils/helpers.js';
 import i18next from '../i18n/config.js';
 import { flattenPdfDocument, unflattenPdfDocument, flattenedPages, pdfjsAnnotationId } from './flatten.js';
+
+// The undo snapshot reads the raw markups: through the store proxy every
+// markup and nested value of the drawing would be wrapped for one copy.
+const raw = (value) => (value && value[$RAW]) || value;
 
 // Not markups on the page: a viewport is a /VP entry, not an annotation.
 const NOT_FLATTENABLE = new Set(['scaleRegion']);
@@ -77,8 +82,8 @@ export async function flattenDocument({ pages = null, types = null, ids = null, 
     .map(c => c.annotation);
   if (!chosen.length) return { flattened: 0, skipped: 0, reason: 'none' };
 
-  const oldBytes = getCachedPdfBytes(getCacheKey());
-  const oldAnnotations = doc.annotations.map(a => cloneAnnotation(a));
+  const oldBytes = await getPdfBytes(getCacheKey());
+  const oldAnnotations = raw(doc.annotations).map(a => cloneAnnotation(a));
   const oldRotations = { ...(doc.pageRotations || {}) };
   const oldPage = doc.currentPage;
   const sourcePdf = doc.pdfDoc;
@@ -128,7 +133,7 @@ export async function unflattenDocument({ pages = null } = {}) {
   const doc = getActiveDocument();
   if (!doc?.pdfDoc) return { restored: 0, reason: 'none' };
   if (!(await allPagesLoaded(doc))) return { restored: 0, reason: 'loading' };
-  const bytes = getCachedPdfBytes(getCacheKey());
+  const bytes = await getPdfBytes(getCacheKey());
   if (!bytes || getActiveDocument() !== doc) return { restored: 0, reason: 'none' };
 
   showLoading(i18next.t('flattenMarkups.working', { ns: 'common' }));
@@ -146,7 +151,7 @@ export async function unflattenDocument({ pages = null } = {}) {
     const { modelsFromPdf } = await import('./flatten-models.js');
     const models = await modelsFromPdf(newBytes, { only, existing: doc.annotations, pdfjsOptions: pdfjsAssets() });
     if (getActiveDocument() !== doc) return { restored: 0, reason: 'none' };
-    const oldAnnotations = doc.annotations.map(a => cloneAnnotation(a));
+    const oldAnnotations = raw(doc.annotations).map(a => cloneAnnotation(a));
     const rotations = { ...(doc.pageRotations || {}) };
     const page = doc.currentPage;
     const newAnnotations = [...oldAnnotations.map(a => cloneAnnotation(a)), ...models];

@@ -1,8 +1,10 @@
-import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { edition } from '../editions/active.js';
 import { createBatchCompareReportModel, createCompareChangeReportModel } from './change-report.js';
 import { drawBrandMark } from '../pdf/brand-mark-pdf.js';
+
+// fontkit (about 0.5 MB) loads with the first report, not with the editor.
+const loadFontkit = () => import('@pdf-lib/fontkit').then((m) => m.default);
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -94,6 +96,7 @@ function createReportLayout(document, font, face) {
 }
 
 export async function buildCompareChangeReportPdf(options, fontBytes) {
+  const fontkit = await loadFontkit();
   if (!fontBytes?.byteLength) throw new Error('The bundled report font is unavailable.');
   const report = createCompareChangeReportModel(options);
   const document = await PDFDocument.create();
@@ -140,6 +143,7 @@ export async function buildCompareChangeReportPdf(options, fontBytes) {
 }
 
 export async function buildBatchCompareChangeReportPdf(batch, fontBytes, generatedAt) {
+  const fontkit = await loadFontkit();
   if (!fontBytes?.byteLength) throw new Error('The bundled report font is unavailable.');
   const report = createBatchCompareReportModel(batch, generatedAt);
   const document = await PDFDocument.create();

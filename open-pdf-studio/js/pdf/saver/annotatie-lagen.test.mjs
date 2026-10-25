@@ -328,8 +328,11 @@ test('de saver schrijft de lagen één keer en zet /OC vlak voor de annotatie de
 
 test('de lader leest de lagen zodra het pdf-lib-document er is, en begint bij elk bestand opnieuw', () => {
   const loader = bron('../loader.js');
-  const gedeeld = loader.slice(loader.indexOf('async function getSharedPdfLibDoc('));
-  assert.match(gedeeld.slice(0, 1500), /pasGelezenLagenToe\(doc, leesAnnotatieLagen\(pdfLibDoc\)\)/);
+  // pdf-lib-catalog.js reads the layers with the other catalog fields (in
+  // the worker or in place); the loader applies them when that read is in.
+  assert.match(bron('../pdf-lib-catalog.js'), /layers: field\(\(\) => leesAnnotatieLagen\(pdfLibDoc\)\)/);
+  const gedeeld = loader.slice(loader.indexOf('async function openPdfLibSource('));
+  assert.match(gedeeld.slice(0, 3000), /pasGelezenLagenToe\(doc, catalog\.layers\)/);
   assert.match(loader, /doc\.annotationLayers = \[\];\s*\n\s*doc\.currentLayerId = null;\s*\n\s*doc\._annotatieLagenGelezen = false;/);
 });
 

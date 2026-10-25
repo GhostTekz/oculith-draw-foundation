@@ -88,10 +88,11 @@ test('closing a file rejects its pending bitmap without touching another file', 
   } finally { stub.restore(); }
 });
 
-test('byte budget evicts an old tile before eight entries are reached', async () => {
+test('the shared byte budget evicts an old tile before eight entries are reached', async () => {
   const stub = installDeferredBitmaps();
   try {
-    const large = { width: 5000, height: 5000 };
+    // Two 7000 x 7000 tiles (196 MB each) exceed the 384 MB bitmap budget.
+    const large = { width: 7000, height: 7000 };
     const first = tileCacheSet('large.pdf', 1, 1, 0, '0,0', large, {});
     const second = tileCacheSet('large.pdf', 2, 1, 0, '0,0', large, {});
     const old = bitmap(), newer = bitmap();

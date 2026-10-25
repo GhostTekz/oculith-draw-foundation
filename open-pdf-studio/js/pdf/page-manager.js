@@ -1,5 +1,5 @@
 import { state, getActiveDocument } from '../core/state.js';
-import { getCachedPdfBytes, setCachedPdfBytes, cancelAnnotationLoading, markAllAnnotationPagesLoaded } from './loader.js';
+import { getCachedPdfBytes, getPdfBytes, setCachedPdfBytes, forgetPdfRangeSource, cancelAnnotationLoading, markAllAnnotationPagesLoaded } from './loader.js';
 import { setViewMode } from './renderer.js';
 import { generateThumbnails, clearThumbnailCache } from '../ui/panels/left-panel.js';
 import { markDocumentModified } from '../ui/chrome/tabs.js';
@@ -38,7 +38,7 @@ export async function copyPage(pageNum) {
   if (!getActiveDocument()?.pdfDoc) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const srcDoc = await PDFDocument.load(currentBytes, { ignoreEncryption: true });
@@ -60,7 +60,7 @@ export async function copyPages(pageNumbers) {
   if (!getActiveDocument()?.pdfDoc || !pageNumbers || pageNumbers.length === 0) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const srcDoc = await PDFDocument.load(currentBytes, { ignoreEncryption: true });
@@ -113,7 +113,7 @@ export async function pastePage(afterPageNum) {
   if (!getActiveDocument()?.pdfDoc || !pageClipboard) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const doc = getActiveDocument();
@@ -259,6 +259,7 @@ export async function reloadFromBytes(newBytes, annotations, rotations, targetPa
   clearTextCache(doc.id);
 
   // Load new bytes into pdf.js (slice to prevent buffer detachment of the original)
+  forgetPdfRangeSource(doc);
   doc.pdfDoc = await pdfjsLib.getDocument({
     data: newBytes.slice(),
     cMapUrl: '/pdfjs/web/cmaps/',
@@ -383,7 +384,7 @@ export async function insertBlankPages(position, refPage, count, widthPt, height
   if (!getActiveDocument()?.pdfDoc) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const doc = getActiveDocument();
@@ -477,7 +478,7 @@ export async function insertPagesFromFile(refPage, position, sourcePath = null, 
   if (!filePath) return false;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return false;
 
   const doc = getActiveDocument();
@@ -583,7 +584,7 @@ export async function deletePages(pageNumbers) {
   }
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const doc = getActiveDocument();
@@ -647,7 +648,7 @@ export async function extractPages(pageNumbers, deleteFromOriginal) {
   }
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   // Ask user where to save
@@ -699,7 +700,7 @@ export async function reorderPages(newPageOrder) {
   if (unchanged) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const doc = getActiveDocument();
@@ -787,7 +788,7 @@ export async function replacePages(pageNumber) {
   if (!filePath) return;
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;
 
   const doc = getActiveDocument();
@@ -879,7 +880,7 @@ export async function mergeFiles(filePaths, position) {
   const verslag = nieuwMergeVerslag();
 
   const cacheKey = getCacheKey();
-  let currentBytes = getCachedPdfBytes(cacheKey);
+  let currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes && doc.filePath) {
     // Bytes may not be in the JS cache yet (e.g. a just-opened doc) — read
     // them from disk like savePDF does, so merge never silently no-ops.

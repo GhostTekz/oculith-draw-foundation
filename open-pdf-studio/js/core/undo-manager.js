@@ -4,6 +4,13 @@ import { cloneAnnotation } from '../annotations/factory.js';
 import { stampRasterStale } from '../annotations/stamp-appearance-sync.js';
 import { applyOcrShift } from '../pdf/shift-page-geometry.js';
 import { trimUndoStack } from './undo-byte-budget.js';
+import { unwrap } from 'solid-js/store';
+import {
+  rawOf, undoStackOf, redoStackOf, clearRedoStack, historyChanged,
+} from './undo-stacks.js';
+export {
+  undoStackOf, redoStackOf, trackUndoHistory, undoDepth, redoDepth,
+} from './undo-stacks.js';
 // Page-structure commands also obey the PDF-byte ceiling in undo-byte-budget.js.
 const MAX_UNDO_STACK = 100;
 let undoTransactionDepth = 0;
@@ -13,7 +20,21 @@ let undoTransactionBeforeSelectionIds = null;
 
 function clonePlainValue(value) {
   if (value == null) return value;
-  return JSON.parse(JSON.stringify(value));
+  return JSON.parse(JSON.stringify(rawOf(value)));
+}
+
+// Snapshot an annotation for the history from its raw object: reading the
+// store proxy would wrap every nested value and, inside a computation,
+// subscribe it to every property.
+function historyClone(annotation) {
+  return cloneAnnotation(rawOf(annotation));
+}
+
+// A command enters the history as plain data. The stacks are outside the
+// store, so nothing unwraps a proxy that a caller put in a command (a shallow
+// copy of a markup still holds its nested arrays as proxies); do it once here.
+function plainCommand(cmd) {
+  return unwrap(cmd);
 }
 
 // Sync the modified flag based on whether the undo stack matches the saved clean point
@@ -21,29 +42,24 @@ function syncModifiedState() {
   const doc = getActiveDocument();
   if (!doc) return;
   const isClean = doc.savedUndoStackLength >= 0 &&
-                  (doc.undoStack || []).length === doc.savedUndoStackLength;
+                  undoStackOf(doc).length === doc.savedUndoStackLength;
   doc.modified = !isClean;
 }
 
-// Per-document undo stack stored on the document object
+// Per-document undo stack, kept outside the store (undo-stacks.js)
 function getUndoStack() {
-  const doc = getActiveDocument();
-  if (!doc) return [];
-  if (!doc.undoStack) doc.undoStack = [];
-  return doc.undoStack;
+  return undoStackOf(getActiveDocument());
 }
 
 function getRedoStack() {
-  const doc = getActiveDocument();
-  if (!doc) return [];
-  if (!doc.redoStack) doc.redoStack = [];
-  return doc.redoStack;
+  return redoStackOf(getActiveDocument());
 }
 
 function pushUndo(cmd) {
   const stack = getUndoStack();
-  stack.push(cmd);
+  stack.push(plainCommand(cmd));
   const removed = trimUndoStack(stack, MAX_UNDO_STACK);
+  historyChanged();
   const doc = getActiveDocument();
   if (removed && doc && doc.savedUndoStackLength >= 0) {
     doc.savedUndoStackLength -= removed;
@@ -53,7 +69,7 @@ function pushUndo(cmd) {
 
 function clearRedo() {
   const doc = getActiveDocument();
-  if (doc) doc.redoStack = [];
+  if (doc) clearRedoStack(doc);
 }
 
 // No-op: TitleBar.jsx now derives undo/redo enabled from reactive state
@@ -191,7 +207,7 @@ export function execute(cmd) {
   }
   const doc = getActiveDocument();
   // If clean point was beyond current position, it's now unreachable (divergent edit)
-  if (doc && doc.savedUndoStackLength > (doc.undoStack || []).length) {
+  if (doc && doc.savedUndoStackLength > undoStackOf(doc).length) {
     doc.savedUndoStackLength = -1;
   }
   pushUndo(cmd);
@@ -210,6 +226,7 @@ export async function undo() {
   const cmd = undoStack.pop();
   const redoStack = getRedoStack();
   redoStack.push(cmd);
+  historyChanged();
   scheduleThumbnailRefresh(cmd);
 
   if (cmd.type === 'pageStructure') {
@@ -306,6 +323,7 @@ export async function redo() {
   const cmd = redoStack.pop();
   const undoStack = getUndoStack();
   undoStack.push(cmd);
+  historyChanged();
   scheduleThumbnailRefresh(cmd);
 
   if (cmd.type === 'pageStructure') {
@@ -871,7 +889,7 @@ function scheduleStoredGeometry(annotations) {
 export function recordAdd(annotation) {
   execute({
     type: 'addAnnotation',
-    annotation: cloneAnnotation(annotation)
+    annotation: historyClone(annotation)
   });
   scheduleStoredGeometry(annotation);
 }
@@ -879,13 +897,13 @@ export function recordAdd(annotation) {
 export function recordDelete(annotation, index) {
   execute({
     type: 'deleteAnnotation',
-    annotation: cloneAnnotation(annotation),
+    annotation: historyClone(annotation),
     index: index
   });
 }
 
 export function recordClearPage(pageNum, annotations) {
-  const pageAnnotations = annotations.filter(a => a.page === pageNum).map(a => cloneAnnotation(a));
+  const pageAnnotations = rawOf(annotations).filter(a => a.page === pageNum).map(a => historyClone(a));
   if (pageAnnotations.length === 0) return;
   execute({
     type: 'clearPage',
@@ -898,7 +916,7 @@ export function recordClearAll(annotations) {
   if (annotations.length === 0) return;
   execute({
     type: 'clearAll',
-    annotations: annotations.map(a => cloneAnnotation(a))
+    annotations: rawOf(annotations).map(a => historyClone(a))
   });
 }
 
@@ -906,8 +924,8 @@ export function recordModify(annotationId, oldState, newState) {
   execute({
     type: 'modifyAnnotation',
     id: annotationId,
-    oldState: cloneAnnotation(oldState),
-    newState: cloneAnnotation(newState)
+    oldState: historyClone(oldState),
+    newState: historyClone(newState)
   });
   const ann = getActiveDocument()?.annotations?.find((item) => item.id === annotationId);
   if (ann) scheduleStoredGeometry(ann);
@@ -933,8 +951,8 @@ export function recordBulkModify(currentAnnotations, originalAnnotations) {
     if (originalAnnotations[i]) {
       items.push({
         id: currentAnnotations[i].id,
-        oldState: cloneAnnotation(originalAnnotations[i]),
-        newState: cloneAnnotation(currentAnnotations[i])
+        oldState: historyClone(originalAnnotations[i]),
+        newState: historyClone(currentAnnotations[i])
       });
     }
   }
@@ -949,7 +967,7 @@ export function recordBulkDelete(annotations) {
   const doc = getActiveDocument();
   if (!doc) return;
   const items = annotations.map(ann => ({
-    annotation: cloneAnnotation(ann),
+    annotation: historyClone(ann),
     index: doc.annotations.indexOf(ann)
   }));
   execute({ type: 'bulkDelete', items });
@@ -959,7 +977,7 @@ export function recordBulkDelete(annotations) {
 export function recordBulkAdd(annotations) {
   if (!annotations || annotations.length === 0) return;
   const items = annotations.map(ann => ({
-    annotation: cloneAnnotation(ann)
+    annotation: historyClone(ann)
   }));
   execute({ type: 'bulkAdd', items });
   scheduleStoredGeometry(annotations);
@@ -1070,7 +1088,7 @@ export function recordPropertyChange(annotation) {
     pendingPropertyChange = {
       id: annotation.id,
       docId: doc.id,
-      oldState: cloneAnnotation(annotation)
+      oldState: historyClone(annotation)
     };
   }
 
@@ -1083,7 +1101,7 @@ export function recordPropertyChange(annotation) {
         pendingPropertyChange.docId !== pendingDocId) return;
     const targetDoc = state.documents.find(candidate => candidate.id === pendingDocId);
     const current = targetDoc?.annotations.find(candidate => candidate.id === pendingId);
-    if (current) pendingPropertyChange.newState = cloneAnnotation(current);
+    if (current) pendingPropertyChange.newState = historyClone(current);
   });
   propertyChangeTimer = setTimeout(() => {
     flushPropertyChange();
@@ -1102,26 +1120,27 @@ export function flushPropertyChange() {
       type: 'modifyAnnotation',
       id: pendingPropertyChange.id,
       oldState: pendingPropertyChange.oldState,
-      newState: pendingPropertyChange.newState || cloneAnnotation(current)
+      newState: pendingPropertyChange.newState || historyClone(current)
     };
-    if (!targetDoc.undoStack) targetDoc.undoStack = [];
+    const undoStack = undoStackOf(targetDoc);
     // If clean point was beyond current position, it's now unreachable
-    if (targetDoc.savedUndoStackLength > targetDoc.undoStack.length) {
+    if (targetDoc.savedUndoStackLength > undoStack.length) {
       targetDoc.savedUndoStackLength = -1;
     }
-    targetDoc.undoStack.push(cmd);
-    if (targetDoc.undoStack.length > MAX_UNDO_STACK) {
-      targetDoc.undoStack.shift();
+    undoStack.push(plainCommand(cmd));
+    if (undoStack.length > MAX_UNDO_STACK) {
+      undoStack.shift();
       if (targetDoc.savedUndoStackLength >= 0) {
         targetDoc.savedUndoStackLength--;
         if (targetDoc.savedUndoStackLength < 0) targetDoc.savedUndoStackLength = -1;
       }
     }
-    targetDoc.redoStack = [];
+    historyChanged();
+    clearRedoStack(targetDoc);
     scheduleStoredGeometry(current);
     // Sync modified state
     const isClean = targetDoc.savedUndoStackLength >= 0 &&
-                    targetDoc.undoStack.length === targetDoc.savedUndoStackLength;
+                    undoStack.length === targetDoc.savedUndoStackLength;
     targetDoc.modified = !isClean;
   }
 
@@ -1163,12 +1182,12 @@ export function recordPageStructure(oldBytes, oldAnnotations, oldRotations, oldP
   execute({
     type: 'pageStructure',
     oldBytes: oldBytes,
-    oldAnnotations: oldAnnotations.map(a => ({ ...a })),
-    oldRotations: { ...oldRotations },
+    oldAnnotations: rawOf(oldAnnotations).map(a => ({ ...rawOf(a) })),
+    oldRotations: { ...rawOf(oldRotations) },
     oldPage: oldPage,
     newBytes: newBytes,
-    newAnnotations: newAnnotations.map(a => ({ ...a })),
-    newRotations: { ...newRotations },
+    newAnnotations: rawOf(newAnnotations).map(a => ({ ...rawOf(a) })),
+    newRotations: { ...rawOf(newRotations) },
     newPage: newPage,
     ...(extra.ocrShift ? { ocrShift: { ...extra.ocrShift, pages: [...extra.ocrShift.pages] } } : {}),
   });

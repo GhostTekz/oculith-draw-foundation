@@ -3,7 +3,7 @@ import i18next from '../../i18n/config.js';
 import { getActiveDocument } from '../../core/state.js';
 import { isTauri, writeBinaryFile, readBinaryFile } from '../../core/platform.js';
 import { PDFDocument, PDFName, PDFHexString, PDFDict, PDFArray, PDFString } from 'pdf-lib';
-import { getCachedPdfBytes } from '../../pdf/loader.js';
+import { getPdfBytes, forgetPdfRangeSource } from '../../pdf/loader.js';
 import {
   setAttachmentItems as setItems, setAttachmentCountText as setCountText,
   setAttachmentEmptyMessage as setEmptyMessage, setAttachmentSelectedKey as setSelectedKey,
@@ -204,7 +204,7 @@ async function embedAttachment(activeDoc, filename, fileBytes) {
   try {
     let pdfBytes;
     if (activeDoc.filePath) {
-      pdfBytes = getCachedPdfBytes(activeDoc.filePath);
+      pdfBytes = await getPdfBytes(activeDoc.filePath);
       if (!pdfBytes && isTauri()) {
         pdfBytes = await readBinaryFile(activeDoc.filePath);
       }
@@ -234,7 +234,7 @@ async function removeAttachment(activeDoc, key) {
   try {
     let pdfBytes;
     if (activeDoc.filePath) {
-      pdfBytes = getCachedPdfBytes(activeDoc.filePath);
+      pdfBytes = await getPdfBytes(activeDoc.filePath);
       if (!pdfBytes && isTauri()) {
         pdfBytes = await readBinaryFile(activeDoc.filePath);
       }
@@ -289,6 +289,7 @@ async function reloadDocumentFromBytes(activeDoc, bytes) {
     isEvalSupported: false,
     verbosity: 0,
   }).promise;
+  forgetPdfRangeSource(activeDoc);
   activeDoc.pdfDoc = newDoc;
 }
 
