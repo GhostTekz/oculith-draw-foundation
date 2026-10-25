@@ -1,3 +1,4 @@
+import { perfRecord } from '../core/perf.js';
 import { state, getActiveDocument, getPageRotation, setPageRotation } from '../core/state.js';
 import { nativeOcgPdfJsConfig, nativeOcgSelectionForDocument, nativeOcgSelectionForPath } from './native-ocg-selection.js';
 import { sourceRenderRevision, sourceRenderCurrent, sourceWriteActive } from './source-render-revision.js';
@@ -304,6 +305,11 @@ _startJankDetector();
 
 // Render PDF page (single page mode)
 export async function renderPage(pageNum) {
+  const perfT0 = performance.now();
+  try { return await renderPageNow(pageNum); } finally { perfRecord('page.render', performance.now() - perfT0); }
+}
+
+async function renderPageNow(pageNum) {
   // In-flight counter exposed for MCP test harness — `waitForRenderIdle()`
   // polls `window.__pdfRenderInFlight === 0` to know when a synthetic zoom
   // event has fully settled (bitmap painted, tile rendered, state updated).

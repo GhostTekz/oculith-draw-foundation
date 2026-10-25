@@ -9,8 +9,8 @@ Standard templates may have copyright placeholders; package authors and source
 links below provide attribution context and do not replace a legal review.
 This graph includes development, build, and platform-specific dependencies.
 
-Cargo.lock SHA-256: 6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61
-External packages: 778
+Cargo.lock SHA-256: 416262c00430ee6dbef79e583f14dfccbbc25351d570db6ef8820c8725c6fd17
+External packages: 780
 
 ==============================================================================
 acadrust@0.5.5
@@ -16343,6 +16343,39 @@ Copyright notices are retained in src/* files where relevant.
 
 
 ==============================================================================
+libmimalloc-sys@0.1.49
+Declared license: MIT
+Source: https://github.com/purpleprotocol/mimalloc_rust/tree/master/libmimalloc-sys
+Authors: Octavian Oncescu <octavonce@gmail.com>
+
+--- libmimalloc-sys@0.1.49: LICENSE.txt (SHA-256 a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b) ---
+Copyright 2019 Octavian Oncescu
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+==============================================================================
 libredox@0.1.16
 Declared license: MIT
 Source: https://gitlab.redox-os.org/redox-os/libredox.git
@@ -17431,6 +17464,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+==============================================================================
+mimalloc@0.1.52
+Declared license: MIT
+Source: https://github.com/purpleprotocol/mimalloc_rust
+Authors: Octavian Oncescu <octavonce@gmail.com>, Vincent Rouillé <vincent@speedy37.fr>, Thom Chiovoloni <chiovolonit@gmail.com>
+
+--- mimalloc@0.1.52: LICENSE.txt (SHA-256 a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b) ---
+Identical source text is printed earlier in this bundle.
 
 ==============================================================================
 mime@0.3.17

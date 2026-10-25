@@ -1,3 +1,5 @@
+import { perfRecord } from '../core/perf.js';
+import { $RAW } from 'solid-js/store';
 import { state, getActiveDocument } from '../core/state.js';
 import { ifcCategoryForAnnotationType } from '../solid/data/ifcCategoryMap.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
@@ -250,8 +252,65 @@ function saveEditSnapshot(doc) {
     'markupNumberColumn2', 'markupCheckmarkColumn', 'markupStatusSet',
     'markupFormulaColumn',
   ];
-  return JSON.stringify(fields.map(field => doc?.[field]), (key, value) =>
-    key.startsWith('_pending') || key === 'nm' ? undefined : value);
+  // A fingerprint of the same data JSON.stringify used to compare, walked on
+  // the raw objects: the string it built (every markup, image data URLs
+  // included) ran to hundreds of MB on a large set, several times per save.
+  const h = { a: 0x811c9dc5, b: 0x9e3779b9 };
+  for (const field of fields) { snapshotMix(h, field); snapshotValue(h, doc?.[field], 0); }
+  return `${h.a.toString(36)}.${h.b.toString(36)}`;
+}
+
+const snapshotRaw = (value) => (value && value[$RAW]) || value;
+function snapshotWord(h, n) {
+  h.a = Math.imul(h.a ^ (n >>> 0), 0x01000193) >>> 0;
+  h.b = Math.imul((h.b ^ (n >>> 0)) >>> 0, 0x7feb352d) >>> 0;
+  h.b = (h.b ^ (h.b >>> 15)) >>> 0;
+}
+// Strings up to 64 KB are read whole; a longer one (an embedded image) by
+// its length and a dense spread of samples, head and tail.
+function snapshotMix(h, str) {
+  const n = str.length;
+  snapshotWord(h, n);
+  if (n <= 65536) { for (let i = 0; i < n; i++) snapshotWord(h, str.charCodeAt(i)); return; }
+  for (let i = 0; i < 512; i++) { snapshotWord(h, str.charCodeAt(i)); snapshotWord(h, str.charCodeAt(n - 1 - i)); }
+  const step = Math.floor(n / 1024);
+  for (let i = 0; i < n; i += step) snapshotWord(h, str.charCodeAt(i));
+}
+function snapshotValue(h, value, depth) {
+  value = snapshotRaw(value);
+  if (value === null || value === undefined) { snapshotWord(h, value === null ? 1 : 2); return; }
+  switch (typeof value) {
+    case 'string': snapshotWord(h, 3); snapshotMix(h, value); return;
+    case 'number': snapshotWord(h, 4); snapshotMix(h, String(value)); return;
+    case 'boolean': snapshotWord(h, value ? 5 : 6); return;
+    case 'object': break;
+    default: return; // functions and symbols: JSON leaves them out too
+  }
+  if (depth > 64) { snapshotWord(h, 7); return; }
+  if (typeof value.toJSON === 'function' && !Array.isArray(value)) {
+    try { snapshotValue(h, value.toJSON(), depth + 1); } catch { snapshotWord(h, 8); }
+    return;
+  }
+  if (Array.isArray(value)) {
+    snapshotWord(h, 9 + value.length);
+    for (let i = 0; i < value.length; i++) snapshotValue(h, value[i], depth + 1);
+    return;
+  }
+  if (ArrayBuffer.isView(value)) {
+    snapshotWord(h, 10 + value.byteLength);
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    const step = Math.max(1, Math.floor(bytes.length / 4096));
+    for (let i = 0; i < bytes.length; i += step) snapshotWord(h, bytes[i]);
+    return;
+  }
+  snapshotWord(h, 11);
+  for (const key in value) {
+    if (key.startsWith('_pending') || key === 'nm') continue;
+    const v = value[key];
+    if (v === undefined || typeof v === 'function') continue;
+    snapshotMix(h, key);
+    snapshotValue(h, v, depth + 1);
+  }
 }
 
 function refreshVisibleSource(renderer, doc) {
@@ -265,6 +324,11 @@ function refreshVisibleSource(renderer, doc) {
 }
 
 export async function savePDF(saveAsPath = null, opties = {}, activeDoc = getActiveDocument()) {
+  const perfT0 = performance.now();
+  try { return await savePDFNow(saveAsPath, opties, activeDoc); } finally { perfRecord('save', performance.now() - perfT0); }
+}
+
+async function savePDFNow(saveAsPath = null, opties = {}, activeDoc = getActiveDocument()) {
   if (!activeDoc?.pdfDoc || !state.documents.includes(activeDoc)) return false;
   const currentPath = activeDoc?.filePath;
   // Redirect to "Save As" for untitled docs. These now have a temp-file
@@ -370,7 +434,10 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       existingPdfBytes = await readBinaryFile(currentPath);
     }
 
+    const _svParse = performance.now();
     const pdfDocLib = await PDFDocument.load(existingPdfBytes);
+    perfRecord('save.parse', performance.now() - _svParse);
+    const _svBuild = performance.now();
     // Een voorbeeld van het importvenster kan inhoud missen en wordt nooit
     // als document opgeslagen (#400).
     {
@@ -3340,7 +3407,10 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     }
 
     // Save the PDF
+    perfRecord('save.build', performance.now() - _svBuild);
+    const _svSer = performance.now();
     const pdfBytes = await pdfDocLib.save();
+    perfRecord('save.serialize', performance.now() - _svSer);
     const outputPath = saveAsPath || activeDoc?.saveTargetPath || currentPath;
     const savedBytes = new Uint8Array(pdfBytes);
     // Structural edits replace the PDF and often move its working path. A
@@ -3371,7 +3441,9 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       await unlockFile(outputPath);
       try {
         if (!stillCurrent() || !editsUnchanged()) throw changedDuringSave();
+        const _svWrite = performance.now();
         await writeBinaryFileAtomic(outputPath, savedBytes);
+        perfRecord('save.write', performance.now() - _svWrite);
       } catch (writeErr) {
         // Re-lock before reporting error
         await lockFile(outputPath);

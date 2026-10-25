@@ -95,6 +95,70 @@ function mixPoints(state, pts) {
   }
 }
 
+// One markup's geometry and drawn-label words.
+function mixAnnotation(state, ann) {
+  mixStr(state, ann.type || '');
+  for (let k = 0; k < NUM_KEYS.length; k++) {
+    const key = NUM_KEYS[k];
+    const v = ann[key];
+    if (typeof v !== 'number') continue;
+    // The key's slot in NUM_KEYS identifies it as well as its name did,
+    // without hashing the name character by character.
+    mixInt(state, 0x100 + k);
+    mixQuant(state, v);
+  }
+  mixPoints(state, ann.points);
+  mixPoints(state, ann.path);
+  if (Array.isArray(ann.holes)) {
+    mixInt(state, ann.holes.length + 1);
+    for (let h = 0; h < ann.holes.length; h++) mixPoints(state, ann.holes[h]);
+  }
+  mixPoints(state, ann.controlPoints);
+  if (Array.isArray(ann.quadPoints)) {
+    mixInt(state, ann.quadPoints.length + 1);
+    for (let q = 0; q < ann.quadPoints.length; q++) mixPoints(state, ann.quadPoints[q]);
+  }
+  if (Array.isArray(ann.leaders)) {
+    mixInt(state, ann.leaders.length + 1);
+    for (let L = 0; L < ann.leaders.length; L++) {
+      const leader = ann.leaders[L];
+      mixQuant(state, leader?.kneeX);
+      mixQuant(state, leader?.kneeY);
+      mixQuant(state, leader?.tipX);
+      mixQuant(state, leader?.tipY);
+    }
+  }
+  if (Array.isArray(ann.rects)) {
+    mixInt(state, ann.rects.length + 1);
+    for (let r = 0; r < ann.rects.length; r++) {
+      const rect = ann.rects[r];
+      mixQuant(state, rect?.x);
+      mixQuant(state, rect?.y);
+      mixQuant(state, rect?.width);
+      mixQuant(state, rect?.height);
+    }
+  }
+  if (ann.raceway && typeof ann.raceway === 'object') {
+    mixStr(state, 'rw');
+    mixStr(state, ann.raceway.kind || '');
+    mixStr(state, ann.raceway.tradeSize || '');
+    mixStr(state, ann.raceway.conduitType || '');
+    if (typeof ann.raceway.widthIn === 'number') mixQuant(state, ann.raceway.widthIn);
+    mixInt(state, ann.raceway.trueSize ? 1 : 2);
+  }
+  if (ann.measureKind) mixStr(state, ann.measureKind);
+  if (ann.markerStyle) mixStr(state, ann.markerStyle);
+  if (ann.lineStyleId) mixStr(state, ann.lineStyleId);
+  // The candidate box grows with the drawn label, the point-text glyphs,
+  // and the angle arc. A change to only those must rebuild the tree.
+  if (typeof ann.measureText === 'string') mixStr(state, ann.measureText);
+  if (typeof ann.text === 'string') mixStr(state, ann.text);
+  if (ann.textAlign) mixStr(state, ann.textAlign);
+  if (ann.startHead) mixStr(state, ann.startHead);
+  if (ann.endHead) mixStr(state, ann.endHead);
+  if (ann.dimTextPosition) mixStr(state, ann.dimTextPosition);
+}
+
 function geometryToken(annotations, page) {
   const state = { a: 0x811c9dc5, b: 0x9e3779b9 };
   mixInt(state, annotations.length);
@@ -104,69 +168,42 @@ function geometryToken(annotations, page) {
     // Slot changes, page reassignment and reorder must rebuild the queried
     // page. Other pages' potentially long point arrays are not read here.
     mixInt(state, i + 1);
-    mixStr(state, ann.type || '');
-    for (let k = 0; k < NUM_KEYS.length; k++) {
-      const key = NUM_KEYS[k];
-      const v = ann[key];
-      if (typeof v !== 'number') continue;
-      // The key's slot in NUM_KEYS identifies it as well as its name did,
-      // without hashing the name character by character.
-      mixInt(state, 0x100 + k);
-      mixQuant(state, v);
-    }
-    mixPoints(state, ann.points);
-    mixPoints(state, ann.path);
-    if (Array.isArray(ann.holes)) {
-      mixInt(state, ann.holes.length + 1);
-      for (let h = 0; h < ann.holes.length; h++) mixPoints(state, ann.holes[h]);
-    }
-    mixPoints(state, ann.controlPoints);
-    if (Array.isArray(ann.quadPoints)) {
-      mixInt(state, ann.quadPoints.length + 1);
-      for (let q = 0; q < ann.quadPoints.length; q++) mixPoints(state, ann.quadPoints[q]);
-    }
-    if (Array.isArray(ann.leaders)) {
-      mixInt(state, ann.leaders.length + 1);
-      for (let L = 0; L < ann.leaders.length; L++) {
-        const leader = ann.leaders[L];
-        mixQuant(state, leader?.kneeX);
-        mixQuant(state, leader?.kneeY);
-        mixQuant(state, leader?.tipX);
-        mixQuant(state, leader?.tipY);
-      }
-    }
-    if (Array.isArray(ann.rects)) {
-      mixInt(state, ann.rects.length + 1);
-      for (let r = 0; r < ann.rects.length; r++) {
-        const rect = ann.rects[r];
-        mixQuant(state, rect?.x);
-        mixQuant(state, rect?.y);
-        mixQuant(state, rect?.width);
-        mixQuant(state, rect?.height);
-      }
-    }
-    if (ann.raceway && typeof ann.raceway === 'object') {
-      mixStr(state, 'rw');
-      mixStr(state, ann.raceway.kind || '');
-      mixStr(state, ann.raceway.tradeSize || '');
-      mixStr(state, ann.raceway.conduitType || '');
-      if (typeof ann.raceway.widthIn === 'number') mixQuant(state, ann.raceway.widthIn);
-      mixInt(state, ann.raceway.trueSize ? 1 : 2);
-    }
-    if (ann.measureKind) mixStr(state, ann.measureKind);
-    if (ann.markerStyle) mixStr(state, ann.markerStyle);
-    if (ann.lineStyleId) mixStr(state, ann.lineStyleId);
-    // The candidate box grows with the drawn label, the point-text glyphs,
-    // and the angle arc. A change to only those must rebuild the tree.
-    if (typeof ann.measureText === 'string') mixStr(state, ann.measureText);
-    if (typeof ann.text === 'string') mixStr(state, ann.text);
-    if (ann.textAlign) mixStr(state, ann.textAlign);
-    if (ann.startHead) mixStr(state, ann.startHead);
-    if (ann.endHead) mixStr(state, ann.endHead);
-    if (ann.dimTextPosition) mixStr(state, ann.dimTextPosition);
+    mixAnnotation(state, ann);
   }
   return state;
 }
+
+/**
+ * A fingerprint of every markup in the document (slot, page, id and
+ * geometry), read from the raw objects: equal fingerprints mean nothing a
+ * spatial index or draw lookup is built from has changed. A few
+ * milliseconds for tens of thousands of markups, where a rebuild through
+ * the store's proxies costs tens to hundreds.
+ */
+export function documentGeometryToken(annotations) {
+  const source = raw(annotations) || [];
+  const state = { a: 0x811c9dc5, b: 0x9e3779b9 };
+  mixInt(state, source.length);
+  for (let i = 0; i < source.length; i++) {
+    const ann = source[i];
+    if (!ann || typeof ann !== 'object') { mixInt(state, 0); continue; }
+    mixInt(state, i + 1);
+    mixInt(state, typeof ann.page === 'number' ? ann.page : -1);
+    mixStr(state, ann.id || '');
+    mixAnnotation(state, ann);
+    // What annotationBounds reads beyond mixAnnotation's fields.
+    mixQuant(state, ann.point?.x); mixQuant(state, ann.point?.y);
+    mixQuant(state, ann.vertex?.x); mixQuant(state, ann.vertex?.y);
+    mixQuant(state, ann.tagFontSize);
+    mixInt(state, ann.tagTonen ? 1 : 2);
+    // Parametric figures build their extent from many parameters: all of them.
+    if (PARAMETRIC.has(ann.type)) {
+      try { mixStr(state, JSON.stringify(ann)); } catch { mixInt(state, Math.random() * 4294967296); }
+    }
+  }
+  return state;
+}
+const PARAMETRIC = new Set(['stavenreeks', 'betonbalk', 'wall']);
 
 function unionPoint(box, px, py, slack) {
   if (!Number.isFinite(px) || !Number.isFinite(py)) return box;

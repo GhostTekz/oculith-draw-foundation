@@ -23,6 +23,9 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // Core modules
+// pdf-lib's parse and save pauses, set once for every caller (before any load).
+import './pdf/pdf-lib-tempo.js';
+import { startPerf } from './core/perf.js';
 import { state } from './core/state.js';
 import { edition } from './editions/active.js';
 import { registerTemplate } from './symbols/registry.js';
@@ -196,6 +199,9 @@ async function init() {
     recordStartupDiagnostic('frontend-ready');
     return;
   }
+
+  // Per-operation timings and the stall counter (js/core/perf.js).
+  startPerf();
 
   // Disable context menu on desktop only (long-press is expected on mobile)
   if (!mobile) {

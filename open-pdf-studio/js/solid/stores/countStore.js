@@ -1,4 +1,5 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal } from 'solid-js';
+import { lazyMemo } from './lazy-memo.js';
 import { getActiveDocument } from '../../core/state.js';
 
 // --- Telcategorieën (per sessie; presets + vrij toe te voegen) ---
@@ -74,7 +75,7 @@ export function nextCountNumber(categoryId) {
 }
 
 /** Reactieve telling per categorie, afgeleid van de annotaties van het actieve document. */
-export const countTallies = createMemo(() => {
+export const countTallies = lazyMemo(() => {
   const doc = getActiveDocument();
   const counts = (doc?.annotations || []).filter(a => a.type === 'count');
   const byCat = new Map();
@@ -89,7 +90,7 @@ export const countTallies = createMemo(() => {
   return rows;
 });
 
-export const countTotal = createMemo(() => countTallies().reduce((s, r) => s + r.count, 0));
+export const countTotal = lazyMemo(() => countTallies().reduce((s, r) => s + r.count, 0));
 
 /** CSV-regels voor de telling (gebruikt door de paneel-export). */
 export function countCsvRows() {

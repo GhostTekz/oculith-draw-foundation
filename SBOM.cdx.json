@@ -16,7 +16,7 @@
       },
       {
         "name": "ocudraw:cargoLockSha256",
-        "value": "6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61"
+        "value": "416262c00430ee6dbef79e583f14dfccbbc25351d570db6ef8820c8725c6fd17"
       },
       {
         "name": "ocudraw:npmLockSha256",
@@ -8211,6 +8211,34 @@
     },
     {
       "type": "library",
+      "name": "libmimalloc-sys",
+      "version": "0.1.49",
+      "bom-ref": "pkg:cargo/libmimalloc-sys@0.1.49",
+      "purl": "pkg:cargo/libmimalloc-sys@0.1.49",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "ocudraw:inventory",
+          "value": "Cargo.lock external package"
+        },
+        {
+          "name": "ocudraw:source",
+          "value": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "ocudraw:noticePath",
+          "value": "open-pdf-studio/src-tauri/package-notices/rust-third-party-notices.txt"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "name": "libredox",
       "version": "0.1.16",
       "bom-ref": "pkg:cargo/libredox@0.1.16",
@@ -8635,6 +8663,34 @@
       "version": "0.9.1",
       "bom-ref": "pkg:cargo/memoffset@0.9.1",
       "purl": "pkg:cargo/memoffset@0.9.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "ocudraw:inventory",
+          "value": "Cargo.lock external package"
+        },
+        {
+          "name": "ocudraw:source",
+          "value": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "ocudraw:noticePath",
+          "value": "open-pdf-studio/src-tauri/package-notices/rust-third-party-notices.txt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mimalloc",
+      "version": "0.1.52",
+      "bom-ref": "pkg:cargo/mimalloc@0.1.52",
+      "purl": "pkg:cargo/mimalloc@0.1.52",
       "licenses": [
         {
           "license": {

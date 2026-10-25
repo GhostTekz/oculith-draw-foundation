@@ -7,6 +7,9 @@
 
 use clap::Parser;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Parser, Debug, Clone)]
 #[command(name = "ocudraw-community", version)]
 struct Cli {

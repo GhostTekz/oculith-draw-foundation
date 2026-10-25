@@ -47,3 +47,11 @@ opt-level = 3
 
 [profile.dev.package.pdfium-render]
 opt-level = 3
+
+# Release builds: whole-program optimisation across crates (thin LTO) and one
+# codegen unit, so lopdf parsing and the render paths inline across crate
+# boundaries. Panics stay unwinding: a panicking command must not take the
+# app down.
+[profile.release]
+lto = "thin"
+codegen-units = 1

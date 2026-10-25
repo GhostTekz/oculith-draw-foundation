@@ -73,7 +73,20 @@ struct OpenedFiles(Mutex<Vec<String>>);
 struct LockedFiles(Mutex<HashMap<String, File>>);
 
 // Cache PDF file bytes to avoid re-reading from disk on every render call
-struct PdfBytesCache(Mutex<HashMap<String, Vec<u8>>>);
+struct PdfBytesCache(Mutex<HashMap<String, Arc<Vec<u8>>>>);
+
+/// The file's bytes, from the cache or read once. Shared, not copied: a
+/// clone per call was a full copy of the file (hundreds of MB on a set),
+/// made while the cache lock was held.
+fn cached_pdf_bytes(bytes_cache: &PdfBytesCache, path: &str) -> Result<Arc<Vec<u8>>, String> {
+    let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
+    if let Some(cached) = bm.get(path) {
+        return Ok(cached.clone());
+    }
+    let read = Arc::new(fs::read(path).map_err(|e| format!("Read: {}", e))?);
+    bm.insert(path.to_string(), read.clone());
+    Ok(read)
+}
 
 // Cache parsed DocumentHandle objects so the font registry inside each
 // handle survives across page renders. The handle holds a Mutex<FontRegistry>
@@ -106,7 +119,12 @@ struct PageTypeCache(Mutex<HashMap<(String, u32), String>>);
 /// Page-point area of additive parts minus holes. Without the `geos` feature
 /// the desktop shell answers with an error and the measurement keeps the
 /// shoelace total. See docs/GEOS.md.
-#[tauri::command]
+// Commands marked `command(async)` run on the async runtime's threads, not
+// the main thread: a plain synchronous command waits for the window's event
+// loop, and file, session and page commands measured a fixed ~1 s each while
+// the app was busy. Commands that touch windows, dialogs, the clipboard or
+// the desktop stay plain.
+#[tauri::command(async)]
 fn geos_net_area(parts: Vec<Vec<[f64; 2]>>, holes: Vec<Vec<[f64; 2]>>) -> Result<f64, String> {
     #[cfg(feature = "geos")]
     {
@@ -133,7 +151,7 @@ struct GeosAreaShape {
 /// Page-point area of the union of several shapes. Without the `geos` feature
 /// the desktop shell answers with an error and the schedule keeps the sum of
 /// its rows. See docs/GEOS.md.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_group_net_area(shapes: Vec<GeosAreaShape>) -> Result<f64, String> {
     #[cfg(feature = "geos")]
     {
@@ -156,7 +174,7 @@ fn geos_group_net_area(shapes: Vec<GeosAreaShape>) -> Result<f64, String> {
 /// Crossing points of two open page-space paths. Without the `geos` feature
 /// the desktop shell answers with an error and the trim keeps the segment
 /// crossing already applied in JavaScript. See docs/GEOS.md.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_crossings(a: Vec<[f64; 2]>, b: Vec<[f64; 2]>) -> Result<Vec<[f64; 2]>, String> {
     #[cfg(feature = "geos")]
     {
@@ -176,7 +194,7 @@ fn geos_crossings(a: Vec<[f64; 2]>, b: Vec<[f64; 2]>) -> Result<Vec<[f64; 2]>, S
 /// One-sided parallel of a committed offset. Without the `geos` feature the
 /// desktop shell answers with an error and the copy keeps the JavaScript
 /// mitre. See docs/GEOS.md.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_offset_curve(
     points: Vec<[f64; 2]>,
     distance: f64,
@@ -199,7 +217,7 @@ fn geos_offset_curve(
 
 /// True when `(x, y)` is strictly inside `ring`. A point on the boundary is false.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_contains(ring: Vec<[f64; 2]>, x: f64, y: f64) -> Result<bool, String> {
     #[cfg(feature = "geos")]
     {
@@ -215,7 +233,7 @@ fn geos_contains(ring: Vec<[f64; 2]>, x: f64, y: f64) -> Result<bool, String> {
 
 /// True when `(x, y)` is inside `ring` or on its boundary.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_covers(ring: Vec<[f64; 2]>, x: f64, y: f64) -> Result<bool, String> {
     #[cfg(feature = "geos")]
     {
@@ -231,7 +249,7 @@ fn geos_covers(ring: Vec<[f64; 2]>, x: f64, y: f64) -> Result<bool, String> {
 
 /// Douglas-Peucker reduction. `tolerance` is page points.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_simplify(
     points: Vec<[f64; 2]>,
     tolerance: f64,
@@ -262,7 +280,7 @@ struct GeosFace {
 
 /// Closed faces of page-space linework. A line that does not close adds no face.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_polygonize(lines: Vec<Vec<[f64; 2]>>) -> Result<Vec<GeosFace>, String> {
     #[cfg(feature = "geos")]
     {
@@ -293,7 +311,7 @@ fn geos_face(face: open_pdf_geos::PolygonFace) -> GeosFace {
 
 /// Page-point area of the intersection of two simple rings.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_intersection_area(a: Vec<[f64; 2]>, b: Vec<[f64; 2]>) -> Result<f64, String> {
     #[cfg(feature = "geos")]
     {
@@ -310,7 +328,7 @@ fn geos_intersection_area(a: Vec<[f64; 2]>, b: Vec<[f64; 2]>) -> Result<f64, Str
 
 /// Page-point area of ring `a` minus ring `b`.
 /// Without the `geos` feature the desktop shell answers with an error.
-#[tauri::command]
+#[tauri::command(async)]
 fn geos_difference_area(a: Vec<[f64; 2]>, b: Vec<[f64; 2]>) -> Result<f64, String> {
     #[cfg(feature = "geos")]
     {
@@ -333,12 +351,12 @@ fn rings_from_pairs(rings: Vec<Vec<[f64; 2]>>) -> Vec<Vec<(f64, f64)>> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_opened_file(state: tauri::State<OpenedFiles>) -> Vec<String> {
     state.0.lock().unwrap().clone()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_session_file_path() -> String {
     if let Some(data_dir) = datamap::lokale_datamap() {
         let app_dir = data_dir.join(APP_STORAGE_DIR);
@@ -351,14 +369,14 @@ fn get_session_file_path() -> String {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_session(data: String) -> Result<bool, String> {
     let path = get_session_file_path();
     atomic_file::write(std::path::Path::new(&path), data.as_bytes()).map_err(|e| e.to_string())?;
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_session() -> Option<String> {
     let path = get_session_file_path();
     fs::read_to_string(&path).ok()
@@ -376,14 +394,14 @@ fn get_preferences_file_path() -> String {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_preferences(data: String) -> Result<bool, String> {
     let path = get_preferences_file_path();
     atomic_file::write(std::path::Path::new(&path), data.as_bytes()).map_err(|e| e.to_string())?;
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_preferences() -> Option<String> {
     let path = get_preferences_file_path();
     fs::read_to_string(&path).ok()
@@ -415,20 +433,20 @@ fn veilige_catalogus_bestandsnaam(id: &str) -> String {
     format!("{}.json", schoon)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_catalog(id: String, data: String) -> Result<bool, String> {
     let path = get_catalogs_dir().join(veilige_catalogus_bestandsnaam(&id));
     atomic_file::write(&path, data.as_bytes()).map_err(|e| e.to_string())?;
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_catalog(id: String) -> Option<String> {
     let path = get_catalogs_dir().join(veilige_catalogus_bestandsnaam(&id));
     fs::read_to_string(&path).ok()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_catalog(id: String) -> Result<bool, String> {
     let path = get_catalogs_dir().join(veilige_catalogus_bestandsnaam(&id));
     match fs::remove_file(&path) {
@@ -438,7 +456,7 @@ fn delete_catalog(id: String) -> Result<bool, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_username() -> String {
     whoami::username()
 }
@@ -446,12 +464,12 @@ fn get_username() -> String {
 
 // Fallback commands for when plugins aren't available via global API
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(&path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_file(path: String, data: String) -> Result<bool, String> {
     let bytes = BASE64.decode(&data).map_err(|e| e.to_string())?;
     atomic_file::write(std::path::Path::new(&path), &bytes).map_err(|e| e.to_string())?;
@@ -476,7 +494,7 @@ async fn write_file_atomic(request: tauri::ipc::Request<'_>) -> Result<(), Strin
     }).await.map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn file_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
@@ -486,7 +504,7 @@ async fn open_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn is_dev_mode() -> bool {
     cfg!(debug_assertions)
 }
@@ -590,7 +608,7 @@ fn open_default_apps_settings() -> Result<bool, String> {
 
 /// Lock a file to prevent other applications from writing to it.
 /// Opens the file with shared read access only (no write sharing on Windows).
-#[tauri::command]
+#[tauri::command(async)]
 fn lock_file(path: String, state: tauri::State<LockedFiles>) -> Result<bool, String> {
     let mut locks = state.0.lock().map_err(|e| e.to_string())?;
 
@@ -628,7 +646,7 @@ fn lock_file(path: String, state: tauri::State<LockedFiles>) -> Result<bool, Str
 }
 
 /// Unlock a previously locked file, allowing other apps to write to it.
-#[tauri::command]
+#[tauri::command(async)]
 fn unlock_file(path: String, state: tauri::State<LockedFiles>) -> Result<bool, String> {
     let mut locks = state.0.lock().map_err(|e| e.to_string())?;
     // Removing the entry drops the File handle, releasing the lock
@@ -1000,7 +1018,7 @@ async fn printer_bedrukbaar(
 }
 
 /// Get the system temp directory path.
-#[tauri::command]
+#[tauri::command(async)]
 fn get_temp_dir() -> String {
     std::env::temp_dir().to_string_lossy().to_string()
 }
@@ -1032,7 +1050,7 @@ fn sanitize_temp_pdf_name(name: &str) -> String {
 /// unieke submap: de printspooler (Windows én CUPS) toont de bestandsnaam als
 /// jobnaam, dus zo heet de printjob naar het pdf-bestand in plaats van naar
 /// een timestamp.
-#[tauri::command]
+#[tauri::command(async)]
 fn write_temp_pdf(data: Vec<u8>, name: Option<String>) -> Result<String, String> {
     let temp_dir = std::env::temp_dir();
     let timestamp = std::time::SystemTime::now()
@@ -1060,14 +1078,14 @@ fn write_temp_pdf(data: Vec<u8>, name: Option<String>) -> Result<String, String>
 }
 
 /// Delete a file at the given path.
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_file(path: String) -> Result<bool, String> {
     fs::remove_file(&path).map_err(|e| format!("Failed to delete file: {}", e))?;
     Ok(true)
 }
 
 /// Rename (move) a file from old_path to new_path.
-#[tauri::command]
+#[tauri::command(async)]
 fn rename_file(old_path: String, new_path: String) -> Result<bool, String> {
     fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
     Ok(true)
@@ -1614,7 +1632,7 @@ async fn download_pdf_from_url(url: String) -> Result<String, String> {
 
 /// List PDF files in a directory.
 /// Returns a list of full file paths for .pdf files found.
-#[tauri::command]
+#[tauri::command(async)]
 fn list_pdf_files(dir: String) -> Result<Vec<String>, String> {
     let entries = fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))?;
     let mut pdf_files: Vec<String> = Vec::new();
@@ -1674,7 +1692,7 @@ fn get_plugins_dir() -> std::path::PathBuf {
     plugins_dir
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_plugins() -> Result<Vec<serde_json::Value>, String> {
     let plugins_dir = get_plugins_dir();
     let mut plugins = Vec::new();
@@ -1786,7 +1804,7 @@ fn uninstall_plugin(id: String) -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_plugin_file(plugin_id: String, file_path: String) -> Result<String, String> {
     // Validate inputs
     if plugin_id.contains("..") || plugin_id.contains('/') || plugin_id.contains('\\') {
@@ -1808,7 +1826,7 @@ fn read_plugin_file(plugin_id: String, file_path: String) -> Result<String, Stri
 }
 
 // ─── Allow FS access to a path (for testing / programmatic file opens) ────
-#[tauri::command]
+#[tauri::command(async)]
 fn allow_fs_scope(app: tauri::AppHandle, path: String) -> Result<bool, String> {
     app.fs_scope().allow_file(&path)
         .map_err(|e| format!("{}", e))?;
@@ -1854,16 +1872,7 @@ fn get_or_load_doc_at_generation(
     }
 
     // Slow path — fetch bytes (from cache or disk), parse, insert
-    let bytes = {
-        let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
-        if let Some(cached) = bm.get(path) {
-            cached.clone()
-        } else {
-            let read = fs::read(path).map_err(|e| format!("Read: {}", e))?;
-            bm.insert(path.to_string(), read.clone());
-            read
-        }
-    };
+    let bytes = cached_pdf_bytes(&bytes_cache, &path)?;
 
     let renderer = PdfRenderer::new();
     let handle = renderer.load_document(&bytes).map_err(|e| format!("{}", e))?;
@@ -1893,7 +1902,7 @@ fn get_or_load_doc_at_generation(
 /// vs PDFium (per scripts/render-regression-test.py). Some
 /// pages render incorrectly. Speed numbers from this command must always be
 /// read with that disclaimer until the regression suite reports green.
-#[tauri::command]
+#[tauri::command(async)]
 fn render_pdf_page_skia(
     path: String,
     page_index: u32,
@@ -1927,7 +1936,7 @@ fn render_pdf_page_skia(
 /// fall back to an in-process PDFium parse in the main process — on a large
 /// document that fallback runs concurrently with the PDF.js parse of the
 /// same bytes and can take the whole load down at startup.
-#[tauri::command]
+#[tauri::command(async)]
 fn worker_pool_ready(
     pool: tauri::State<'_, std::sync::Arc<tokio::sync::OnceCell<worker_pool::WorkerPool>>>,
 ) -> bool {
@@ -2206,24 +2215,15 @@ async fn render_pdf_page(
         }
 
         // Fallback: in-proc PDFium.
-        let bytes = {
-            let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
-            if let Some(cached) = bm.get(&path) {
-                cached.clone()
-            } else {
-                let read = std::fs::read(&path).map_err(|e| format!("Read: {}", e))?;
-                bm.insert(path.clone(), read.clone());
-                read
-            }
-        };
+        let bytes = cached_pdf_bytes(&bytes_cache, &path)?;
 
         let render_bytes = if visibility.is_empty() { bytes } else {
-            ocg_render_copy::render_copy(&bytes, &visibility)
-                .map_err(|e| format!("OCG render copy: {e}"))?
+            std::sync::Arc::new(ocg_render_copy::render_copy(&bytes, &visibility)
+                .map_err(|e| format!("OCG render copy: {e}"))?)
         };
         let handle = pdfium_renderer::get_or_load_pdfium_doc_for_render(
             &path,
-            std::sync::Arc::new(render_bytes),
+            render_bytes,
             &pdfium_cache,
             &pixmap_cache,
             render_generation,
@@ -2275,20 +2275,11 @@ async fn ocr_pdf_page(
     pixmap_cache: tauri::State<'_, pdfium_renderer::PixmapCacheState>,
 ) -> Result<Vec<ocr::OcrWord>, String> {
     let render_generation = pixmap_cache.snapshot_generation(&path);
-    let bytes = {
-        let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
-        if let Some(cached) = bm.get(&path) {
-            cached.clone()
-        } else {
-            let read = std::fs::read(&path).map_err(|e| format!("Read: {}", e))?;
-            bm.insert(path.clone(), read.clone());
-            read
-        }
-    };
+    let bytes = cached_pdf_bytes(&bytes_cache, &path)?;
 
     let handle = pdfium_renderer::get_or_load_pdfium_doc_for_render(
         &path,
-        std::sync::Arc::new(bytes),
+        bytes,
         &pdfium_cache,
         &pixmap_cache,
         render_generation,
@@ -2384,24 +2375,15 @@ async fn render_pdf_page_region(
         // in-proc PDFium-toegang (laden én renderen, alle drie de render-paden) wordt
         // nu centraal geserialiseerd via PDFIUM_INPROC_LOCK in pdfium_renderer, dus
         // dit pad heeft geen eigen lock meer nodig.
-        let bytes = {
-            let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
-            if let Some(cached) = bm.get(&path) {
-                cached.clone()
-            } else {
-                let read = std::fs::read(&path).map_err(|e| format!("Read: {}", e))?;
-                bm.insert(path.clone(), read.clone());
-                read
-            }
-        };
+        let bytes = cached_pdf_bytes(&bytes_cache, &path)?;
 
         let render_bytes = if visibility.is_empty() { bytes } else {
-            ocg_render_copy::render_copy(&bytes, &visibility)
-                .map_err(|e| format!("OCG render copy: {e}"))?
+            std::sync::Arc::new(ocg_render_copy::render_copy(&bytes, &visibility)
+                .map_err(|e| format!("OCG render copy: {e}"))?)
         };
         let handle = pdfium_renderer::get_or_load_pdfium_doc_for_render(
             &path,
-            std::sync::Arc::new(render_bytes),
+            render_bytes,
             &pdfium_cache,
             &pixmap_cache,
             render_generation,
@@ -2577,61 +2559,103 @@ async fn render_tile_scene_region(
     Ok(tauri::ipc::Response::new(data))
 }
 
+/// Timings from the page (js/core/perf.js) into the app log, under the
+/// `perf` target: operation names and milliseconds only, never content.
+#[tauri::command(async)]
+fn perf_log(lines: Vec<String>) {
+    for line in lines.iter().take(500) {
+        let line: String = line.chars().take(400).collect();
+        log::info!(target: "perf", "{}", line);
+    }
+}
+
+/// Whether the app was started with OPDS_PERF=1 (timings logged every minute).
+#[tauri::command(async)]
+fn perf_enabled() -> bool {
+    std::env::var("OPDS_PERF").map(|v| v == "1").unwrap_or(false)
+}
+
 /// Goedkope zwaarte-probe: som van de GECOMPRIMEERDE content-stream-lengtes van
 /// een pagina (raw stream-bytes, geen decompressie). Groot => zware vector-pagina.
 /// Gebruikt door het progressieve render-pad om alleen echt-zware pagina's tegel-
 /// voor-tegel te renderen.
-#[tauri::command]
-fn page_content_size(path: String, page_index: u32) -> Result<u64, String> {
+/// Elke pagina's som, per bestandsversie (pad, lengte, wijzigtijd) één keer
+/// berekend: de probe draait voor elke nieuw bezochte pagina, en las tot nu toe
+/// elke keer het hele bestand opnieuw in (op een set van honderden MB seconden
+/// per pagina).
+type ContentSizes = std::collections::HashMap<String, ((u64, Option<std::time::SystemTime>), std::sync::Arc<Vec<u64>>)>;
+static CONTENT_SIZES: std::sync::OnceLock<std::sync::Mutex<ContentSizes>> = std::sync::OnceLock::new();
+
+fn page_content_sizes(path: &str) -> Result<std::sync::Arc<Vec<u64>>, String> {
     use lopdf::{Document, Object};
-    let doc = Document::load(&path).map_err(|e| format!("load: {}", e))?;
-    let pages = doc.get_pages(); // BTreeMap<u32, ObjectId>, gesorteerd op paginanummer
-    let page_id = pages
-        .values()
-        .nth(page_index as usize)
-        .copied()
-        .ok_or_else(|| format!("page {} out of range", page_index))?;
-    let page = doc
-        .get_dictionary(page_id)
-        .map_err(|e| format!("page dict: {}", e))?;
-    let contents = match page.get(b"Contents") {
-        Ok(c) => c,
-        Err(_) => return Ok(0), // geen content-stream (bv. lege pagina) => niet zwaar
-    };
-    // Verzamel de stream-object-ids (Contents = Reference of Array van References).
-    let mut ids: Vec<lopdf::ObjectId> = Vec::new();
-    match contents {
-        Object::Reference(id) => ids.push(*id),
-        Object::Array(arr) => {
-            for o in arr {
-                if let Object::Reference(id) = o {
-                    ids.push(*id);
-                }
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat: {}", e))?;
+    let identity = (meta.len(), meta.modified().ok());
+    let cache = CONTENT_SIZES.get_or_init(|| std::sync::Mutex::new(Default::default()));
+    if let Ok(c) = cache.lock() {
+        if let Some((id, sizes)) = c.get(path) {
+            if *id == identity {
+                return Ok(sizes.clone());
             }
         }
-        _ => {}
     }
-    let mut total: u64 = 0;
-    for id in ids {
-        if let Ok(Object::Stream(s)) = doc.get_object(id) {
-            total += s.content.len() as u64;
+    let doc = Document::load(path).map_err(|e| format!("load: {}", e))?;
+    let sizes: Vec<u64> = doc
+        .get_pages() // BTreeMap<u32, ObjectId>, gesorteerd op paginanummer
+        .values()
+        .map(|&page_id| {
+            let Ok(page) = doc.get_dictionary(page_id) else { return 0 };
+            // Geen content-stream (bv. lege pagina) => niet zwaar.
+            let Ok(contents) = page.get(b"Contents") else { return 0 };
+            // Contents = Reference of Array van References.
+            let ids: Vec<lopdf::ObjectId> = match contents {
+                Object::Reference(id) => vec![*id],
+                Object::Array(arr) => arr.iter().filter_map(|o| if let Object::Reference(id) = o { Some(*id) } else { None }).collect(),
+                _ => Vec::new(),
+            };
+            ids.into_iter()
+                .filter_map(|id| if let Ok(Object::Stream(s)) = doc.get_object(id) { Some(s.content.len() as u64) } else { None })
+                .sum()
+        })
+        .collect();
+    let sizes = std::sync::Arc::new(sizes);
+    if let Ok(mut c) = cache.lock() {
+        // Alleen de laatste versie per pad, en hooguit een handvol paden.
+        if c.len() >= 8 && !c.contains_key(path) {
+            c.clear();
         }
+        c.insert(path.to_string(), (identity, sizes.clone()));
     }
-    Ok(total)
+    Ok(sizes)
+}
+
+/// Goedkope zwaarte-probe: som van de GECOMPRIMEERDE content-stream-lengtes van
+/// een pagina (raw stream-bytes, geen decompressie). Groot => zware vector-pagina.
+/// Gebruikt door het progressieve render-pad om alleen echt-zware pagina's tegel-
+/// voor-tegel te renderen. Async en in spawn_blocking: een synchrone command
+/// draait op de hoofdthread en bevroor het venster tijdens het inlezen.
+#[tauri::command]
+async fn page_content_size(path: String, page_index: u32) -> Result<u64, String> {
+    let sizes = tauri::async_runtime::spawn_blocking(move || page_content_sizes(&path))
+        .await
+        .map_err(|e| format!("join: {}", e))??;
+    sizes
+        .get(page_index as usize)
+        .copied()
+        .ok_or_else(|| format!("page {} out of range", page_index))
 }
 
 #[tauri::command]
-fn render_thumbnail(
+async fn render_thumbnail(
     path: String,
     page_index: u32,
     max_width: u32,
     rotation: Option<i32>,
     ocg_visibility: Option<Vec<ocg_render_copy::LayerVisibility>>,
     skip_images: Option<bool>,
-    bytes_cache: tauri::State<PdfBytesCache>,
-    pdfium_cache: tauri::State<pdfium_renderer::PdfiumDocCache>,
-    pixmap_cache: tauri::State<pdfium_renderer::PixmapCacheState>,
-    thumb_cache: tauri::State<ThumbnailCache>,
+    bytes_cache: tauri::State<'_, PdfBytesCache>,
+    pdfium_cache: tauri::State<'_, pdfium_renderer::PdfiumDocCache>,
+    pixmap_cache: tauri::State<'_, pdfium_renderer::PixmapCacheState>,
+    thumb_cache: tauri::State<'_, ThumbnailCache>,
 ) -> Result<String, String> {
     let visibility = ocg_render_copy::canonical_visibility(ocg_visibility.as_deref().unwrap_or(&[]))
         .map_err(|e| format!("OCG selection: {e}"))?;
@@ -2652,24 +2676,15 @@ fn render_thumbnail(
         return Ok(cached);
     }
 
-    let bytes = {
-        let mut bm = bytes_cache.0.lock().map_err(|e| format!("Bytes cache lock: {}", e))?;
-        if let Some(cached) = bm.get(&path) {
-            cached.clone()
-        } else {
-            let read = std::fs::read(&path).map_err(|e| format!("Read: {}", e))?;
-            bm.insert(path.clone(), read.clone());
-            read
-        }
-    };
+    let bytes = cached_pdf_bytes(&bytes_cache, &path)?;
 
     let render_bytes = if visibility.is_empty() { bytes } else {
-        ocg_render_copy::render_copy(&bytes, &visibility)
-            .map_err(|e| format!("OCG thumbnail render copy: {e}"))?
+        std::sync::Arc::new(ocg_render_copy::render_copy(&bytes, &visibility)
+            .map_err(|e| format!("OCG thumbnail render copy: {e}"))?)
     };
     let handle = pdfium_renderer::get_or_load_pdfium_doc_for_render(
         &path,
-        std::sync::Arc::new(render_bytes),
+        render_bytes,
         &pdfium_cache,
         &pixmap_cache,
         render_generation,
@@ -2691,12 +2706,12 @@ fn render_thumbnail(
 }
 
 #[tauri::command]
-fn analyze_page_type(
+async fn analyze_page_type(
     path: String,
     page_index: u32,
-    bytes_cache: tauri::State<PdfBytesCache>,
-    handle_cache: tauri::State<DocHandleCache>,
-    page_type_cache: tauri::State<PageTypeCache>,
+    bytes_cache: tauri::State<'_, PdfBytesCache>,
+    handle_cache: tauri::State<'_, DocHandleCache>,
+    page_type_cache: tauri::State<'_, PageTypeCache>,
 ) -> Result<String, String> {
     let key = (path.clone(), page_index);
     let generation = handle_cache.0.lock()
@@ -2730,12 +2745,12 @@ fn analyze_page_type(
 /// — already-cached pages are skipped in the parallel loop and the result
 /// returns the cached value.
 #[tauri::command]
-fn analyze_page_type_batch(
+async fn analyze_page_type_batch(
     path: String,
     page_indices: Vec<u32>,
-    bytes_cache: tauri::State<PdfBytesCache>,
-    handle_cache: tauri::State<DocHandleCache>,
-    page_type_cache: tauri::State<PageTypeCache>,
+    bytes_cache: tauri::State<'_, PdfBytesCache>,
+    handle_cache: tauri::State<'_, DocHandleCache>,
+    page_type_cache: tauri::State<'_, PageTypeCache>,
 ) -> Result<Vec<String>, String> {
     let generation = handle_cache.0.lock()
         .map_err(|e| format!("Handle cache lock: {}", e))?.generation();
@@ -2791,14 +2806,14 @@ fn analyze_page_type_batch(
 }
 
 #[tauri::command]
-fn extract_draw_commands(
+async fn extract_draw_commands(
     path: String,
     page_index: u32,
     rotation: Option<i32>,
     ocg_visibility: Option<Vec<ocg_render_copy::LayerVisibility>>,
-    bytes_cache: tauri::State<PdfBytesCache>,
-    handle_cache: tauri::State<DocHandleCache>,
-) -> Result<Vec<u8>, String> {
+    bytes_cache: tauri::State<'_, PdfBytesCache>,
+    handle_cache: tauri::State<'_, DocHandleCache>,
+) -> Result<tauri::ipc::Response, String> {
     let visibility = ocg_render_copy::canonical_visibility(ocg_visibility.as_deref().unwrap_or(&[]))
         .map_err(|e| format!("OCG selection: {e}"))?;
     if !visibility.is_empty() {
@@ -2810,10 +2825,11 @@ fn extract_draw_commands(
     }
     let extra_rot = rotation.unwrap_or(0);
     let cmds = doc.extract_draw_commands(page_index as usize, extra_rot).map_err(|e| format!("{}", e))?;
-    Ok(cmds.into_bytes())
+    // Raw bytes, not a JSON array of numbers (3-4x the size, parsed in JS).
+    Ok(tauri::ipc::Response::new(cmds.into_bytes()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn extract_page_text(
     path: String,
     page_index: u32,
@@ -2832,13 +2848,13 @@ fn extract_page_text(
 /// `rotations` is a parallel array of extra rotation values (one per page).
 /// Pass an empty array to use 0 for all pages.
 #[tauri::command]
-fn extract_draw_commands_batch(
+async fn extract_draw_commands_batch(
     path: String,
     page_indices: Vec<u32>,
     rotations: Option<Vec<i32>>,
     ocg_visibility: Option<Vec<ocg_render_copy::LayerVisibility>>,
-    bytes_cache: tauri::State<PdfBytesCache>,
-    handle_cache: tauri::State<DocHandleCache>,
+    bytes_cache: tauri::State<'_, PdfBytesCache>,
+    handle_cache: tauri::State<'_, DocHandleCache>,
 ) -> Result<Vec<Vec<u8>>, String> {
     let visibility = ocg_render_copy::canonical_visibility(ocg_visibility.as_deref().unwrap_or(&[]))
         .map_err(|e| format!("OCG selection: {e}"))?;
@@ -2991,7 +3007,7 @@ async fn release_pdf_document(
 
 /// Clear the entire PDF bytes cache AND parsed handle cache (call on app
 /// cleanup or memory pressure).
-#[tauri::command]
+#[tauri::command(async)]
 fn clear_pdf_cache(
     bytes_cache: tauri::State<PdfBytesCache>,
     handle_cache: tauri::State<DocHandleCache>,
@@ -3014,7 +3030,7 @@ fn clear_pdf_cache(
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_page_dimensions(
     path: String,
     bytes_cache: tauri::State<PdfBytesCache>,
@@ -3319,6 +3335,17 @@ pub fn run(opts: StartupOpts) {
                 let _ = app.fs_scope().allow_file(path);
             }
 
+            // OPDS_DEVTOOLS=1 opens the web inspector at start, for profiling
+            // (the app blocks its menu entry and shortcuts otherwise). With
+            // WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:<port> set as well, the
+            // inspector can be reached from another machine over a tunnel.
+            #[cfg(not(target_os = "android"))]
+            if std::env::var("OPDS_DEVTOOLS").map(|v| v == "1").unwrap_or(false) {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+
             // Set the window icon (desktop only — not applicable on Android)
             #[cfg(not(target_os = "android"))]
             if let Some(window) = app.get_webview_window("main") {
@@ -3495,6 +3522,8 @@ pub fn run(opts: StartupOpts) {
             render_pdf_page_region,
             render_tile_scene_region,
             page_content_size,
+            perf_log,
+            perf_enabled,
             get_page_dimensions,
             invalidate_pdf_cache,
             handtekening::certificaat::pdf_certificate_info,
