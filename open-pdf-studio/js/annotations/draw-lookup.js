@@ -18,7 +18,11 @@ export function buildDrawLookup(annotations, index) {
   return { byId, always };
 }
 
-export function visibleDrawItems(index, lookup, page, x, y, width, height, selected) {
+// `current` (the document's markups now) resolves each slot to the object
+// in it now: the lookup is reused across redraws while the geometry is
+// unchanged, and undo can put a new object (same id and geometry, other
+// colour) in a slot.
+export function visibleDrawItems(index, lookup, page, x, y, width, height, selected, current = null) {
   const byPosition = new Map();
   for (const id of index.query(page, x, y, width, height)) {
     for (const item of lookup.byId.get(id) || []) byPosition.set(item.position, item);
@@ -32,5 +36,5 @@ export function visibleDrawItems(index, lookup, page, x, y, width, height, selec
   }
   return [...byPosition.values()]
     .sort((a, b) => a.position - b.position)
-    .map((item) => item.annotation);
+    .map((item) => (current && current[item.position]) || item.annotation);
 }

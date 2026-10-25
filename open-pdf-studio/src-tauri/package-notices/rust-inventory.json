@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "cargoLockSha256": "6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61",
+  "cargoLockSha256": "416262c00430ee6dbef79e583f14dfccbbc25351d570db6ef8820c8725c6fd17",
   "metadataCommand": "cargo metadata --locked --format-version 1",
-  "packageCount": 784,
+  "packageCount": 786,
   "missingLicenseMetadata": [],
   "packages": [
     {
@@ -2342,6 +2342,14 @@
       "licenseFileField": null
     },
     {
+      "name": "libmimalloc-sys",
+      "version": "0.1.49",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "workspace": false,
+      "licenseField": "MIT",
+      "licenseFileField": null
+    },
+    {
       "name": "libredox",
       "version": "0.1.16",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -2464,6 +2472,14 @@
     {
       "name": "memoffset",
       "version": "0.9.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "workspace": false,
+      "licenseField": "MIT",
+      "licenseFileField": null
+    },
+    {
+      "name": "mimalloc",
+      "version": "0.1.52",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "workspace": false,
       "licenseField": "MIT",

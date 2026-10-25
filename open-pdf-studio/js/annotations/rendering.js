@@ -1,9 +1,10 @@
+import { perfRecord } from '../core/perf.js';
 import { apInBitmap } from '../pdf/ap-render-state.js';
 import { state, getActiveDocument, getPageRotation, imageCache } from '../core/state.js';
 import { drawSpaceOverlay } from '../spaces/overlay.js';
 import { annotationCanvas, annotationCtx, textHighlightCanvas, textHighlightCtx } from '../ui/dom-elements.js';
 import { updateStatusAnnotations } from '../ui/chrome/status-bar.js';
-import { updateAnnotationsList } from '../ui/panels/annotations-list.js';
+import { updateAnnotationsListIfChanged } from '../ui/panels/annotations-list.js';
 import { renderWatermarksBehind, renderWatermarksInFront } from '../watermark/watermark-renderer.js';
 
 // Import from sub-modules
@@ -50,6 +51,8 @@ import { drawCommentIcon } from './rendering/comment-icons.js';
 import { drawCaret, strikeLine, replaceStrikeColor } from './rendering/caret.js';
 import { spatialIndex, annotationBounds } from './spatial-index.js';
 import { buildDrawLookup, visibleDrawItems } from './draw-lookup.js';
+import { documentGeometryToken } from './markup-rtree.js';
+import { pageSlots } from './page-buckets.js';
 import { bitmapVoor, bijNieuweTegel } from './vector-snippet-preview.js';
 import { invalidateScaleRegionCache, pixelsPerUnitFor, getRegionScaleFactor } from './scale-region.js';
 import { metSchaalBronnen } from './schaal-bronnen.js';
@@ -2971,10 +2974,28 @@ let _lastIndexedCount = -1;
 let _drawLookupDoc = null;
 let _drawLookup = { byId: new Map(), always: [] };
 
-function rebuildDrawLookup(doc, annotations) {
+let _drawLookupToken = null;
+
+function rebuildDrawLookup(doc, annotations, token = documentGeometryToken(annotations)) {
+  const perfT0 = performance.now();
+  try { return rebuildDrawLookupNow(doc, annotations, token); } finally { perfRecord('index.rebuild', performance.now() - perfT0); }
+}
+
+function rebuildDrawLookupNow(doc, annotations, token = documentGeometryToken(annotations)) {
   _drawLookup = buildDrawLookup(annotations, spatialIndex);
   _drawLookupDoc = doc;
   _lastIndexedCount = annotations.length;
+  _drawLookupToken = token;
+}
+
+// A full redraw (a click, a selection, a page render) rebuilt the spatial
+// index and draw lookup every time: O(all markups) through the store's
+// proxies, 100 ms and more on a drawing with tens of thousands. Now only
+// when the markups' geometry fingerprint (raw reads, a few ms) changed.
+function drawLookupCurrent(doc, annotations) {
+  if (doc !== _drawLookupDoc || annotations.length !== _lastIndexedCount || spatialIndex.isVerouderd) return null;
+  const token = documentGeometryToken(annotations);
+  return token.a === _drawLookupToken?.a && token.b === _drawLookupToken?.b ? true : token;
 }
 
 // Valt deze annotatie volledig buiten het (ruim genomen) zichtbare gebied?
@@ -3029,6 +3050,11 @@ function notifyRedrawn(lightweight) {
 }
 
 export function redrawAnnotations(lightweight = false) {
+  const perfT0 = performance.now();
+  try { return redrawAnnotationsNow(lightweight); } finally { perfRecord(lightweight ? 'redraw.frame' : 'redraw.full', performance.now() - perfT0); }
+}
+
+function redrawAnnotationsNow(lightweight = false) {
   bumpAnnotationFrame();
   notifyRedrawn(lightweight);
   if (!annotationCtx || !annotationCanvas) return;
@@ -3042,8 +3068,11 @@ export function redrawAnnotations(lightweight = false) {
 
   // Pan and zoom call the lightweight path each frame. Reuse the spatial
   // lookup then; rebuild after edits, document changes, or count changes.
-  if (!lightweight || doc !== _drawLookupDoc || annotations.length !== _lastIndexedCount || spatialIndex.isVerouderd) {
+  if (doc !== _drawLookupDoc || annotations.length !== _lastIndexedCount || spatialIndex.isVerouderd) {
     rebuildDrawLookup(doc, annotations);
+  } else if (!lightweight) {
+    const current = drawLookupCurrent(doc, annotations);
+    if (current !== true) rebuildDrawLookup(doc, annotations, current || undefined);
   }
 
   // Scale-region lookup cache: invalidate per redraw so moves/resizes
@@ -3217,18 +3246,44 @@ export function redrawAnnotations(lightweight = false) {
   // naar het vermenigvuldig-canvas, zodat ze met de tekening mengt — tenzij
   // een eerder getekende gewone markering eronder ligt: dat canvas ligt onder
   // het annotatiecanvas, dus de volgorde zou dan omkeren.
-  const eerdereVakken = [];
+  // Eerder getekende vakken in een grof raster (256 pt-cellen): de
+  // overlaptest vergeleek elke vermenigvuldig-markering met álle eerdere
+  // vakken, kwadratisch per frame op een zware tekening.
+  const VAK_CEL = 256;
+  const eerdereRaster = new Map();
+  const eerdereVakken = {
+    push(v) {
+      const c0 = Math.floor(v.x / VAK_CEL), c1 = Math.floor((v.x + v.width) / VAK_CEL);
+      const r0 = Math.floor(v.y / VAK_CEL), r1 = Math.floor((v.y + v.height) / VAK_CEL);
+      if (!Number.isFinite(c0 + c1 + r0 + r1) || (c1 - c0 + 1) * (r1 - r0 + 1) > 4096) { (eerdereRaster.get('groot') || eerdereRaster.set('groot', []).get('groot')).push(v); return; }
+      for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) {
+        const k = `${c},${r}`;
+        (eerdereRaster.get(k) || eerdereRaster.set(k, []).get(k)).push(v);
+      }
+    },
+  };
+  const raakt = (b, v) => b.x < v.x + v.width && v.x < b.x + b.width && b.y < v.y + v.height && v.y < b.y + b.height;
   const overlaptEerdere = (annotation) => {
     const b = annotationBounds(annotation, { goedkoop: true });
     if (!b) return true;
-    return eerdereVakken.some(v => b.x < v.x + v.width && v.x < b.x + b.width && b.y < v.y + v.height && v.y < b.y + b.height);
+    if ((eerdereRaster.get('groot') || []).some(v => raakt(b, v))) return true;
+    const c0 = Math.floor(b.x / VAK_CEL), c1 = Math.floor((b.x + b.width) / VAK_CEL);
+    const r0 = Math.floor(b.y / VAK_CEL), r1 = Math.floor((b.y + b.height) / VAK_CEL);
+    if (!Number.isFinite(c0 + c1 + r0 + r1) || (c1 - c0 + 1) * (r1 - r0 + 1) > 4096) {
+      for (const lijst of eerdereRaster.values()) if (lijst.some(v => raakt(b, v))) return true;
+      return false;
+    }
+    for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) {
+      if ((eerdereRaster.get(`${c},${r}`) || []).some(v => raakt(b, v))) return true;
+    }
+    return false;
   };
   // Ingelezen markeringen die de pagina-bitmap al uit hun eigen /AP tekent
   // (pdf/ap-render-state.js): niet nog eens natekenen.
   const apAlGetekend = apInBitmap(doc, curPage);
   // Weergavefilters één keer per doorloop gelezen (view-filters.js).
   const drawAnnotations = useViewport && annotations.length > 200
-    ? visibleDrawItems(spatialIndex, _drawLookup, curPage, vpX, vpY, vpW, vpH, doc?.selectedAnnotations)
+    ? visibleDrawItems(spatialIndex, _drawLookup, curPage, vpX, vpY, vpW, vpH, doc?.selectedAnnotations, annotations)
     : annotations;
   metWeergaveDoorloop(() => metSchaalBronnen(() => drawAnnotations.forEach(annotation => {
     if (annotation.page !== curPage) return;
@@ -3365,7 +3420,8 @@ let _lijstGepland = false;
 function lijstNaTekenen() {
   if (_lijstGepland) return;
   _lijstGepland = true;
-  const bouw = () => { _lijstGepland = false; updateAnnotationsList(); };
+  // Alleen opbouwen als er iets veranderd is dat de lijst toont.
+  const bouw = () => { _lijstGepland = false; updateAnnotationsListIfChanged(); };
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(bouw, 0));
   else setTimeout(bouw, 0);
 }
@@ -3494,8 +3550,13 @@ function tekenPaginaLagen(ctx, pageNum, width, height, overrideDpr, renderOffset
   // In de weergave (geen afdruk/export: _lagen leeg) tekent de pagina-bitmap
   // onbewerkte ingelezen markeringen al uit hun /AP (pdf/ap-render-state.js).
   const apAlGetekend = _lagen ? null : apInBitmap(doc, pageNum);
-  metWeergaveDoorloop(() => metSchaalBronnen(() => annotations.forEach(annotation => {
-    if (annotation.page !== pageNum) return;
+  // Alleen de markeringen van deze pagina (page-buckets.js), niet per
+  // zichtbare pagina de hele lijst.
+  const dezePagina = pageAnnotations && annotations === pageAnnotations
+    ? annotations
+    : pageSlots(annotations, pageNum).map(slot => annotations[slot]);
+  metWeergaveDoorloop(() => metSchaalBronnen(() => dezePagina.forEach(annotation => {
+    if (!annotation || annotation.page !== pageNum) return;
     if (apAlGetekend?.has(annotation.id)) return;
     if (_buitenBeeld(annotation, cvX, cvY, cvW, cvH)) return;
     // Mengmodus en clip lekken niet naar de volgende markering.
@@ -3673,6 +3734,11 @@ export function updateAllContinuousSharpOverlays() {
 // draaide elke muisbeweging een volledige annotatie-scan per pagina — op een
 // document van 200 bladen is dat 200x de hele array per frame.
 export function redrawContinuous(lightweight = false) {
+  const perfT0 = performance.now();
+  try { return redrawContinuousNow(lightweight); } finally { perfRecord(lightweight ? 'redraw.continuous.frame' : 'redraw.continuous.full', performance.now() - perfT0); }
+}
+
+function redrawContinuousNow(lightweight = false) {
   if (_naHertekenen) _naHertekenen();
   notifyRedrawn(lightweight);
   // A tool preview (rubber band, polyline, measurement, raceway, hover snap)
@@ -3702,8 +3768,11 @@ export function redrawContinuous(lightweight = false) {
   const doc = state.documents[state.activeDocumentIndex];
   const annotationsByPage = new Map(resident.map(({ pageNum }) => [pageNum, []]));
   if (doc && annotationsByPage.size) {
-    for (const annotation of doc.annotations) {
-      annotationsByPage.get(annotation.page)?.push(annotation);
+    // Per page from its slots (page-buckets.js): only that page's markups
+    // are read through the store.
+    const all = doc.annotations;
+    for (const pageNum of annotationsByPage.keys()) {
+      annotationsByPage.set(pageNum, pageSlots(all, pageNum).map((slot) => all[slot]));
     }
   }
   resident.forEach(({ canvas, pageNum }) => {

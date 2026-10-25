@@ -1,6 +1,7 @@
 // Spaces panel UI state: the selected space, outline visibility and the page
 // filter. The canvas overlay (spaces/overlay.js) mirrors the first two.
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal } from 'solid-js';
+import { lazyMemo } from './lazy-memo.js';
 import { state } from '../../core/state.js';
 import { collectSpaces, markupSpaceResolver } from '../../spaces/model.js';
 import { setSelectedSpaceIdForView, setSpaceOutlinesVisible, spaceOutlinesVisible } from '../../spaces/overlay.js';
@@ -29,7 +30,7 @@ export function setOutlinesShown(on) {
 }
 
 /** Every space of the active document, nesting resolved (reactive). */
-export const documentSpaces = createMemo(() => {
+export const documentSpaces = lazyMemo(() => {
   const doc = state.documents[state.activeDocumentIndex];
   if (!doc) return [];
   // Read the stored list so a replaced array (undo, edit) re-runs this memo.
@@ -38,7 +39,7 @@ export const documentSpaces = createMemo(() => {
 });
 
 /** Markups per space id, counting sub-spaces too (reactive). */
-export const spaceMarkupCounts = createMemo(() => {
+export const spaceMarkupCounts = lazyMemo(() => {
   const doc = state.documents[state.activeDocumentIndex];
   const spaces = documentSpaces();
   const counts = new Map();

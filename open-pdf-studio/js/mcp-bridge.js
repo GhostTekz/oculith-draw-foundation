@@ -702,6 +702,19 @@ async function handleGetViewportState() {
   };
 }
 
+// Per-operation timings (js/core/perf.js) for a measured run: `reset`
+// starts clean, `flush` also writes them to the app log. Includes the
+// drawing's markup count so a run can be read against its load.
+async function handlePerfSnapshot(params) {
+  const perf = await import('./core/perf.js');
+  const snap = perf.perfSnapshot();
+  const { getActiveDocument } = await import('./core/state.js');
+  const doc = getActiveDocument();
+  if (params?.flush) await perf.perfFlush('snapshot');
+  if (params?.reset) perf.perfReset();
+  return { ok: true, ...snap, markups: doc?.annotations?.length || 0, pages: doc?.pdfDoc?.numPages || 0, at: Date.now() };
+}
+
 async function handleGetRecentConsole(params) {
   // Return the recent capture-buffer of console messages. Defaults to all
   // 500 entries. Filter via `params.since` (epoch-ms cutoff) or
@@ -3321,6 +3334,7 @@ const HANDLERS = {
   'mcp:type':               handleType,
   'mcp:get-viewport-state': handleGetViewportState,
   'mcp:get-recent-console': handleGetRecentConsole,
+  'mcp:perf-snapshot':      handlePerfSnapshot,
   'mcp:wheel-zoom':         handleWheelZoom,
   'mcp:zoom-anchor-test':   handleZoomAnchorTest,
   'mcp:clear-caches':       handleClearCaches,

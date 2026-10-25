@@ -1,3 +1,4 @@
+import { perfRecord } from '../core/perf.js';
 import { state, getNextUntitledName, getActiveDocument } from '../core/state.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
 import { updateAllStatus } from '../ui/chrome/status-bar.js';
@@ -197,7 +198,9 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     // App-created backing files already have an exact native grant. Other
     // entrances retain their current scope path until their own migration.
     if (filePath && window.__TAURI__ && !exactScopeGranted) {
+      const _sc0 = performance.now();
       try { await window.__TAURI__.core.invoke('allow_fs_scope', { path: filePath }); } catch {}
+      perfRecord('open.scope', performance.now() - _sc0);
     }
 
     // ─── COLD-OPEN PARALLEL PRE-RENDER ───────────────────────────────────────
@@ -218,63 +221,69 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     //   - originX/originY assumed 0; if MediaBox origin is non-zero (rare),
     //     preview is briefly mis-positioned by a few pt — corrected once
     //     proper render fires
-    let _preT0 = performance.now();
-    // Zware pagina's (grote content-stream) slaan de pre-render over: een
-    // whole-page render kost daar SECONDEN en zou — gepind op één worker —
-    // vóór de progressieve tegels in de rij staan. Het progressieve pad
-    // levert de eerste content daar zelf. (isHeavyPage cachet per bestand;
-    // de check zelf kost ~100 ms eenmalig.)
-    let _skipPre = false;
-    if (filePath && isTauri()) {
-      try {
-        const prog = await import('./progressive-render.js');
-        _skipPre = !!(state.preferences && state.preferences.progressiveRender)
-          && await prog.isHeavyPage(filePath, 1);
-        if (_skipPre) console.log('[prog-guard] zware pagina → cold-open pre-render overgeslagen');
-      } catch {}
-    }
-    // The pre-render is an optimisation, not a requirement: when the PDFium
-    // worker pool hasn't finished spawning (cold start via file association),
-    // it would fall back to an in-process parse in the main process while
-    // PDF.js parses the same bytes — on large documents that doubles peak
-    // memory during boot and can take the whole load down. Skip it then.
-    let _poolReady = false;
-    if (filePath && isTauri() && !_skipPre) {
-      try { _poolReady = await invoke('worker_pool_ready'); } catch { _poolReady = false; }
-      if (!_poolReady) console.log('[prog-guard] worker pool not ready → cold-open pre-render skipped');
-    }
-    if (filePath && isTauri() && !_skipPre && _poolReady) {
-      const { renderPdfPage: _renderPdfPage } = await import('./engine-router.js');
-      _renderPdfPage({
-        path: filePath,
-        pageIndex: 0,
-        scale: 1.0,
-        rotation: 0,
-      }).then(async (rgbaData) => {
-        if (!rgbaData || isClosed() || doc.pdfDoc || !isActive()) return;
+    // The preview is an optimisation: its checks (is page 1 heavy? are the
+    // render workers up?) and render run beside the file read instead of
+    // before it; the heavy-page probe alone parsed the whole file first.
+    void (async () => {
+      let _preT0 = performance.now();
+      // Zware pagina's (grote content-stream) slaan de pre-render over: een
+      // whole-page render kost daar SECONDEN en zou — gepind op één worker —
+      // vóór de progressieve tegels in de rij staan. Het progressieve pad
+      // levert de eerste content daar zelf. (isHeavyPage cachet per bestand;
+      // de check zelf kost ~100 ms eenmalig.)
+      let _skipPre = false;
+      if (filePath && isTauri()) {
         try {
-          const bytes = rgbaData instanceof Uint8Array ? rgbaData : new Uint8Array(rgbaData);
-          if (bytes.length <= 8) return;
-          const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
-          const w = view.getUint32(0, true);
-          const h = view.getUint32(4, true);
-          const rgba = new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, bytes.length - 8);
-          const imageData = new ImageData(rgba, w, h);
-          const bitmap = await createImageBitmap(imageData);
-          if (isClosed() || doc.pdfDoc || !isActive()) { bitmap.close(); return; }
-          const vp = await import('./pdf-viewport.js');
-          vp.setPage(filePath, 1, w, h, 0, 0, 0);
-          window.__pdfViewport.currentBitmap = bitmap;
-          window.__pdfViewport.pageType = 'raster';
-          window.__pdfViewport.dirty = true;
-          console.log(`[PERF] cold-open preview painted: ${(performance.now() - _preT0).toFixed(0)}ms (${w}x${h})`);
-        } catch (e) {
-          console.warn('[PERF] cold-open preview paint failed:', e?.message ?? e);
-        }
-      }).catch((e) => {
-        console.warn('[PERF] cold-open pre-render failed:', e?.message ?? e);
-      });
-    }
+          const prog = await import('./progressive-render.js');
+          _skipPre = !!(state.preferences && state.preferences.progressiveRender)
+            && await prog.isHeavyPage(filePath, 1);
+          if (_skipPre) console.log('[prog-guard] zware pagina → cold-open pre-render overgeslagen');
+        } catch {}
+      }
+      // The pre-render is an optimisation, not a requirement: when the PDFium
+      // worker pool hasn't finished spawning (cold start via file association),
+      // it would fall back to an in-process parse in the main process while
+      // PDF.js parses the same bytes — on large documents that doubles peak
+      // memory during boot and can take the whole load down. Skip it then.
+      let _poolReady = false;
+      if (filePath && isTauri() && !_skipPre) {
+        try { _poolReady = await invoke('worker_pool_ready'); } catch { _poolReady = false; }
+        if (!_poolReady) console.log('[prog-guard] worker pool not ready → cold-open pre-render skipped');
+      }
+      if (filePath && isTauri() && !_skipPre && _poolReady) {
+        const { renderPdfPage: _renderPdfPage } = await import('./engine-router.js');
+        _renderPdfPage({
+          path: filePath,
+          pageIndex: 0,
+          scale: 1.0,
+          rotation: 0,
+        }).then(async (rgbaData) => {
+          if (!rgbaData || isClosed() || doc.pdfDoc || !isActive()) return;
+          try {
+            const bytes = rgbaData instanceof Uint8Array ? rgbaData : new Uint8Array(rgbaData);
+            if (bytes.length <= 8) return;
+            const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
+            const w = view.getUint32(0, true);
+            const h = view.getUint32(4, true);
+            const rgba = new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, bytes.length - 8);
+            const imageData = new ImageData(rgba, w, h);
+            const bitmap = await createImageBitmap(imageData);
+            if (isClosed() || doc.pdfDoc || !isActive()) { bitmap.close(); return; }
+            const vp = await import('./pdf-viewport.js');
+            vp.setPage(filePath, 1, w, h, 0, 0, 0);
+            window.__pdfViewport.currentBitmap = bitmap;
+            window.__pdfViewport.pageType = 'raster';
+            window.__pdfViewport.dirty = true;
+            console.log(`[PERF] cold-open preview painted: ${(performance.now() - _preT0).toFixed(0)}ms (${w}x${h})`);
+          } catch (e) {
+            console.warn('[PERF] cold-open preview paint failed:', e?.message ?? e);
+          }
+        }).catch((e) => {
+          console.warn('[PERF] cold-open pre-render failed:', e?.message ?? e);
+        });
+      }
+
+    })();
 
     let typedArray;
 
@@ -295,17 +304,21 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
       }
 
       // Read file using Tauri fs plugin or web file cache
+      const _rd0 = performance.now();
       const data = await readBinaryFile(filePath);
+      perfRecord('open.readFile', performance.now() - _rd0);
       if (isClosed()) return;
       if (!data) throw new Error('File system access not available');
-      typedArray = new Uint8Array(data);
-
-      // Cache a copy of original bytes for saver (pdf.js transfers the buffer
-      // to a web worker, which detaches the original Uint8Array making it length 0)
-      originalBytesCache.set(filePath, typedArray.slice());
+      // The bytes read are the saver's original; pdf.js gets its own copy
+      // (it transfers the buffer to a web worker, which detaches it). One
+      // copy of the file, not two: `new Uint8Array(uint8Array)` copied too.
+      const original = data instanceof Uint8Array ? data : new Uint8Array(data);
+      originalBytesCache.set(filePath, original);
+      typedArray = original.slice();
     }
     const fileBytes = typedArray.byteLength || typedArray.length;
     console.log(`[PERF] File read done: ${(performance.now() - _t0).toFixed(0)}ms, size: ${fileBytes} bytes`);
+    perfRecord('open.read', performance.now() - _t0);
 
     // Load PDF using pdf.js (this transfers the buffer to a worker)
     doc.pdfDoc = await pdfjsLib.getDocument({
@@ -319,6 +332,7 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     }).promise;
     if (isClosed()) return;
     console.log(`[PERF] PDF.js getDocument done: ${(performance.now() - _t0).toFixed(0)}ms, pages: ${doc.pdfDoc.numPages}`);
+    perfRecord('open.pdfjs', performance.now() - _t0);
     const largeOpen = isLargeOpen({ numPages: doc.pdfDoc.numPages, byteLength: fileBytes });
     doc._largeOpen = largeOpen;
     // pdf-lib parses the whole file on the main thread. A large set waits
@@ -1185,6 +1199,7 @@ export async function getSharedPdfLibDoc(doc) {
   console.log(`[PERF] PDFDocument.load START (${(pdfBytes.length / 1024 / 1024).toFixed(1)} MB)`);
   doc._sharedPdfLibDocPromise = PDFDocument.load(pdfBytes, { ignoreEncryption: true }).then(pdfLibDoc => {
     console.log(`[PERF] PDFDocument.load DONE: ${(performance.now() - _pll0).toFixed(0)}ms`);
+    perfRecord('load.pdfLibParse', performance.now() - _pll0);
     doc._sharedPdfLibDoc = pdfLibDoc;
     doc._sharedPdfLibDocPromise = null;
     // Annotatielagen (#468): de lijst lezen zodra het document er is — vóór
@@ -1216,6 +1231,7 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
 
   const annotations = await page.getAnnotations();
   console.log(`[PERF] page ${pageNum}: getAnnotations (${annotations.length} annots): ${(performance.now() - _sp0).toFixed(0)}ms`);
+  perfRecord('load.getAnnotations', performance.now() - _sp0);
 
   if (annotations.length === 0) return;
 
@@ -1235,6 +1251,7 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
     releaseSharedPdfLib(doc);
     pdfLibDoc = await getSharedPdfLibDoc(doc);
     console.log(`[PERF] page ${pageNum}: getSharedPdfLibDoc: ${(performance.now() - _pl0).toFixed(0)}ms`);
+    perfRecord('load.waitPdfLib', performance.now() - _pl0);
   }
 
   if (stampAnnots.length > 0 || hasSquareAnnotations) {
@@ -1249,6 +1266,7 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
       console.warn('[loader] hybrid stamp extraction failed:', e);
     }
     console.log(`[PERF] page ${pageNum}: stampExtraction (${stampAnnots.length} stamps): ${(performance.now() - _st0).toFixed(0)}ms`);
+    perfRecord('load.stamps', performance.now() - _st0);
   }
 
   if (needsExtraData) {
@@ -1256,6 +1274,7 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
       const _ce0 = performance.now();
       annotColorMap = await extractAnnotationColors(pageNum, pdfLibDoc);
       console.log(`[PERF] page ${pageNum}: colorExtraction: ${(performance.now() - _ce0).toFixed(0)}ms`);
+      perfRecord('load.colors', performance.now() - _ce0);
     } else {
       // On-demand path: pdf-lib not ready, skip colors for now
       doc._pagesNeedingColorUpdate.add(pageNum);
@@ -1267,6 +1286,8 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
   refineLoadedAreas(doc, pageNum);
   console.log(`[PERF] page ${pageNum}: convertAnnotations (${annotations.length}): ${(performance.now() - _cv0).toFixed(0)}ms`);
   console.log(`[PERF] page ${pageNum}: TOTAL: ${(performance.now() - _sp0).toFixed(0)}ms`);
+  perfRecord('load.convert', performance.now() - _cv0);
+  perfRecord('load.page', performance.now() - _sp0);
 }
 
 function refineLoadedAreas(doc, pageNum) {

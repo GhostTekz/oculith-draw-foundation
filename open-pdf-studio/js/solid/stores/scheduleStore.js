@@ -1,4 +1,5 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal } from 'solid-js';
+import { lazyMemo } from './lazy-memo.js';
 import { state, getActiveDocument } from '../../core/state.js';
 import { formatMeasurement } from '../../annotations/measurement.js';
 import { savePreferences } from '../../core/preferences.js';
@@ -20,7 +21,7 @@ function collectMeasurements() {
 }
 
 // --- Filtered + grouped entries ---
-const scheduleEntries = createMemo(() => {
+const scheduleEntries = lazyMemo(() => {
   const measurements = collectMeasurements();
   const ft = filterType();
   const fp = filterPage();
@@ -79,7 +80,7 @@ function getTypeName(type) {
 }
 
 // --- Grouped entries ---
-const groupedEntries = createMemo(() => {
+const groupedEntries = lazyMemo(() => {
   const entries = scheduleEntries();
   const gb = groupBy();
   const groups = new Map();
@@ -166,7 +167,7 @@ const ELEMENT_TYPE_NAMES = {
 };
 
 /** Telt élke geplaatste annotatie, gegroepeerd per type (aflopend op aantal). */
-export const allElementsTally = createMemo(() => {
+export const allElementsTally = lazyMemo(() => {
   const doc = getActiveDocument();
   const byType = new Map();
   for (const a of (doc?.annotations || [])) byType.set(a.type, (byType.get(a.type) || 0) + 1);
@@ -175,7 +176,7 @@ export const allElementsTally = createMemo(() => {
     .sort((a, b) => b.count - a.count);
 });
 
-export const allElementsTotal = createMemo(() => (getActiveDocument()?.annotations || []).length);
+export const allElementsTotal = lazyMemo(() => (getActiveDocument()?.annotations || []).length);
 
 export function toggleSchedule() {
   setScheduleVisible(!scheduleVisible());

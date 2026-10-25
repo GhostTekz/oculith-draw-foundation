@@ -619,6 +619,18 @@ fn handle_tools_list() -> Value {
                 }
             },
             {
+                "name": "app_perf_snapshot",
+                "description": "Per-operation timings measured inside the app (js/core/perf.js): for each operation (redraw.full, redraw.frame, index.rebuild, list.build, page.render, save, and any an edition adds) its count, mean, p50, p95 and max in ms, plus main-thread stalls (frames >100 ms late), the active drawing's markup and page counts. `reset` starts a clean measurement; `flush` also writes the summary to the app log.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "reset": { "type": "boolean", "description": "Clear the timings after reading them." },
+                        "flush": { "type": "boolean", "description": "Also write the summary to the app log." }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            {
                 "name": "app_wheel_zoom",
                 "description": "Dispatch a synthetic ctrl+WheelEvent at (x, y) in the LIVE WebView — exercises the exact same wheel listener the OS hits, so this is a faithful proxy for a user spinning the wheel. `deltaY` < 0 = zoom in, > 0 = zoom out. Use this from an AI-driven debugging loop to reproduce the user's reported zoom problems WITHOUT a human at the mouse.",
                 "inputSchema": {
@@ -1297,6 +1309,7 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, (i
         "app_type"        => tool_app_request(state, "mcp:type",        &arguments, Duration::from_secs(30)).await,
         "app_get_viewport_state" => tool_app_request(state, "mcp:get-viewport-state", &arguments, Duration::from_secs(5)).await,
         "app_get_recent_console" => tool_app_request(state, "mcp:get-recent-console", &arguments, Duration::from_secs(5)).await,
+        "app_perf_snapshot"      => tool_app_request(state, "mcp:perf-snapshot",      &arguments, Duration::from_secs(10)).await,
         "app_wheel_zoom"         => tool_app_request(state, "mcp:wheel-zoom",         &arguments, Duration::from_secs(15)).await,
         "app_zoom_anchor_test"   => tool_app_request(state, "mcp:zoom-anchor-test",   &arguments, Duration::from_secs(30)).await,
         "app_clear_caches"       => tool_app_request(state, "mcp:clear-caches",       &arguments, Duration::from_secs(10)).await,

@@ -1,3 +1,5 @@
+import { perfRecord } from '../../core/perf.js';
+import { $RAW } from 'solid-js/store';
 import { state, getActiveDocument, isSelected, getAnnotationBounds, addToSelection, removeFromSelection } from '../../core/state.js';
 import { getTypeDisplayName, getAnnotationDisplayName, createDateFormatter } from '../../utils/helpers.js';
 import {
@@ -260,12 +262,85 @@ function markupTime(ann) {
 
 // Update annotations list - pushes data to the Solid.js store
 export function updateAnnotationsList(filterValue) {
+  const perfT0 = performance.now();
+  try { return updateAnnotationsListNow(filterValue); } finally { perfRecord('list.build', performance.now() - perfT0); }
+}
+
+function updateAnnotationsListNow(filterValue) {
   layerNameMemo = { doc: state.documents[state.activeDocumentIndex], names: new Map() };
   try {
+    lastBuild = { token: listInputsToken(), at: Date.now() };
     buildAnnotationsList(filterValue);
   } finally {
     layerNameMemo = null;
   }
+}
+
+// Every full canvas redraw (a click, a selection, a page render) asked for a
+// list build: O(all markups) through the store's proxies, with filters,
+// layer counts and element types, even while the list is hidden; on a
+// drawing with tens of thousands of markups 100 ms and more per click. The
+// redraw path now asks updateAnnotationsListIfChanged, which builds only when
+// the markups (read raw), the selection, the page or the list's own
+// settings changed. Callers that change something else the list shows call
+// updateAnnotationsList as before; as a safety net a skipped request is
+// followed by one build two seconds later.
+let lastBuild = null;
+let trailingTimer = 0;
+const TRAILING_MS = 2000;
+
+const rawOf = (value) => (value && value[$RAW]) || value;
+function mixStr(h, s) {
+  h = Math.imul(h ^ s.length, 0x01000193) >>> 0;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+  return h;
+}
+function mixNum(h, n) {
+  return Math.imul(h ^ ((Number.isFinite(n) ? Math.round(n * 100) : 0x7fffffff) | 0), 0x01000193) >>> 0;
+}
+
+function listInputsToken() {
+  const doc = state.documents[state.activeDocumentIndex];
+  let h = 0x811c9dc5;
+  h = mixNum(h, state.activeDocumentIndex);
+  if (!doc) return String(h);
+  h = mixNum(h, doc.currentPage || 0);
+  const list = rawOf(doc.annotations) || [];
+  h = mixNum(h, list.length);
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (!a || typeof a !== 'object') continue;
+    h = mixNum(h, i);
+    for (const k in a) {
+      const v = a[k];
+      if (typeof v === 'string') h = mixStr(h, v);
+      else if (typeof v === 'number') h = mixNum(h, v);
+      else if (typeof v === 'boolean') h = mixNum(h, v ? 1 : 2);
+      else if (Array.isArray(v)) h = mixNum(h, v.length + 3);
+      else if (v == null) h = mixNum(h, 4);
+      else h = mixNum(h, 5);
+    }
+  }
+  for (const a of rawOf(doc.selectedAnnotations) || []) h = mixStr(h, String(a?.id || ''));
+  try {
+    const plain = (v) => (v instanceof Set || v instanceof Map ? [...v] : v);
+    h = mixStr(h, JSON.stringify([filterMode(), sortMode(), columnSort(), columnFilters(), searchQuery(), expandedThreads(), replyTarget()?.id ?? replyTarget() ?? null, collapsedGroups(), expandedMarkupGroups()].map(plain)));
+  } catch { h = mixNum(h, Date.now()); }
+  return String(h);
+}
+
+export function updateAnnotationsListIfChanged() {
+  if (!lastBuild || listInputsToken() !== lastBuild.token) {
+    if (trailingTimer) { clearTimeout(trailingTimer); trailingTimer = 0; }
+    updateAnnotationsList();
+    return;
+  }
+  if (trailingTimer) return;
+  const at = lastBuild.at;
+  trailingTimer = setTimeout(() => {
+    trailingTimer = 0;
+    if (lastBuild && lastBuild.at === at) updateAnnotationsList();
+  }, TRAILING_MS);
 }
 
 function buildAnnotationsList(filterValue) {

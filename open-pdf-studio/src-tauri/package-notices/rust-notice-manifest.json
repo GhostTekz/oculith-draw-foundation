@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "cargoLockSha256": "6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61",
-  "externalPackageCount": 778,
+  "cargoLockSha256": "416262c00430ee6dbef79e583f14dfccbbc25351d570db6ef8820c8725c6fd17",
+  "externalPackageCount": 780,
   "standardTextIds": [
     "Apache-2.0",
     "BSD-3-Clause",
@@ -4575,6 +4575,19 @@
       "standardTextIds": []
     },
     {
+      "name": "libmimalloc-sys",
+      "version": "0.1.49",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "license": "MIT",
+      "sourceFiles": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b"
+        }
+      ],
+      "standardTextIds": []
+    },
+    {
       "name": "libredox",
       "version": "0.1.16",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -4830,6 +4843,19 @@
         {
           "path": "LICENSE",
           "sha256": "3234ac55816264ee7b6c7ee27efd61cf0a1fe775806870e3d9b4c41ea73c5cb1"
+        }
+      ],
+      "standardTextIds": []
+    },
+    {
+      "name": "mimalloc",
+      "version": "0.1.52",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "license": "MIT",
+      "sourceFiles": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b"
         }
       ],
       "standardTextIds": []
