@@ -3,7 +3,10 @@
 // deterministic for a given seed. No real drawing content.
 //
 // Usage: node scripts/perf/make-workload.mjs <out.pdf> [--sheets 10] [--markups 2000]
-//          [--segments 20000] [--seed 1] [--width 3024] [--height 2160]
+//          [--segments 20000] [--seed 1] [--width 3024] [--height 2160] [--own]
+// --own marks the markups as this app's own (its markup id key), the way a
+// drawing saved here carries them; without it they read as another
+// editor's markups (drawn from their appearance into the page image).
 import { writeFile } from 'node:fs/promises';
 import { PDFDocument, PDFName, PDFNumber, PDFString, rgb } from 'pdf-lib';
 
@@ -19,6 +22,7 @@ if (!out) {
 }
 const sheets = opt('sheets', 10), markups = opt('markups', 2000), segments = opt('segments', 20000);
 const width = opt('width', 3024), height = opt('height', 2160);
+const own = args.includes('--own');
 let seed = opt('seed', 1) >>> 0 || 1;
 // Mulberry32: small, seeded, the same set every run.
 const random = () => {
@@ -60,6 +64,7 @@ for (let s = 0; s < sheets; s++) {
       Contents: PDFString.of(`F-${s + 1}-${k + 1}`),
       NM: PDFString.of(`perf-${s + 1}-${k + 1}`),
       AP: { N: doc.context.register(box(w, h)) },
+      ...(own ? { OPS_MarkupIdV1: PDFString.of(`perf-own-${s + 1}-${k + 1}`) } : {}),
     });
     annots.push(doc.context.register(dict));
   }

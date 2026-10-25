@@ -10,12 +10,14 @@ import { carriedFromText } from '../annotations/carried-from.js';
 import { layoutTextboxForExport, verticaleTekstVerschuiving } from '../annotations/rendering/shapes.js';
 import { markDocumentSaved, updateWindowTitle } from '../ui/chrome/tabs.js';
 import { updateStatusMessage } from '../ui/chrome/status-bar.js';
-import { isTauri, invoke, readBinaryFile, writeBinaryFileAtomic, saveFileDialog, unlockFile, lockFile } from '../core/platform.js';
-import { getCachedPdfBytes, setCachedPdfBytes, hidePdfABar } from './loader.js';
+import { isTauri, invoke, readBinaryFile, writeBinaryFileAtomic, appendBinaryFileAtomic, saveFileDialog, unlockFile, lockFile } from '../core/platform.js';
+import { getCachedPdfBytes, getPdfBytes, setCachedPdfBytes, hidePdfABar } from './loader.js';
 import { PDFDocument, PDFString, PDFHexString, PDFName, PDFArray, PDFStream, PDFRef, PDFDict, degrees,
   PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList } from 'pdf-lib';
 import { kopNaarLE, koppenSleutel } from './lijnkoppen.js';
 import { ruimOnbereikbaarOp } from './saver/vervangen-opruimen.js';
+import { inspectSource, snapshotObjects, reserveObjectNumbers, buildIncrement, prepareForWrite,
+  appendBytes, compactionDue, MAX_REVISIONS } from './saver/incremental.js';
 import { extPaginaPlan, extHoudtPlek, extVoorRegistratie } from './saver/ext-behoud.js';
 import { writeMarkupGroups } from './markup-group-pdf.js';
 import { extNatief } from './saver/ext-natief.js';
@@ -313,6 +315,42 @@ function snapshotValue(h, value, depth) {
   }
 }
 
+// ── Incremental save (preference `incrementalSave`, saver/incremental.js) ──
+// A save that qualifies appends the objects it changed to the original file
+// instead of rewriting it. Pages whose markups did not change since the last
+// save (same models, same document-level settings) are not rebuilt at all:
+// their /Annots stay the file's, exactly like a page whose annotations have
+// not loaded yet. Everything that does not qualify writes the whole file.
+
+/** A fingerprint of one page's models (the same walk as saveEditSnapshot). */
+function pageModelHash(models) {
+  const h = { a: 0x811c9dc5, b: 0x9e3779b9 };
+  snapshotValue(h, models, 0);
+  return `${h.a.toString(36)}.${h.b.toString(36)}`;
+}
+
+/** Why this save cannot be incremental, or null when it can be tried. */
+function incrementalBlocker(activeDoc, { saveAsPath, alleenBytes, currentPath, basisVanPad }) {
+  if (!state.preferences?.incrementalSave) return 'off';
+  if (saveAsPath || alleenBytes) return 'save-as';
+  if (!isTauri() || !basisVanPad || activeDoc.isUntitled || activeDoc._renderTemp) return 'source';
+  if ((activeDoc.saveTargetPath || currentPath) !== currentPath) return 'target';
+  // These rewrite page content; leave them to the full rewrite.
+  if ((activeDoc.textEdits || []).some((te) => !te.baked)) return 'text-edits';
+  if (activeDoc.ocrResults && Object.keys(activeDoc.ocrResults).length) return 'ocr';
+  if (Array.isArray(activeDoc.watermarks) ? activeDoc.watermarks.length : !!activeDoc.watermarks) return 'watermarks';
+  return null;
+}
+
+/**
+ * The page fingerprints of the last save, if this save starts from exactly
+ * the bytes that save wrote (the same cached array, at the same path).
+ */
+function geldigeBasis(activeDoc, currentPath, bytes) {
+  const b = activeDoc._saveBaseline;
+  return b && b.path === currentPath && b.bytes?.deref?.() === bytes ? b : null;
+}
+
 function refreshVisibleSource(renderer, doc) {
   try {
     const pending = doc.viewMode === 'continuous'
@@ -362,7 +400,10 @@ async function savePDFNow(saveAsPath = null, opties = {}, activeDoc = getActiveD
   // document.
   if (!opties.zonderHandtekeningVraag) {
     const { bevestigOpslaanMetHandtekeningen } = await import('./handtekeningen/verificatie.js');
-    if (!(await bevestigOpslaanMetHandtekeningen(activeDoc, saveAsPath))) return false;
+    const _svSig = performance.now();
+    const doorgaan = await bevestigOpslaanMetHandtekeningen(activeDoc, saveAsPath);
+    perfRecord('save.signatureWait', performance.now() - _svSig);
+    if (!doorgaan) return false;
   }
 
   if (_saveBezig) {
@@ -418,13 +459,17 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     defaultValue: 'The document changed while saving. Save again.',
   }));
   let rewrittenSource = false;
+  let _svAfter = 0;
   let refreshFailure = null;
   let rendererForRefresh = null;
   try {
     showLoading('Saving PDF...');
 
     // Get original PDF bytes (from cache or disk, with memory key fallback for untitled docs)
-    let existingPdfBytes = getCachedPdfBytes(currentPath);
+    const _svBytes = performance.now();
+    let existingPdfBytes = getCachedPdfBytes(currentPath) || await getPdfBytes(currentPath);
+    // Only bytes of the file at currentPath can take an appended update.
+    let basisVanPad = !!existingPdfBytes;
     if (!existingPdfBytes) {
       if (activeDoc) {
         existingPdfBytes = getCachedPdfBytes(`__memory__${activeDoc.id}`);
@@ -432,11 +477,38 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     }
     if (!existingPdfBytes) {
       existingPdfBytes = await readBinaryFile(currentPath);
+      basisVanPad = !!existingPdfBytes;
     }
 
+    perfRecord('save.bytes', performance.now() - _svBytes);
     const _svParse = performance.now();
     const pdfDocLib = await PDFDocument.load(existingPdfBytes);
     perfRecord('save.parse', performance.now() - _svParse);
+    // Incremental save: check the file's cross-reference chain and remember
+    // every object as loaded, before anything changes the document.
+    let incr = null;
+    // The fingerprints this save leaves for the next one (page -> models).
+    const nieuweBasis = state.preferences?.incrementalSave && !alleenBytes && typeof WeakRef === 'function'
+      ? { docHash: null, pages: new Map() } : null;
+    {
+      const blocker = incrementalBlocker(activeDoc, { saveAsPath, alleenBytes, currentPath, basisVanPad });
+      if (!blocker) {
+        const _svInc = performance.now();
+        const source = inspectSource(existingPdfBytes);
+        if (!source.ok) {
+          console.info(`[saver] incremental save not possible for this file (${source.reason}): full rewrite`);
+        } else if (source.revisions >= MAX_REVISIONS || compactionDue(existingPdfBytes.length, source.base)) {
+          console.info('[saver] appended updates have grown large: compacting with a full rewrite');
+        } else {
+          reserveObjectNumbers(pdfDocLib.context, source.size);
+          incr = {
+            source, snap: snapshotObjects(pdfDocLib), basis: geldigeBasis(activeDoc, currentPath, existingPdfBytes),
+            schoon: 0,
+          };
+        }
+        perfRecord('save.incSnapshot', performance.now() - _svInc);
+      }
+    }
     const _svBuild = performance.now();
     // Een voorbeeld van het importvenster kan inhoud missen en wordt nooit
     // als document opgeslagen (#400).
@@ -564,6 +636,20 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       annotaties: docAnnotations,
     });
 
+    // Everything outside the models that goes into a markup's dictionary:
+    // when it changed, every page is rebuilt.
+    if (nieuweBasis) {
+      nieuweBasis.docHash = pageModelHash([
+        savedMarkupTextColumn, savedMarkupSecondTextColumn, savedMarkupChoiceColumn,
+        savedMarkupSecondChoiceColumn, savedMarkupNumberColumn, savedMarkupSecondNumberColumn,
+        savedMarkupCheckmarkColumn, savedMarkupFormulaColumn, savedMarkupStatusSet,
+        activeDoc.markupStatusSet ?? null, layersForSave(doc),
+        laagOcgs ? [...laagOcgs].map(([id, ref]) => [id, String(ref)]) : null,
+        activeDoc.pageScales ?? null, activeDoc.pageRotations ?? null,
+      ]);
+      if (incr?.basis && incr.basis.docHash !== nieuweBasis.docHash) incr.basis = null;
+    }
+
     // Paginaschalen (doc.pageScales) als /VP + /Measure per pagina, zodat
     // the external editor/Acrobat en een volgende opening de schaal uit de PDF lezen. Alleen
     // de eigen /OPS_PageScale-viewports worden vervangen; CAD-viewports
@@ -650,6 +736,17 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       if (!pageAnnotsLoaded && pageAnnotations.length > 0) {
         console.warn(`[saver] pagina ${pageNum}: ${pageAnnotations.length} model-annotaties maar pagina niet als geladen gemarkeerd — opslaan afgebroken om duplicaten te voorkomen`);
         throw changedDuringSave();
+      }
+
+      // Incremental save: this page's markups are what the last save wrote.
+      // Its /Annots stay the file's, like a page not loaded yet.
+      if (incr?.basis && pageAnnotsLoaded && !appRotation) {
+        const hash = pageModelHash(pageAnnotations);
+        if (incr.basis.pages.get(pageNum) === hash) {
+          nieuweBasis.pages.set(pageNum, hash);
+          incr.schoon++;
+          continue;
+        }
       }
 
       // Build annotations array: keep existing annotations we don't handle (widgets, links, etc.)
@@ -3331,6 +3428,18 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       page.node.set(PDFName.of('Annots'), context.obj(annotsArray));
     }
 
+    // What the file now holds per loaded page, for the next incremental save
+    // (after the loop: writing may complete a model, e.g. its /NM).
+    if (nieuweBasis) {
+      for (let pageNum = 1; pageNum <= pages.length; pageNum++) {
+        if (nieuweBasis.pages.has(pageNum)) continue;
+        const loaded = activeDoc._annotationPagesReady
+          ? activeDoc._annotationPagesReady.has(pageNum)
+          : (activeDoc._loadedAnnotationPages ? activeDoc._loadedAnnotationPages.has(pageNum) : true);
+        if (loaded) nieuweBasis.pages.set(pageNum, pageModelHash(annotationsByPage[pageNum] || []));
+      }
+    }
+
     // Burn text edits into the PDF (cover-and-replace)
     if (!alleenBytes) await saveTextEditsToPages(pdfDocLib, pages, activeDoc);
 
@@ -3409,10 +3518,28 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     // Save the PDF
     perfRecord('save.build', performance.now() - _svBuild);
     const _svSer = performance.now();
-    const pdfBytes = await pdfDocLib.save();
-    perfRecord('save.serialize', performance.now() - _svSer);
+    // Incremental save: only the changed objects, appended. Vector snippets
+    // burn into and clean up page content: those saves stay full rewrites.
+    let increment = null;
+    if (incr && !heeftKnipsels && await prepareForWrite(pdfDocLib)) {
+      const r = buildIncrement(pdfDocLib, existingPdfBytes, incr.source, incr.snap);
+      if (r.reason) {
+        console.info(`[saver] incremental save not possible (${r.reason}): full rewrite`);
+      } else if (incr.source.revisions + 1 >= MAX_REVISIONS
+          || compactionDue(existingPdfBytes.length + r.bytes.length, incr.source.base)) {
+        console.info('[saver] appended updates have grown large: compacting with a full rewrite');
+      } else {
+        increment = r.bytes;
+        console.info(`[saver] incremental save: ${r.objects} objects, ${increment.length} bytes appended; ${incr.schoon} unchanged pages kept`);
+      }
+    } else if (incr && heeftKnipsels) {
+      console.info('[saver] incremental save not possible (vector snippets): full rewrite');
+    }
+    const savedBytes = increment
+      ? appendBytes(existingPdfBytes, increment)
+      : new Uint8Array(await pdfDocLib.save());
+    perfRecord(increment ? 'save.serializeIncremental' : 'save.serialize', performance.now() - _svSer);
     const outputPath = saveAsPath || activeDoc?.saveTargetPath || currentPath;
-    const savedBytes = new Uint8Array(pdfBytes);
     // Structural edits replace the PDF and often move its working path. A
     // serialization started before that replacement must not write old bytes.
     if (!stillCurrent() || !editsUnchanged()) throw changedDuringSave();
@@ -3437,13 +3564,31 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
         orchestrator.cancelBitmapRendersForFile(outputPath);
         renderer.clearBitmapJSCacheForFile(outputPath);
         renderer.clearLowResCache();
+        // Render workers read the source file on demand and keep it open.
+        // Close those handles before the atomic replace: a volume without
+        // POSIX rename semantics refuses to replace an open file.
+        try { await invoke('release_pdf_worker_files', { path: outputPath }); }
+        catch (error) { console.warn('[saver] render workers kept the file open:', error); }
       }
       await unlockFile(outputPath);
       try {
         if (!stillCurrent() || !editsUnchanged()) throw changedDuringSave();
         const _svWrite = performance.now();
-        await writeBinaryFileAtomic(outputPath, savedBytes);
+        if (increment) {
+          try {
+            await appendBinaryFileAtomic(outputPath, existingPdfBytes, increment);
+          } catch (appendErr) {
+            if (!String(appendErr?.message || appendErr).includes('append-mismatch')) throw appendErr;
+            // The file on disk is not the one this save started from: write
+            // the whole result, as a full save would.
+            console.warn('[saver] file changed on disk; writing the whole file instead of appending');
+            await writeBinaryFileAtomic(outputPath, savedBytes);
+          }
+        } else {
+          await writeBinaryFileAtomic(outputPath, savedBytes);
+        }
         perfRecord('save.write', performance.now() - _svWrite);
+        _svAfter = performance.now();
       } catch (writeErr) {
         // Re-lock before reporting error
         await lockFile(outputPath);
@@ -3465,7 +3610,9 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
 
       // Invalidate native caches before releasing the UI paint gate.
       if (isTauri()) {
-        try { await invoke('invalidate_pdf_cache', { path: outputPath }); }
+        // The render workers' file handles were released before the write:
+        // their cache invalidation need not hold up the save.
+        try { await invoke('invalidate_pdf_cache', { path: outputPath, background: true }); }
         catch (error) {
           refreshFailure = error;
           console.error('[saver] PDF saved, but native view refresh failed:', error);
@@ -3476,7 +3623,13 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     }
 
     // Update cache so subsequent saves use the latest PDF as base
-    setCachedPdfBytes(outputPath, savedBytes.slice());
+    const cachedBytes = savedBytes.slice();
+    setCachedPdfBytes(outputPath, cachedBytes);
+    if (activeDoc) {
+      activeDoc._saveBaseline = nieuweBasis
+        ? { path: outputPath, bytes: new WeakRef(cachedBytes), docHash: nieuweBasis.docHash, pages: nieuweBasis.pages }
+        : null;
+    }
     // A close/reload during the atomic write cannot be undone here. Keep the
     // new live document dirty, and never publish the old save as its state.
     if (!stillCurrent() || !editsUnchanged()) throw changedDuringSave();
@@ -3592,6 +3745,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
         && getActiveDocument() === activeDoc && rendererForRefresh) {
       refreshVisibleSource(rendererForRefresh, activeDoc);
     }
+    if (_svAfter) perfRecord('save.afterWrite', performance.now() - _svAfter);
     return true;
   } catch (error) {
     if (rewrittenSource && rendererForRefresh && stillCurrent() && getActiveDocument() === activeDoc) {

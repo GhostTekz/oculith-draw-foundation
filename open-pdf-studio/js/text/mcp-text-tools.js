@@ -85,8 +85,8 @@ export async function replaceTextForMcp({ spanId, expectedText, newText, color }
   const record = newRecord(span, page, newText, textColor);
   // Preflight on a throwaway PDF copy. A conservative in-place match is
   // mandatory: a white cover rectangle would damage images/vector artwork.
-  const { getCachedPdfBytes } = await import('../pdf/loader.js');
-  const sourceBytes = getCachedPdfBytes(path);
+  const { getPdfBytes } = await import('../pdf/loader.js');
+  const sourceBytes = await getPdfBytes(path);
   if (!sourceBytes) return failure('source PDF bytes unavailable');
   const copy = await PDFDocument.load(sourceBytes.slice(), { ignoreEncryption: true });
   const inPlace = applyInPlaceTextEdits(copy, copy.getPages(), [record]).get(record);

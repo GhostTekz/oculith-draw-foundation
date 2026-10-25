@@ -21,6 +21,7 @@ import { parseCarriedFrom, CARRIED_FROM_MAX } from '../../annotations/carried-fr
 import { assemblyIdText, ASSEMBLY_ID_MAX } from '../../annotations/assemblies.js';
 import { isExtAnnotDict, leesExtExtra, producerIsExt } from '../ext-interop.js';
 import { readGroupKeys } from '../markup-group-pdf.js';
+import { timeSlicer } from '../../core/yield-to-main.js';
 
 // Documenten waarvan de knipsel-bronpagina's al in de store staan: dat
 // uitpakken gebeurt één keer per document, bij het eerste knipsel dat we zien.
@@ -180,9 +181,57 @@ function leesTekstcorrectieExtra(context, annotDict, subtypeName, colors) {
   }
 }
 
+/**
+ * The inline styling of an /RC body as runs per line (colors.textRuns) when
+ * it mixes styles, else its uniform underline and strike-through. Needs
+ * DOMParser: the pdf-lib worker has none, so it returns the cleaned /RC as
+ * colors.richTextSource and the loader calls this on the main thread
+ * (applyDeferredRichText).
+ */
+export function applyRichTextRuns(colors, rcCleaned) {
+  const rcDoc = new DOMParser().parseFromString(rcCleaned, 'text/html');
+  const rcBody = rcDoc.body;
+  if (rcBody) {
+    const rcLines = parseEditorDom(rcBody);
+    const eersteRun = rcLines.flat()[0];
+    const gemengd = rcLines.flat().some(r =>
+      r.bold !== !!eersteRun?.bold || r.italic !== !!eersteRun?.italic ||
+      !!r.underline !== !!eersteRun?.underline || !!r.strikethrough !== !!eersteRun?.strikethrough);
+    if (gemengd) {
+      colors.textRuns = rcLines;
+    } else {
+      // Uniform styling: trust the actual parsed run over the
+      // naive whole-blob regex above, which matches the FIRST
+      // "text-decoration:" it finds anywhere in the RC string —
+      // typically the <body>'s own "text-decoration:none"
+      // default, appearing before a <p>'s own override. That
+      // silently dropped an underline/strikethrough applying
+      // to the whole (single-style) annotation.
+      colors.fontUnderline = !!eersteRun?.underline;
+      colors.fontStrikethrough = !!eersteRun?.strikethrough;
+    }
+  }
+}
+
+/** The /RC bodies a worker run left in `colorMap` (deferRichText), parsed here. */
+export function applyDeferredRichText(colorMap) {
+  if (!colorMap) return;
+  for (const colors of colorMap.values()) {
+    if (!colors || typeof colors.richTextSource !== 'string') continue;
+    const source = colors.richTextSource;
+    delete colors.richTextSource;
+    if (typeof DOMParser === 'undefined') continue;
+    try { applyRichTextRuns(colors, source); } catch (_) { /* RC zonder bruikbare structuur */ }
+  }
+}
+
 // Extract colors (IC, appearance stream) from annotations using pdf-lib
 // Returns Map<rectKey, { ic, apStrokeColor }> where ic = Interior Color hex, apStrokeColor = stroke from appearance stream
-export async function extractAnnotationColors(pageNum, pdfDoc) {
+// Options for a run outside the main thread (pdf-lib-worker.js):
+// storeSnippet receives the vector snippet source pages instead of the
+// snippet store, and deferRichText leaves the /RC parse to
+// applyDeferredRichText.
+export async function extractAnnotationColors(pageNum, pdfDoc, { storeSnippet = bewaarKnipsel, deferRichText = false } = {}) {
   const colorMap = new Map();
   try {
     const page = pdfDoc.getPages()[pageNum - 1];
@@ -212,8 +261,12 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
     // always mapped by reference, so the saver can keep or rewrite exactly
     // the object the model came from.
     const extProducer = producerIsExt(pdfDoc);
+    // Tens of thousands of markups on one sheet: read them in slices that
+    // give the event loop a turn (core/yield-to-main.js).
+    const slice = timeSlicer();
 
     for (let i = 0; i < annots.size(); i++) {
+      await slice();
       const annotDict = context.lookup(annots.get(i));
       if (!annotDict) continue;
       const subtype = annotDict.get(PDFName.of('Subtype'));
@@ -575,7 +628,7 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
           if (velden) {
             if (!_knipselBronnenGelezen.has(pdfDoc)) {
               _knipselBronnenGelezen.add(pdfDoc);
-              await leesKnipselBronnen(pdfDoc, bewaarKnipsel);
+              await leesKnipselBronnen(pdfDoc, storeSnippet);
             }
             colors.vectorSnippet = velden;
           }
@@ -1410,7 +1463,7 @@ const result = {};
               // zijn regels, <b>/<i>/font-weight/font-style de opmaak. Alleen
               // bewaren als er echt gemengde opmaak in zit.
               try {
-                if (typeof DOMParser !== 'undefined' && /<(b|i|strong|em|span|p|div)\b/i.test(rcStr)) {
+                if ((deferRichText || typeof DOMParser !== 'undefined') && /<(b|i|strong|em|span|p|div)\b/i.test(rcStr)) {
                   // toString() van een PDFString bevat de haakjes/escapes van
                   // de PDF-notatie; voor het parsen de gedecodeerde tekst.
                   const rcDecoded = (typeof rcRaw.decodeText === 'function') ? rcRaw.decodeText()
@@ -1426,28 +1479,8 @@ const result = {};
                   // block boundary doesn't already provide.
                   const rcCleaned = String(rcDecoded).replace(/^\s*<\?xml[^>]*\?>/i, '')
                     .replace(/(?:&#(?:13|10);|[\r\n])+(?=<\/(?:span|p|div)>)/gi, '');
-                  const rcDoc = new DOMParser().parseFromString(rcCleaned, 'text/html');
-                  const rcBody = rcDoc.body;
-                  if (rcBody) {
-                    const rcLines = parseEditorDom(rcBody);
-                    const eersteRun = rcLines.flat()[0];
-                    const gemengd = rcLines.flat().some(r =>
-                      r.bold !== !!eersteRun?.bold || r.italic !== !!eersteRun?.italic ||
-                      !!r.underline !== !!eersteRun?.underline || !!r.strikethrough !== !!eersteRun?.strikethrough);
-                    if (gemengd) {
-                      colors.textRuns = rcLines;
-                    } else {
-                      // Uniform styling: trust the actual parsed run over the
-                      // naive whole-blob regex above, which matches the FIRST
-                      // "text-decoration:" it finds anywhere in the RC string —
-                      // typically the <body>'s own "text-decoration:none"
-                      // default, appearing before a <p>'s own override. That
-                      // silently dropped an underline/strikethrough applying
-                      // to the whole (single-style) annotation.
-                      colors.fontUnderline = !!eersteRun?.underline;
-                      colors.fontStrikethrough = !!eersteRun?.strikethrough;
-                    }
-                  }
+                  if (deferRichText) colors.richTextSource = rcCleaned;
+                  else applyRichTextRuns(colors, rcCleaned);
                 }
               } catch (_) { /* RC zonder bruikbare structuur */ }
               // Extract line-height from RC (stored as absolute pt value, convert to multiplier)

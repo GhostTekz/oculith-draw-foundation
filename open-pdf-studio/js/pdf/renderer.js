@@ -15,10 +15,12 @@ import { noteViewBefore, noteViewAfter } from '../core/view-history.js';
 function getPdfCanvas() { return document.getElementById('pdf-canvas'); }
 function getAnnotationCanvas() { return document.getElementById('annotation-canvas'); }
 import { redrawAnnotations, renderAnnotationsForPage, updateContinuousSharpOverlay, updateAllContinuousSharpOverlays } from '../annotations/rendering.js';
-import { ensureAnnotationsForPage, hidePdfABar, getCachedPdfBytes } from './loader.js';
+import { ensureAnnotationsForPage, annotationsRead, hidePdfABar, getCachedPdfBytes, notePagePainted } from './loader.js';
+import { afterNextFrame } from '../core/yield-to-main.js';
 import { updateAllStatus } from '../ui/chrome/status-bar.js';
 import { hideProperties } from '../ui/panels/properties-panel.js';
 import { updateActiveThumbnail, pauseThumbnails, resumeThumbnails, isThumbnailPipelineIdle } from '../ui/panels/left-panel.js';
+import { noteActivity } from './pdfjs-idle-cleanup.js';
 import { createSinglePageTextLayer, clearSinglePageTextLayer, createTextLayer, clearTextLayers, releaseTextLayerForPage, createTextLayerFromRust } from '../text/text-layer.js';
 import { createSinglePageLinkLayer, clearSinglePageLinkLayer, createLinkLayer, clearLinkLayers, releaseLinkLayerForPage, applyOverlayPointerEvents } from './link-layer.js';
 import { createSinglePageFormLayer, clearSinglePageFormLayer, createFormLayer, clearFormLayers, releaseFormLayerForPage, hideFormFieldsBar } from './form-layer.js';
@@ -37,6 +39,7 @@ import { stopAlleWielScrollers } from './wiel-scroll.js';
 import { pageCanvasContext } from './page-canvas-context.js';
 import { clipDektZicht, clipUitDataset, zichtbaarPaginaDeel } from './continuous-clip.js';
 import { continuousPagesToRelease } from './continuous-residency.js';
+import { registerBitmapCache, enforceBitmapBudget } from './bitmap-budget.js';
 // Hi-DPI support: render canvases at device pixel ratio for sharp text
 export function getCanvasDPR() { return window.devicePixelRatio || 1; }
 
@@ -46,11 +49,26 @@ export function getCanvasDPR() { return window.devicePixelRatio || 1; }
 // ImageData rebuild pipeline (~300-500ms saved per hit). On a hit, render is
 // just `drawImage(cachedBitmap)` which the GPU compositor handles in <10ms.
 // Both entry count and bitmap bytes are bounded; a large sheet can occupy
-// much more memory than several small pages.
+// much more memory than several small pages. Bytes count toward the shared
+// bitmap budget (bitmap-budget.js).
 const _BITMAP_JS_CACHE = new Map();
 const _bitmapJsEpochs = new Map();
 const _BITMAP_JS_CACHE_MAX = 16;
-const _BITMAP_JS_CACHE_MAX_BYTES = 128 * 1024 * 1024;
+function _bitmapJsCacheBytes() {
+  let bytes = 0;
+  for (const entry of _BITMAP_JS_CACHE.values()) bytes += entry.w * entry.h * 4;
+  return bytes;
+}
+// Drop the least recently used entry; the newest one always stays.
+function _bitmapJsEvictOldest() {
+  if (_BITMAP_JS_CACHE.size <= 1) return 0;
+  const oldest = _BITMAP_JS_CACHE.keys().next().value;
+  const old = _BITMAP_JS_CACHE.get(oldest);
+  _BITMAP_JS_CACHE.delete(oldest);
+  try { old.bitmap?.close?.(); } catch {}
+  return old.w * old.h * 4;
+}
+registerBitmapCache('continuous-bitmaps', { bytes: _bitmapJsCacheBytes, evictOldest: _bitmapJsEvictOldest });
 const _bitmapJsPending = new Map();
 let _bitmapJsGlobalEpoch = 0;
 export function _bitmapJSCacheGet(key) {
@@ -78,16 +96,8 @@ export async function _bitmapJSCacheSet(key, imageData, filePath = key.split('|'
     try { replaced?.bitmap?.close?.(); } catch {}
     _BITMAP_JS_CACHE.delete(key);
     _BITMAP_JS_CACHE.set(key, { bitmap, w: imageData.width, h: imageData.height });
-    let bytes = 0;
-    for (const entry of _BITMAP_JS_CACHE.values()) bytes += entry.w * entry.h * 4;
-    while (_BITMAP_JS_CACHE.size > _BITMAP_JS_CACHE_MAX
-        || (_BITMAP_JS_CACHE.size > 1 && bytes > _BITMAP_JS_CACHE_MAX_BYTES)) {
-      const oldest = _BITMAP_JS_CACHE.keys().next().value;
-      const old = _BITMAP_JS_CACHE.get(oldest);
-      bytes -= old.w * old.h * 4;
-      _BITMAP_JS_CACHE.delete(oldest);
-      try { old.bitmap?.close?.(); } catch {}
-    }
+    while (_BITMAP_JS_CACHE.size > _BITMAP_JS_CACHE_MAX && _bitmapJsEvictOldest() > 0) { /* drop the oldest */ }
+    enforceBitmapBudget();
   } catch (e) {
     console.warn('[bitmap-cache] createImageBitmap failed:', e);
   } finally {
@@ -271,6 +281,30 @@ function beeldRotatie(pageNum) {
 // zoom levels — earlier-started but slower-completing renders were stomping
 // over the freshest user-requested zoom level.
 let _foregroundRenderGen = 0;
+// Bumped each time the single-page text, link and form layers are rebuilt:
+// a deferred build of an older render gives way to the newer one.
+let _pageLayersToken = 0;
+// How long the page layers wait for the sheet's markups and bitmap, and for
+// an idle moment after that.
+const LAYER_WAIT_MS = 5000;
+const LAYER_IDLE_MS = 500;
+
+// All of `promises` settled (nulls count as settled), or `ms` passed.
+function _untilOrAfter(promises, ms) {
+  let timer;
+  return Promise.race([
+    Promise.all(promises.map((p) => Promise.resolve(p).catch(() => {}))),
+    new Promise((resolve) => { timer = setTimeout(resolve, ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+// The window is idle, or `timeout` ms passed.
+function _whenIdle(timeout) {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout });
+    else setTimeout(resolve, 0);
+  });
+}
 
 // Returns true if `doc` is no longer the active document. Use this after every
 // `await` in render code to abort late completions whose results would corrupt
@@ -280,6 +314,13 @@ let _foregroundRenderGen = 0;
 // switched to tab B, then write A's filePath into the viewport singleton,
 // making the RAF render loop draw A's pages on B's tab — the ghost/bleed-through
 // the user reports when switching tabs rapidly across multiple PDFs.
+// The viewport keeps the redraw callback it is given until the next sheet.
+// An arrow made inside renderPageNow kept that render's whole scope with it,
+// the document included, so a closed document stayed reachable.
+function redrawAllMarkups() {
+  redrawAnnotations(true);
+}
+
 function _isStaleDoc(doc) {
   return doc !== state.documents[state.activeDocumentIndex];
 }
@@ -420,6 +461,7 @@ async function _renderPageImpl(pageNum) {
   const _canUseTauri = isTauri();
   const _hasFilePath = !!doc.filePath;
   let _skipBitmapRender = false;
+  let _bitmapKlaar = null;
 
   // ─── VECTOR VIEWPORT MODE ──────────────────────────────────────────────
   // Extract draw commands once, then hand off to pdf-viewport.js render loop.
@@ -520,7 +562,7 @@ async function _renderPageImpl(pageNum) {
           // annotations one frame behind the PDF during zoom/pan). Use the
           // lightweight=true path so per-frame zoom skips the heavy SolidJS
           // status-bar / list / ribbon updates that would stall the frame.
-          initViewport(pdfCanvas, () => redrawAnnotations(true));
+          initViewport(pdfCanvas, redrawAllMarkups);
           if (!pdfCanvas._vpEventsWired) {
             wireEvents(pdfCanvas);
             pdfCanvas._vpEventsWired = true;
@@ -582,7 +624,7 @@ async function _renderPageImpl(pageNum) {
         if (_isStaleRender()) { resumeThumbnails(); return; }
 
         // Init viewport on the main PDF canvas if not already running.
-        initViewport(pdfCanvas, () => redrawAnnotations(true));
+        initViewport(pdfCanvas, redrawAllMarkups);
         if (!pdfCanvas._vpEventsWired) {
           wireEvents(pdfCanvas);
           pdfCanvas._vpEventsWired = true;
@@ -621,7 +663,16 @@ async function _renderPageImpl(pageNum) {
         // Kick async bitmap fill — fires viewport.dirty when arrives.
         const _orch = await import('./bitmap-orchestrator.js');
         if (_isStaleRender()) { resumeThumbnails(); return; }
-        _orch.ensureBitmapForCurrentView();
+        // Once the bitmap is drawn, the document's pdf-lib parse may start
+        // (loader.js afterFirstPaint): it holds the main thread in one piece.
+        _bitmapKlaar = Promise.resolve(_orch.ensureBitmapForCurrentView())
+          .catch(() => {})
+          .then(afterNextFrame)
+          .then(() => {
+            // From the start of this render to the sheet's bitmap on screen.
+            if (!_isStaleRender()) perfRecord('page.bitmap', performance.now() - _rp0);
+            notePagePainted(doc);
+          });
         // Tile will be ensured on the first zoom change via the _anchorAt hook
         // (Step 4); for the initial fit we let _render() display whatever
         // getBestAvailableBitmap provides immediately.
@@ -646,6 +697,10 @@ async function _renderPageImpl(pageNum) {
       resumeThumbnails();
     }
   }
+
+  // No bitmap of its own on the way (vector path, PDF.js below, a failure):
+  // nothing for the pdf-lib parse to wait for.
+  if (!_bitmapKlaar) notePagePainted(doc);
 
   // Bitmap rendering has moved to the unified viewport model (Task 4):
   // activated above in the raster-mode block; pixel-fill happens via
@@ -771,31 +826,70 @@ async function _renderPageImpl(pageNum) {
     || parseInt(_existingTextLayer.dataset.page) !== pageNum
     || _linkLayerRotationStale;
   if (!_skipBitmapRender || _textLayerStale) {
-    // The selectable text arrives on its own: on a sheet with thousands of
-    // text items it takes seconds (text-layer.js), and the links, forms and
-    // markups do not wait for it.
+    // The text, link and form layers come from PDF.js requests that parse
+    // the page in its worker (getTextContent: the whole content stream; the
+    // annotations: a second or more on a sheet with thousands of markups).
+    // That worker answers one request at a time and cannot drop one once
+    // sent, so these wait for the sheet itself: the text layer until the
+    // markups' annotation list is read and the bitmap is on screen, the
+    // link and form layers until the markups are drawn. Each then starts
+    // when the window is idle, and only while this page is still shown.
+    // The previous page's layers go at once, as before.
+    clearSinglePageTextLayer();
+    clearSinglePageLinkLayer();
+    clearSinglePageFormLayer();
+    const layersToken = ++_pageLayersToken;
+    const layersCurrent = () => layersToken === _pageLayersToken
+      && !_isStaleDoc(doc)
+      && doc.pdfDoc === pdfDoc
+      && doc.currentPage === pageNum
+      && sourceRenderCurrent(doc.filePath, sourceRevision)
+      // The PDF.js path draws the layers at this render's scale.
+      && (_skipBitmapRender || !_isStaleGen());
     const _tl0 = performance.now();
-    createSinglePageTextLayer(page, lagenViewport, () => !_isStaleRender())
-      .then(() => console.log(`[PERF] renderPage(${pageNum}) text layer: ${(performance.now() - _tl0).toFixed(0)}ms`))
-      .catch((e) => console.warn('Failed to create text layer:', e));
+    const textLayerDone = (async () => {
+      await _untilOrAfter([annotationsRead(doc, pageNum), _bitmapKlaar], LAYER_WAIT_MS);
+      await _whenIdle(LAYER_IDLE_MS);
+      if (!layersCurrent()) return;
+      perfRecord('page.textLayerWait', performance.now() - _tl0);
+      const _tb0 = performance.now();
+      await createSinglePageTextLayer(page, lagenViewport, layersCurrent);
+      if (!layersCurrent()) return;
+      perfRecord('page.textLayer', performance.now() - _tb0);
+      console.log(`[PERF] renderPage(${pageNum}) text layer: ${(performance.now() - _tl0).toFixed(0)}ms`);
+      if (window.__pdfViewport) window.__pdfViewport.dirty = true;
+    })().catch((e) => console.warn('Failed to create text layer:', e));
 
-    try {
-      const _ll0 = performance.now();
-      await createSinglePageLinkLayer(page, lagenViewport, () => !_isStaleRender());
-      console.log(`[PERF] renderPage(${pageNum}) link layer: ${(performance.now() - _ll0).toFixed(0)}ms`);
-      if (_isStaleRender()) return;
-    } catch (e) {
-      console.warn('Failed to create link layer:', e);
-    }
-
-    try {
-      const _fl0 = performance.now();
-      await createSinglePageFormLayer(page, lagenViewport, () => !_isStaleRender());
-      console.log(`[PERF] renderPage(${pageNum}) form layer: ${(performance.now() - _fl0).toFixed(0)}ms`);
-      if (_isStaleRender()) return;
-    } catch (e) {
-      console.warn('Failed to create form layer:', e);
-    }
+    const _lf0 = performance.now();
+    const linkFormDone = (async () => {
+      await _untilOrAfter([ensureAnnotationsForPage(pageNum, doc)], LAYER_WAIT_MS);
+      await _whenIdle(LAYER_IDLE_MS);
+      if (!layersCurrent()) return;
+      perfRecord('page.linkFormWait', performance.now() - _lf0);
+      const _lb0 = performance.now();
+      try {
+        await createSinglePageLinkLayer(page, lagenViewport, layersCurrent);
+      } catch (e) {
+        console.warn('Failed to create link layer:', e);
+      }
+      if (!layersCurrent()) return;
+      try {
+        await createSinglePageFormLayer(page, lagenViewport, layersCurrent);
+      } catch (e) {
+        console.warn('Failed to create form layer:', e);
+      }
+      if (!layersCurrent()) return;
+      perfRecord('page.linkFormLayers', performance.now() - _lb0);
+      console.log(`[PERF] renderPage(${pageNum}) link + form layers: ${(performance.now() - _lf0).toFixed(0)}ms`);
+      // Same rule as below for the layers that just arrived.
+      applyOverlayPointerEvents(document.getElementById('canvas-container'));
+      if (window.__pdfViewport) window.__pdfViewport.dirty = true;
+    })();
+    // These layers were PDF.js's last reads of the sheet: it may let go of
+    // the pages it parsed once it has been quiet (pdfjs-idle-cleanup.js).
+    Promise.allSettled([textLayerDone, linkFormDone]).then(() => noteActivity(doc));
+    // The neighbours of a large set wait for these (loader.js).
+    doc._visibleLayers = Promise.all([textLayerDone, linkFormDone]).then(() => {});
 
     // editText tool: annotation-canvas must drop below the textLayer so
     // text-span clicks reach the span listeners (inline text editing).
@@ -823,19 +917,16 @@ async function _renderPageImpl(pageNum) {
     if (window.__pdfViewport) window.__pdfViewport.dirty = true;
   }
 
-  // Ensure annotations for this page are loaded (on-demand if background hasn't reached it yet)
+  // The page's markups: on a sheet with tens of thousands of them, reading
+  // and converting takes seconds (loader.js). The overlay is sized and drawn
+  // with what is loaded now, and drawn again once the markups are in, so the
+  // page and the rest of the view do not wait for them. This function still
+  // returns after the markups, as before.
   // Skip heavy operations during vector zoom (only needed on first load / page change).
   // Uses the same page-aware staleness check as the text-layer block above
   // (evaluated BEFORE that block rebuilt the layer, so page changes pass).
-  if (!_skipBitmapRender || _textLayerStale) {
-    console.log(`[PERF] renderPage(${pageNum}) ensureAnnotations START: ${(performance.now() - _rp0).toFixed(0)}ms`);
-    await ensureAnnotationsForPage(pageNum);
-    if (_isStaleRender()) return;
-    console.log(`[PERF] renderPage(${pageNum}) ensureAnnotations DONE: ${(performance.now() - _rp0).toFixed(0)}ms`);
-    if (state.preferences.snapToPdfContent) {
-      prefetchPdfVectorGeometry(pageNum);
-    }
-  }
+  const _markupsNodig = !_skipBitmapRender || _textLayerStale;
+  const _markupsAl = !!doc._annotationPagesReady?.has(pageNum);
 
   // Final stale-doc check before mutating shared canvas — without this, an
   // earlier renderPage() that finished after a tab switch would resize and
@@ -875,6 +966,29 @@ async function _renderPageImpl(pageNum) {
 
   // Update status bar
   updateAllStatus();
+  perfRecord('page.paint', performance.now() - _rp0);
+
+  // Ensure annotations for this page are loaded (on-demand if background hasn't reached it yet)
+  if (_markupsNodig) {
+    console.log(`[PERF] renderPage(${pageNum}) ensureAnnotations START: ${(performance.now() - _rp0).toFixed(0)}ms`);
+    const _wm0 = performance.now();
+    await ensureAnnotationsForPage(pageNum);
+    if (!_markupsAl) perfRecord('page.waitMarkups', performance.now() - _wm0);
+    if (_isStaleRender()) {
+      // A newer render of this page (a zoom) went ahead without them.
+      if (!_markupsAl && !_isStaleDoc(doc) && doc.currentPage === pageNum) redrawAnnotations();
+      return;
+    }
+    console.log(`[PERF] renderPage(${pageNum}) ensureAnnotations DONE: ${(performance.now() - _rp0).toFixed(0)}ms`);
+    if (state.preferences.snapToPdfContent) {
+      prefetchPdfVectorGeometry(pageNum);
+    }
+    // The markups arrived after the first draw: draw them.
+    if (!_markupsAl) {
+      redrawAnnotations();
+      updateAllStatus();
+    }
+  }
 
   // NOTE: prefetchAdjacentPages was removed — it causes Rust backend contention
   // with thumbnail rendering, making the app unresponsive on large files.
@@ -1174,11 +1288,14 @@ function _releaseContinuousPageSurface(pageNum) {
   container?.querySelectorAll('canvas, .textLayer, .linkLayer, .formLayer').forEach(layer => layer.remove());
 }
 
-function _trimContinuousPageSurfaces() {
+// Resident continuous pages with their canvas bytes and distance from the
+// viewport. Null outside the continuous view.
+function _continuousResidentPages() {
+  if (typeof document === 'undefined') return null;
   const viewport = document.getElementById('pdf-container');
-  if (!viewport || getActiveDocument()?.viewMode !== 'continuous') return;
+  if (!viewport || getActiveDocument()?.viewMode !== 'continuous') return null;
   const view = viewport.getBoundingClientRect();
-  if (!view.height) return;
+  if (!view.height) return null;
   const pages = [];
   for (const pageNum of _residentPages) {
     const wrapper = document.querySelector(`#continuous-container .page-wrapper[data-page="${pageNum}"]`);
@@ -1193,13 +1310,42 @@ function _trimContinuousPageSurfaces() {
       focused: wrapper.contains(document.activeElement),
     });
   }
+  return { pages, view };
+}
+
+function _trimContinuousPageSurfaces() {
+  const resident = _continuousResidentPages();
+  if (!resident) return;
+  const { pages, view } = resident;
   const release = continuousPagesToRelease(pages, {
     maxPages: CONT_MAX_RESIDENT_PAGES,
     maxBytes: CONT_MAX_RESIDENT_BYTES,
     retainDistance: Math.max(600, view.height * 2),
   });
   for (const pageNum of release) _releaseContinuousPageSurface(pageNum);
+  enforceBitmapBudget();
 }
+
+// The resident page canvases count toward the shared bitmap budget. Only a
+// page outside the observer margin and without focus can go, farthest first.
+registerBitmapCache('continuous-pages', {
+  bytes() {
+    const resident = _continuousResidentPages();
+    return resident ? resident.pages.reduce((sum, page) => sum + page.bytes, 0) : 0;
+  },
+  evictOldest() {
+    const resident = _continuousResidentPages();
+    if (!resident) return 0;
+    let far = null;
+    for (const page of resident.pages) {
+      if (page.inRange || page.focused || page.bytes <= 0) continue;
+      if (!far || page.distance > far.distance) far = page;
+    }
+    if (!far) return 0;
+    _releaseContinuousPageSurface(far.pageNum);
+    return far.bytes;
+  },
+});
 
 function continuousPageInfo(pdfDoc, pageNum) {
   let pages = _continuousPageInfoCache.get(pdfDoc);
@@ -2269,6 +2415,7 @@ export async function setViewMode(mode) {
     // het weer overnemen.
     if (pdfContainer) pdfContainer.style.overflow = '';
     await renderContinuous();
+    notePagePainted(doc);
     // Stay on the page the user was reading — the rebuild starts at page 1.
     const wrapper = continuousContainer.querySelector(`.page-wrapper[data-page="${doc.currentPage}"]`);
     if (wrapper) wrapper.scrollIntoView({ block: 'start' });

@@ -11,7 +11,7 @@
 
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { getActiveDocument, getPageRotation } from '../core/state.js';
-import { getCachedPdfBytes } from '../pdf/loader.js';
+import { getPdfBytes } from '../pdf/loader.js';
 import { getCacheKey, reloadFromBytes } from '../pdf/page-manager.js';
 import { recordPageStructure } from '../core/undo-manager.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
@@ -28,9 +28,9 @@ export function getCachedEmbeddedImages(pageNum) {
   return _cache.get(pageNum) || null;
 }
 
-function currentBytes() {
+async function currentBytes() {
   const key = getCacheKey();
-  return key ? getCachedPdfBytes(key) : null;
+  return key ? getPdfBytes(key) : null;
 }
 
 // Detect embedded images on a page and cache their app-space bounding boxes.
@@ -39,7 +39,7 @@ export async function detectEmbeddedImages(pageNum) {
   const doc = getActiveDocument();
   if (!doc?.pdfDoc) { _cache.set(pageNum, []); return []; }
 
-  const bytes = currentBytes();
+  const bytes = await currentBytes();
   if (!bytes) { _cache.set(pageNum, []); return []; }
 
   let images, text;
@@ -92,7 +92,7 @@ export async function removeEmbeddedImage(pageNum, index) {
   const doc = getActiveDocument();
   if (!doc) return false;
 
-  const bytes = currentBytes();
+  const bytes = await currentBytes();
   if (!bytes) return false;
 
   showLoading('Removing image...');

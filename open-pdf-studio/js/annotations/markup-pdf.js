@@ -1,4 +1,3 @@
-import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { edition } from '../editions/active.js';
 import { customTextColumnName } from './custom-text-column.js';
@@ -7,6 +6,9 @@ import { numberColumn, numberText } from './custom-number-column.js';
 import { formulaColumn, formulaText } from './custom-formula-column.js';
 import { checkmarkColumn, checkmarkText } from './custom-checkmark-column.js';
 import { drawBrandMark } from '../pdf/brand-mark-pdf.js';
+
+// fontkit (about 0.5 MB) loads with the first report, not with the editor.
+const loadFontkit = () => import('@pdf-lib/fontkit').then((m) => m.default);
 
 const WIDTH = 612;
 const HEIGHT = 792;
@@ -53,6 +55,7 @@ export async function buildMarkupSummaryPdf({ sourcePath, rows, customTextColumn
   customNumberColumn = null, customCheckmarkColumn = null, customFormulaColumn = null,
   customSecondTextColumn = '', customSecondChoiceColumn = null, customSecondNumberColumn = null,
   showStatusHistory = false, latestStatusOnly = false, generatedAt = new Date() }, fontBytes) {
+  const fontkit = await loadFontkit();
   if (!Array.isArray(rows)) throw new Error('Markup summary rows are required.');
   if (!fontBytes?.byteLength) throw new Error('The bundled markup report font is unavailable.');
   const created = new Date(generatedAt);

@@ -63,9 +63,9 @@ fn main() -> Result<()> {
         match req {
             Request::Render { id, path, page_index, scale, rotation, ocg_visibility, annot_appearance, annot_appearance_index } => {
                 let show = render::AnnotShow::from_request(annot_appearance.as_deref(), annot_appearance_index.as_deref());
-                let resp = match renderer.render(&path, page_index, scale, rotation, &ocg_visibility, show) {
+                let resp = match renderer.render(&path, page_index, scale, rotation, &ocg_visibility, show, shm_region.payload_mut()) {
                     Ok(result) => {
-                        match shm_region.write_bitmap(result.width, result.height, &result.rgba) {
+                        match shm_region.write_header(result.width, result.height) {
                             Ok(bytes) => Response::RenderOk {
                                 id, ok: true,
                                 w: result.width, h: result.height,
@@ -94,10 +94,10 @@ fn main() -> Result<()> {
                 let resp = match renderer.render_region(
                     &path, page_index, scale, rotation,
                     region_x_pt, region_y_pt, region_w_pt, region_h_pt,
-                    &ocg_visibility, show,
+                    &ocg_visibility, show, shm_region.payload_mut(),
                 ) {
                     Ok(result) => {
-                        match shm_region.write_bitmap(result.width, result.height, &result.rgba) {
+                        match shm_region.write_header(result.width, result.height) {
                             Ok(bytes) => Response::RenderOk {
                                 id, ok: true,
                                 w: result.width, h: result.height,
@@ -119,11 +119,13 @@ fn main() -> Result<()> {
             }
             Request::Trim => {
                 renderer.trim();
+                return_freed_memory();
             }
             Request::Invalidate { id, path } => {
                 renderer.invalidate_path(&path);
                 writeln!(stdout, "{}", serde_json::to_string(&Response::InvalidateOk { id, ok: true })?)?;
                 stdout.flush()?;
+                return_freed_memory();
             }
             Request::Shutdown => {
                 eprintln!("[worker {}] shutting down", slot);
@@ -134,3 +136,22 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+/// Hand what PDFium just freed back to the system. PDFium allocates with the
+/// C library's malloc, and glibc keeps freed memory of a long-lived process
+/// for reuse: after a closed drawing the worker went on holding its parse,
+/// over a gigabyte per worker after a few large sets.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn return_freed_memory() {
+    extern "C" {
+        fn malloc_trim(pad: usize) -> i32;
+    }
+    // Safety: malloc_trim only releases free heap memory; no pointers held
+    // by this process are affected.
+    unsafe {
+        malloc_trim(0);
+    }
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn return_freed_memory() {}

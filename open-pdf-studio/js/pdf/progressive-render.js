@@ -143,6 +143,30 @@ export function createSceneAttemptCoordinator() {
 // exotische features) vallen blijvend terug op het PDFium-pool-pad.
 const _sceneAttempts = createSceneAttemptCoordinator();
 
+// Render lanes: a tile request may carry `renderLane` + `renderGeneration`.
+// Once a newer generation is submitted on the same lane, the worker pool drops
+// older queued requests on that lane before they reach a worker and rejects
+// them with RENDER_SUPERSEDED. Only tag requests whose result the caller
+// already throws away when its generation is no longer current. The page-load
+// token keeps lanes of a reloaded view apart from those of the previous one.
+const RENDER_LANE_TOKEN = (() => {
+  try { if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID(); } catch {}
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+})();
+export const RENDER_SUPERSEDED = 'render superseded';
+
+/** Lane name unique to this page load. */
+export function renderLane(name) {
+  return `${RENDER_LANE_TOKEN}:${name}`;
+}
+
+/** Was this tile dropped because a newer view replaced it? */
+export function isRenderSuperseded(error) {
+  return String(error?.message ?? error) === RENDER_SUPERSEDED;
+}
+
+const PROGRESSIVE_LANE = renderLane('progressive');
+
 /**
  * Tegel-invoke met scene-first en per-pagina PDFium-fallback. De eigen
  * display-list-engine rastert tegels parallel uit één gecachete scene
@@ -162,6 +186,10 @@ export async function invokeTileRegion(args) {
   delete args.annotAppearanceIndex;
   if (annot) Object.assign(args, annot);
   const annotAppearance = annot?.annotAppearance || null;
+  // Only the worker pool queues requests; the scene engine takes no lane.
+  const { renderLane: lane, renderGeneration, ...sceneArgs } = args;
+  const laneArgs = lane && Number.isSafeInteger(renderGeneration) ? { renderLane: lane, renderGeneration } : {};
+  args = sceneArgs;
   const key = `${args.path}|${args.pageIndex}|${args.rotation || 0}`;
   const sceneWorthIt = !args.ocgVisibility.length && !annotAppearance
     && (await pageContentBytes(args.path, args.pageIndex + 1)) > SCENE_CONTENT_BYTES;
@@ -189,6 +217,7 @@ export async function invokeTileRegion(args) {
   // worker-RSS tot meerdere gigabytes.
   const res = await invoke('render_pdf_page_region', {
     ...args,
+    ...laneArgs,
     spread: shouldSpreadPdfiumFallback(sceneWorthIt),
   });
   try {
@@ -322,6 +351,22 @@ let _inflightKey = null;
  *  (bitmap-orchestrator) om interactie-werk voorrang te geven. */
 export function progressiveRunActive() {
   return _inflightKey !== null;
+}
+
+// The running run's accumulator, for a page preview that lands while the
+// tiles are still coming in (page-preview.js).
+let _previewSink = null;
+
+/**
+ * Draw a low-resolution preview of the page under the tiles of the running
+ * run, where no tile is yet, and show the result. False when no run of this
+ * page is filling, or it already started from a cached bitmap.
+ */
+export function offerPreviewToProgressiveRun(filePath, pageNum, rotation, bitmap) {
+  const sink = _previewSink;
+  if (!sink || sink.filePath !== filePath || sink.pageNum !== pageNum
+      || (((sink.rotation || 0) % 360) + 360) % 360 !== (((rotation || 0) % 360) + 360) % 360) return false;
+  return sink.take(bitmap);
 }
 
 // Herstart-demper: tijdens openen/fit wisselt de zoom een paar keer kort
@@ -466,6 +511,30 @@ export async function ensureProgressiveBitmapForCurrentView() {
   let lastIntermediate = null; // vorige tussenstand-bitmap (sluiten na swap)
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
   let tilesDone = 0;
+  // The tiles already in the accumulator: a preview is drawn around them.
+  const doneRects = [];
+  let seeded = !!(fallback && fallback.bitmap);
+  const sink = {
+    filePath, pageNum, rotation,
+    take: (bmp) => {
+      if (seeded || failed || !actueel() || tilesDone >= tiles.length) return false;
+      seeded = true;
+      try {
+        actx.save();
+        actx.beginPath();
+        actx.rect(0, 0, fullW, fullH);
+        for (const r of doneRects) actx.rect(r.px, r.py, r.pw, r.ph);
+        actx.clip('evenodd');
+        actx.drawImage(bmp, 0, 0, fullW, fullH);
+        actx.restore();
+      } catch { return false; }
+      perfMark(`preview onder ${tilesDone} tegels`);
+      void publish();
+      return true;
+    },
+  };
+  _previewSink = sink;
+  const dropSink = () => { if (_previewSink === sink) _previewSink = null; };
   console.log(`[prog] start ${fullW}x${fullH}px, ${tiles.length} tegels (tile=${tilePx}px) p${pageNum}`);
   perfMark(`run-start ${fullW}x${fullH} ${tiles.length} tegels p${pageNum} scale=${renderScale.toFixed(3)}`);
   perfHeartbeat();
@@ -500,10 +569,18 @@ export async function ensureProgressiveBitmapForCurrentView() {
         scale: renderScale, rotation,
         regionXPt, regionYPt, regionWPt, regionHPt,
         ocgVisibility: selection.ocgVisibility,
+        // A newer run bumps _progGen, and every result below is discarded
+        // once myGen !== _progGen: the pool may drop this tile while queued.
+        renderLane: PROGRESSIVE_LANE, renderGeneration: myGen,
       });
       bytes = res instanceof Uint8Array ? res : new Uint8Array(res);
       perfMark(`tegel-invoke ${t.pw}x${t.ph} ${Math.round(performance.now() - _i0)}ms (${(bytes.length / 1048576).toFixed(1)}MB)`);
-    } catch { failed = true; return; }
+    } catch (error) {
+      // Dropped for a newer run: this run is stale, not failed.
+      if (isRenderSuperseded(error)) return;
+      failed = true;
+      return;
+    }
     if (myGen !== _progGen) return;
     if (!bytes || bytes.length <= 8) return;
     const dv = new DataView(bytes.buffer, bytes.byteOffset, 8);
@@ -513,6 +590,7 @@ export async function ensureProgressiveBitmapForCurrentView() {
     const rgba = new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, w * h * 4);
     const _b0 = performance.now();
     actx.putImageData(new ImageData(rgba, w, h), t.px, t.py);
+    doneRects.push(t);
     const _bMs = performance.now() - _b0;
     if (_bMs > 5) perfMark(`putImageData ${w}x${h} ${Math.round(_bMs)}ms`);
     tilesDone++;
@@ -533,8 +611,9 @@ export async function ensureProgressiveBitmapForCurrentView() {
   // De tegels worden GESPREID over de pool (zie invokeTileRegion: spread=true),
   // dus CONC bepaalt hoeveel workers tegelijk werken. CONC=4 = alle vier de
   // workers parallel op één blad; dat brengt een NKD1a-blad van ~6 s (serieel)
-  // naar ~1,5 s. Hoger dan het aantal workers heeft geen zin en laat bij een
-  // gen-wissel (paginawissel) meer niet-annuleerbare stale tegels achter.
+  // naar ~1,5 s. Hoger dan het aantal workers heeft geen zin. Tegels die bij
+  // een gen-wissel nog in de rij staan, laat de pool vallen (renderLane/
+  // renderGeneration); alleen tegels die al op een worker lopen, renderen af.
   const CONC = 4;
   let idx = 0;
   const workers = Array.from({ length: CONC }, async () => {
@@ -544,6 +623,7 @@ export async function ensureProgressiveBitmapForCurrentView() {
     }
   });
   await Promise.all(workers);
+  dropSink();
   if (!actueel()) { perfMark(`run-STALE na ${tilesDone} tegels (scale=${renderScale.toFixed(3)})`); if (_inflightKey === runKey) _inflightKey = null; return; }
 
   if (failed) {

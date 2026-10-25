@@ -1,7 +1,9 @@
-import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { edition } from '../editions/active.js';
 import { drawBrandMark } from '../pdf/brand-mark-pdf.js';
+
+// fontkit (about 0.5 MB) loads with the first report, not with the editor.
+const loadFontkit = () => import('@pdf-lib/fontkit').then((m) => m.default);
 
 const WIDTH = 612;
 const HEIGHT = 792;
@@ -45,6 +47,7 @@ function wrap(font, value, size, width) {
 
 /** Export the complete local register; historical file presence is not implied. */
 export async function buildDrawingLogPdf(register, availability = {}, fontBytes, generatedAt = new Date()) {
+  const fontkit = await loadFontkit();
   if (!fontBytes?.byteLength) throw new Error('The bundled drawing log font is unavailable.');
   if (!register || !Array.isArray(register.sheets)) throw new Error('A drawing set is required.');
   const document = await PDFDocument.create();

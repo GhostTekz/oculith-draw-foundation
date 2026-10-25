@@ -2,6 +2,7 @@ import { state, getActiveDocument, getPageRotation } from '../core/state.js';
 import { isTauri, invoke } from '../core/platform.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import { resolveTextEditPageGeometry } from './text-edit-appearance.js';
+import { pageTextContent } from '../pdf/page-text-content.js';
 
 /**
  * Text Layer Management Module
@@ -318,7 +319,8 @@ function textLayerSource(textContent, isCurrent) {
 
 export async function createTextLayer(page, viewport, container, pageNum, isCurrent = () => true) {
   const _t0 = performance.now();
-  const textContent = await page.getTextContent();
+  // Shared with the other readers of the page (page-text-content.js).
+  const textContent = await pageTextContent(page);
   const _t1 = performance.now();
   if (!isCurrent()) return null;
 

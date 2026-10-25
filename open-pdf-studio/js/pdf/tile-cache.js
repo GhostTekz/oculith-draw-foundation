@@ -6,12 +6,12 @@
 import { findBestCoveringTile } from './tile-coverage.js';
 import { sourceRenderRevision, sourceRenderCurrent, sourceWriteActive } from './source-render-revision.js';
 import { closeBitmap } from './bitmap-lifetime.js';
+import { registerBitmapCache, enforceBitmapBudget } from './bitmap-budget.js';
 
 const CACHE = new Map();
 const EPOCHS = new Map();
 const epoch = path => EPOCHS.get(path) || 0;
 const MAX = 8;
-const MAX_BYTES = 128 * 1024 * 1024;
 const PENDING = new Map();
 let globalEpoch = 0;
 
@@ -20,6 +20,19 @@ function cacheBytes() {
   for (const entry of CACHE.values()) bytes += entry.w * entry.h * 4;
   return bytes;
 }
+
+// Drop the least recently used tile; the newest one always stays. Bytes are
+// bounded by the shared bitmap budget (bitmap-budget.js).
+function evictOldest() {
+  if (CACHE.size <= 1) return 0;
+  const oldest = CACHE.keys().next().value;
+  const old = CACHE.get(oldest);
+  CACHE.delete(oldest);
+  closeBitmap(old?.bitmap);
+  return old ? old.w * old.h * 4 : 0;
+}
+
+registerBitmapCache('tiles', { bytes: cacheBytes, evictOldest });
 
 function makeKey(filePath, pageNum, zoomBucket, rotation, regionBucket) {
   return `${filePath}|p${pageNum}|z${Math.round(zoomBucket * 10000)}|r${rotation || 0}|reg${regionBucket}`;
@@ -74,12 +87,8 @@ export async function tileCacheSet(filePath, pageNum, zoomBucket, rotation, regi
     closeBitmap(replaced?.bitmap);
     CACHE.delete(key);
     CACHE.set(key, { bitmap, w: imageData.width, h: imageData.height, regionMeta });
-    while (CACHE.size > MAX || (CACHE.size > 1 && cacheBytes() > MAX_BYTES)) {
-      const oldest = CACHE.keys().next().value;
-      const old = CACHE.get(oldest);
-      CACHE.delete(oldest);
-      closeBitmap(old?.bitmap);
-    }
+    while (CACHE.size > MAX && evictOldest() > 0) { /* drop the oldest */ }
+    enforceBitmapBudget();
   } catch (e) {
     console.warn('[tile-cache] createImageBitmap failed:', e);
   } finally {

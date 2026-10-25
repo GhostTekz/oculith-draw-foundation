@@ -1,5 +1,7 @@
 import { perfRecord } from '../../core/perf.js';
+import { $PROXY } from 'solid-js';
 import { $RAW } from 'solid-js/store';
+import i18next from '../../i18n/config.js';
 import { state, getActiveDocument, isSelected, getAnnotationBounds, addToSelection, removeFromSelection } from '../../core/state.js';
 import { getTypeDisplayName, getAnnotationDisplayName, createDateFormatter } from '../../utils/helpers.js';
 import {
@@ -7,6 +9,7 @@ import {
 } from '../../annotations/corrections/model.js';
 import { showProperties, showMultiSelectionProperties } from './properties-panel.js';
 import { goToPage } from '../../pdf/renderer.js';
+import { annotationSheetsLoaded } from '../../pdf/loader.js';
 import { viewport, markAnchored } from '../../pdf/pdf-viewport.js';
 import { stopAlleWielScrollers } from '../../pdf/wiel-scroll.js';
 import { redrawAnnotations, redrawContinuous } from '../../annotations/rendering.js';
@@ -34,7 +37,7 @@ import { cloneAnnotation } from '../../annotations/factory.js';
 import { statusKey, statusLabel, statusColor, statusHistory, applyStatusChange } from '../../annotations/markup-status.js';
 import { fieldColumnDefined, fieldValue, runMarkupFieldHooks } from '../../annotations/markup-fields.js';
 import {
-  expandedThreads, replyTarget, openThread, setReplyTarget, columnFilters,
+  expandedThreads, replyTarget, openThread, setReplyTarget, columnFilters, setSheetsPending,
   expandGroup, setExpandedMarkupGroups, items as markupListItems,
   collapsedGroups, expandedMarkupGroups,
 } from '../../solid/stores/panels/annotationsStore.js';
@@ -212,7 +215,7 @@ function columnTextFor(doc, byId, defs) {
 export function markupColumnFilterValues(column) {
   if (!FILTERABLE_COLUMNS.includes(column)) return [];
   const doc = state.documents[state.activeDocumentIndex];
-  const annotations = doc ? doc.annotations : [];
+  const annotations = (doc && rawOf(doc.annotations)) || [];
   const byId = new Map(annotations.map(a => [a.id, a]));
   const markups = withoutFoldedChildren(annotations.filter(a => a.type !== 'scaleRegion'), byId);
   return columnFilterValues(markups, column, columnTextFor(doc, byId, columnDefinitions(doc)));
@@ -230,7 +233,22 @@ let listedMarkups = [];
 /** The markups the Markups List currently shows (filters applied), in list order. */
 export function currentListMarkups() {
   if (listStale && listVisible()) updateAnnotationsList();
-  return listedMarkups.slice();
+  return storeObjects(listedMarkups);
+}
+
+// The build reads the markups raw (not through the store's proxies); its
+// callers get the store's objects, which a selection holds.
+function storeObjects(list) {
+  let byRaw = null;
+  return list.map((ann) => {
+    const proxy = ann && ann[$PROXY];
+    if (proxy) return proxy;
+    if (!byRaw) {
+      byRaw = new Map();
+      for (const item of state.documents[state.activeDocumentIndex]?.annotations || []) byRaw.set(rawOf(item), item);
+    }
+    return byRaw.get(ann) || ann;
+  });
 }
 
 function listVisible() {
@@ -343,44 +361,158 @@ export function updateAnnotationsListIfChanged() {
   }, TRAILING_MS);
 }
 
-function buildAnnotationsList(filterValue) {
-  // Houd het "Zichtbaarheid Elementen"-paneel synchroon: dit is de canonieke
-  // "annotatie-set gewijzigd"-aanroep (add/delete/doc-wissel), niet per frame.
-  import('../../solid/stores/elementVisibilityStore.js')
-    .then(m => m.refreshElementTypes())
-    .catch(() => { /* store nog niet geladen */ });
-  // Het lagenpaneel telt markeringen per laag (#468): zelfde aanleiding.
-  refreshAnnotationLayers();
+// Sorting compares with collators made once: localeCompare() sets up the
+// locale's collation again on every call.
+const textCollator = new Intl.Collator();
+const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
+// Sorts `list` in place by keys worked out once per markup, not twice per
+// comparison. `compare` gets two { ann, page, created, k1, k2 } entries.
+function sortByKeys(list, keysOf, compare) {
+  const keyed = new Array(list.length);
+  for (let i = 0; i < list.length; i++) {
+    const ann = list[i];
+    const entry = keysOf(ann);
+    entry.ann = ann;
+    entry.page = ann.page;
+    entry.created = new Date(ann.createdAt).getTime();
+    keyed[i] = entry;
+  }
+  keyed.sort(compare);
+  for (let i = 0; i < keyed.length; i++) list[i] = keyed[i].ann;
+  return list;
+}
+const pageThenDate = (a, b) => {
+  if (a.page !== b.page) return a.page - b.page;
+  return a.created - b.created;
+};
+const byTextKey = (a, b) => (a.k1 !== b.k1 ? textCollator.compare(a.k1, b.k1) : pageThenDate(a, b));
+// '' (outside every space, in no group) sorts last.
+const byNaturalKeyEmptyLast = (a, b) => (a.k1 !== b.k1
+  ? (a.k1 === '' ? 1 : b.k1 === '' ? -1 : naturalCollator.compare(a.k1, b.k1))
+  : pageThenDate(a, b));
+
+// The Element Visibility panel (types and counts) and the Layers panel
+// (markups per layer, #468, and the selection's layer) follow the list
+// build: it is the canonical "markups changed" call (add, delete, document
+// switch). Both count every markup through the store, so each is refreshed
+// only when what it shows changed.
+let countedPanels = null;
+function refreshCountingPanels(doc, annotations) {
+  const types = new Map();
+  const layers = new Map();
+  for (const a of annotations) {
+    if (!a) continue;
+    types.set(a.type, (types.get(a.type) || 0) + 1);
+    const layer = layerIdOf(a);
+    layers.set(layer, (layers.get(layer) || 0) + 1);
+  }
+  const selected = [];
+  for (const a of rawOf(doc?.selectedAnnotations) || []) selected.push(a?.id ?? null, layerIdOf(a));
+  const single = rawOf(doc?.selectedAnnotation);
+  let typesToken;
+  let layersToken;
+  try {
+    typesToken = JSON.stringify([...types]);
+    layersToken = JSON.stringify([[...layers], rawOf(doc?.annotationLayers) ?? null, doc?.currentLayerId ?? null,
+      selected, single ? [single.id ?? null, layerIdOf(single)] : null]);
+  } catch {
+    typesToken = layersToken = String(Math.random());
+  }
+  // By id, not the document itself: this outlives a closed document.
+  const docKey = doc?.id ?? null;
+  const previous = countedPanels;
+  countedPanels = { docKey, typesToken, layersToken };
+  const sameDoc = previous && previous.docKey === docKey;
+  if (!sameDoc || previous.typesToken !== typesToken) {
+    import('../../solid/stores/elementVisibilityStore.js')
+      .then(m => m.refreshElementTypes())
+      .catch(() => { /* store nog niet geladen */ });
+  }
+  if (!sameDoc || previous.layersToken !== layersToken) refreshAnnotationLayers();
+}
+
+// One date formatter for every build of a document: it keeps each date text
+// it made (a list rebuilt after one change formats nothing again).
+// Kept by document id: holding the document itself kept a closed one, with
+// its markups and its PDF.js document, until another list was built.
+let dateFormatter = null;
+let dateFormatterDocId = null;
+
+// Markup rows by markup (the raw object), with what each was made from. A
+// markup whose fields and row context are unchanged keeps its row object, so
+// the build does not remake ~45 fields per markup and the list component
+// keeps its DOM row.
+let rowCache = new WeakMap();
+
+const floatView = new Float64Array(1);
+const floatWords = new Uint32Array(floatView.buffer);
+function mixExact(h, n) {
+  floatView[0] = n;
+  h = Math.imul(h ^ floatWords[0], 0x01000193) >>> 0;
+  return Math.imul(h ^ floatWords[1], 0x01000193) >>> 0;
+}
+function mixValue(h, v, depth) {
+  switch (typeof v) {
+    case 'string':
+      // Image data counts by its length and ends.
+      if (v.length > 256 && (depth > 0 || v.startsWith('data:'))) {
+        return mixStr(mixExact(h, v.length), v.slice(0, 64) + v.slice(-64));
+      }
+      return mixStr(h, v);
+    case 'number': return mixExact(h, v);
+    case 'boolean': return mixExact(h, v ? -1.25 : -1.5);
+    case 'undefined': return mixExact(h, -2.5);
+    case 'object': {
+      if (v === null) return mixExact(h, -3.5);
+      if (depth > 1) return mixExact(h, -4.5);
+      if (Array.isArray(v)) {
+        h = mixExact(h, v.length);
+        for (let i = 0; i < v.length; i++) h = mixValue(h, v[i], depth + 1);
+        return h;
+      }
+      for (const key in v) h = mixValue(mixStr(h, key), v[key], depth + 1);
+      return h;
+    }
+    default: return mixExact(h, -5.5);
+  }
+}
+// A markup's own fields, two levels deep (replies, status history, photos
+// and their entries), as a number.
+function markupFieldsHash(ann) {
+  let h = 0x811c9dc5;
+  for (const key in ann) h = mixValue(mixStr(h, key), ann[key], 0);
+  return h;
+}
+
+function buildAnnotationsList(filterValue) {
   // Use provided filter or fall back to stored filter mode
   if (filterValue !== undefined) {
     setFilterMode(filterValue);
   }
   const activeFilter = filterValue !== undefined ? filterValue : filterMode();
 
-  // Read annotations from the active document directly (bypass proxy getter caching)
   const doc = state.documents[state.activeDocumentIndex];
-  const annotations = doc ? doc.annotations : [];
+  // The markups are read raw, not through the store's proxies: the build only
+  // reads, and a proxy read per field per markup was most of its time on a
+  // large drawing. currentListMarkups hands out the store's objects.
+  const annotations = (doc && rawOf(doc.annotations)) || [];
+  refreshCountingPanels(doc, annotations);
   const defs = columnDefinitions(doc);
   const { definedChoice, definedSecondChoice, definedNumber, definedSecondNumber, definedCheckmark,
     definedFormula, spaceOf } = defs;
 
-  // Filter annotations
-  // Benoemde viewports (scaleRegion) zijn geen markeringen: ze staan in het
-  // meetpaneel, niet in de markeringslijst.
-  let filteredAnnotations = annotations.filter(a => a.type !== 'scaleRegion');
-
-  if (activeFilter === 'current') {
-    filteredAnnotations = filteredAnnotations.filter(a => a.page === (doc ? doc.currentPage : 1));
-  } else if (activeFilter !== 'all') {
-    filteredAnnotations = filteredAnnotations.filter(a => a.type === activeFilter);
-  }
-
-  // Statusfilter (Tonen > Status): verberg annotaties waarvan de
-  // review-status door de gebruiker is uitgevinkt. De berekening leeft op
-  // ÉÉN plek (annotationsStore.isStatusHidden) zodat lijst en canvas (#333)
-  // gegarandeerd hetzelfde filteren.
-  filteredAnnotations = filteredAnnotations.filter(a => !isAnnotationStatusHidden(a));
+  // Filter annotations, in one pass:
+  // - Benoemde viewports (scaleRegion) zijn geen markeringen: ze staan in het
+  //   meetpaneel, niet in de markeringslijst.
+  // - Statusfilter (Tonen > Status): verberg annotaties waarvan de
+  //   review-status door de gebruiker is uitgevinkt. De berekening leeft op
+  //   ÉÉN plek (annotationsStore.isStatusHidden) zodat lijst en canvas (#333)
+  //   gegarandeerd hetzelfde filteren.
+  const currentPage = doc ? doc.currentPage : 1;
+  let filteredAnnotations = annotations.filter(a => a.type !== 'scaleRegion'
+    && (activeFilter === 'current' ? a.page === currentPage : activeFilter === 'all' || a.type === activeFilter)
+    && !isAnnotationStatusHidden(a));
 
   // Proefleescorrecties (#508): de doorhaling van een vervanging staat in de
   // regel van haar invoegteken, met de naam en voorvertoning van de correctie.
@@ -444,6 +576,12 @@ function buildAnnotationsList(filterValue) {
   // the list is collapsed, so it is kept current even when the rows are not
   // built.
   setCountText(`${filteredAnnotations.length} annotation${filteredAnnotations.length !== 1 ? 's' : ''}`);
+  // A large drawing reads a sheet's markups when it is shown: say how many
+  // sheets the list covers until all are read.
+  try {
+    const sheets = annotationSheetsLoaded(doc);
+    setSheetsPending(doc && sheets.loaded < sheets.total ? sheets : null);
+  } catch { setSheetsPending(null); }
 
   listedMarkups = filteredAnnotations;
   // Sorting, grouping and formatting the rows waits until the list is shown.
@@ -468,106 +606,56 @@ function buildAnnotationsList(filterValue) {
     const top = pathOf(ann)[0];
     return top ? (top.name || defaultGroupLabel) : '';
   };
-  // Creation time per markup, parsed once (not twice per comparison).
-  const createdMemo = new Map();
-  const createdTime = (ann) => {
-    let time = createdMemo.get(ann);
-    if (time === undefined) { time = new Date(ann.createdAt).getTime(); createdMemo.set(ann, time); }
-    return time;
+  // Sort keys are worked out once per markup (sortByKeys).
+  const typeNames = new Map();
+  const typeName = (type) => {
+    let name = typeNames.get(type);
+    if (name === undefined) { name = getTypeDisplayName(type); typeNames.set(type, name); }
+    return name;
   };
-  const pageThenDate = (a, b) => {
-    if (a.page !== b.page) return a.page - b.page;
-    return createdTime(a) - createdTime(b);
+  const getLastStatusAuthor = (ann) => {
+    if (ann.replies && ann.replies.length > 0) {
+      for (let i = ann.replies.length - 1; i >= 0; i--) {
+        if (ann.replies[i].author) return ann.replies[i].author;
+      }
+    }
+    return ann.author || 'User';
   };
+  const statusOf = ann => (ann.status || 'none').toLowerCase();
+  const authorOf = ann => (ann.author || 'User').toLowerCase();
 
   if (currentSort === 'type') {
-    filteredAnnotations.sort((a, b) => {
-      const ta = getTypeDisplayName(a.type);
-      const tb = getTypeDisplayName(b.type);
-      if (ta !== tb) return ta.localeCompare(tb);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: typeName(a.type) }), byTextKey);
   } else if (currentSort === 'modifiedDate') {
-    filteredAnnotations.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+    sortByKeys(filteredAnnotations, a => ({ k1: new Date(a.modifiedAt).getTime() }), (a, b) => b.k1 - a.k1);
   } else if (currentSort === 'creationDate') {
-    filteredAnnotations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    sortByKeys(filteredAnnotations, () => ({}), (a, b) => b.created - a.created);
   } else if (currentSort === 'author') {
-    filteredAnnotations.sort((a, b) => {
-      const aa = (a.author || 'User').toLowerCase();
-      const ab = (b.author || 'User').toLowerCase();
-      if (aa !== ab) return aa.localeCompare(ab);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: authorOf(a) }), byTextKey);
   } else if (currentSort === 'color') {
-    filteredAnnotations.sort((a, b) => {
-      const ca = (a.color || a.strokeColor || '#000').toLowerCase();
-      const cb = (b.color || b.strokeColor || '#000').toLowerCase();
-      if (ca !== cb) return ca.localeCompare(cb);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: (a.color || a.strokeColor || '#000').toLowerCase() }), byTextKey);
   } else if (currentSort === 'subject') {
-    const subjectOf = ann => markupSubjectLabel(ann.subject, displayName(ann)).toLowerCase();
-    filteredAnnotations.sort((a, b) => {
-      const sa = subjectOf(a);
-      const sb = subjectOf(b);
-      if (sa !== sb) return sa.localeCompare(sb);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: markupSubjectLabel(a.subject, displayName(a)).toLowerCase() }), byTextKey);
   } else if (currentSort === 'status') {
-    filteredAnnotations.sort((a, b) => {
-      const sa = (a.status || 'none').toLowerCase();
-      const sb = (b.status || 'none').toLowerCase();
-      if (sa !== sb) return sa.localeCompare(sb);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: statusOf(a) }), byTextKey);
   } else if (currentSort === 'statusAndAuthor') {
-    filteredAnnotations.sort((a, b) => {
-      const sa = (a.status || 'none').toLowerCase();
-      const sb = (b.status || 'none').toLowerCase();
-      if (sa !== sb) return sa.localeCompare(sb);
-      const aa = (a.author || 'User').toLowerCase();
-      const ab = (b.author || 'User').toLowerCase();
-      if (aa !== ab) return aa.localeCompare(ab);
+    sortByKeys(filteredAnnotations, a => ({ k1: statusOf(a), k2: authorOf(a) }), (a, b) => {
+      if (a.k1 !== b.k1) return textCollator.compare(a.k1, b.k1);
+      if (a.k2 !== b.k2) return textCollator.compare(a.k2, b.k2);
       return pageThenDate(a, b);
     });
   } else if (currentSort === 'lastStatusAuthor') {
-    const getLastStatusAuthor = (ann) => {
-      if (ann.replies && ann.replies.length > 0) {
-        for (let i = ann.replies.length - 1; i >= 0; i--) {
-          if (ann.replies[i].author) return ann.replies[i].author;
-        }
-      }
-      return ann.author || 'User';
-    };
-    filteredAnnotations.sort((a, b) => {
-      const aa = getLastStatusAuthor(a).toLowerCase();
-      const ab = getLastStatusAuthor(b).toLowerCase();
-      if (aa !== ab) return aa.localeCompare(ab);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: getLastStatusAuthor(a).toLowerCase() }), byTextKey);
   } else if (currentSort === 'layer') {
     // Group by markup layer (docs/MARKUP-LAYERS.md): by layer name.
-    const layerKey = ann => markupLayerName(doc, ann).toLowerCase();
-    filteredAnnotations.sort((a, b) => {
-      const la = layerKey(a), lb = layerKey(b);
-      if (la !== lb) return la.localeCompare(lb);
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: markupLayerName(doc, a).toLowerCase() }), byTextKey);
   } else if (currentSort === 'markupGroup') {
-    filteredAnnotations.sort((a, b) => {
-      const ga = groupNameKey(a), gb = groupNameKey(b);
-      if (ga !== gb) return ga === '' ? 1 : gb === '' ? -1 : ga.localeCompare(gb, undefined, { numeric: true, sensitivity: 'base' });
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: groupNameKey(a) }), byNaturalKeyEmptyLast);
   } else if (currentSort === 'space') {
-    filteredAnnotations.sort((a, b) => {
-      const sa = spaceOf(a), sb = spaceOf(b);
-      if (sa !== sb) return sa === '' ? 1 : sb === '' ? -1 : sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
-      return pageThenDate(a, b);
-    });
+    sortByKeys(filteredAnnotations, a => ({ k1: spaceOf(a) }), byNaturalKeyEmptyLast);
   } else {
     // Default: sort by page
-    filteredAnnotations.sort(pageThenDate);
+    sortByKeys(filteredAnnotations, () => ({}), pageThenDate);
   }
 
   if (filteredAnnotations.length === 0) {
@@ -585,9 +673,14 @@ function buildAnnotationsList(filterValue) {
   // Match by id. A canvas click can hold a different object than the row
   // (a proxy, or the array replaced by undo) and an identity check then
   // leaves every row unselected.
-  const formatDate = createDateFormatter();
+  if (!dateFormatter || dateFormatterDocId !== (doc?.id ?? null)) {
+    dateFormatter = createDateFormatter();
+    dateFormatterDocId = doc?.id ?? null;
+    rowCache = new WeakMap();
+  }
+  const formatDate = dateFormatter;
   const selectedIds = new Set();
-  for (const ann of (doc ? doc.selectedAnnotations : [])) {
+  for (const ann of (doc && rawOf(doc.selectedAnnotations)) || []) {
     if (ann && ann.id != null) selectedIds.add(String(ann.id));
   }
   const openThreads = expandedThreads();
@@ -601,14 +694,36 @@ function buildAnnotationsList(filterValue) {
     return row;
   };
 
-  // Helper to get last status author
-  const getLastStatusAuthor = (ann) => {
-    if (ann.replies && ann.replies.length > 0) {
-      for (let i = ann.replies.length - 1; i >= 0; i--) {
-        if (ann.replies[i].author) return ann.replies[i].author;
-      }
+  // What every markup row depends on besides its markup and its place: the
+  // language, the status set and the custom column definitions.
+  let rowContext;
+  try {
+    rowContext = JSON.stringify([i18next.language ?? null, rawOf(doc?.markupStatusSet) ?? null,
+      doc?.markupTextColumnName ?? null, doc?.markupTextColumn2Name ?? null, definedChoice ?? null,
+      definedSecondChoice ?? null, definedNumber ?? null, definedSecondNumber ?? null, definedCheckmark ?? null,
+      definedFormula ?? null]);
+  } catch {
+    rowContext = String(Math.random());
+  }
+  // The markups the list shows, in row order.
+  const listed = [];
+  // Page labels, one lookup per page.
+  const pageLabels = new Map();
+  const pageLabelOf = (page) => {
+    let label = pageLabels.get(page);
+    if (label === undefined) { label = markupPageLabel(doc, page); pageLabels.set(page, label); }
+    return label;
+  };
+  // Group keys of the date sorts, one per date text.
+  const dayKeys = new Map();
+  const dayKey = (value) => {
+    let day = dayKeys.get(value);
+    if (day === undefined) {
+      const d = new Date(value);
+      day = isNaN(d.getTime()) ? 'Unknown' : d.toLocaleDateString();
+      dayKeys.set(value, day);
     }
-    return ann.author || 'User';
+    return day;
   };
 
 
@@ -621,11 +736,9 @@ function buildAnnotationsList(filterValue) {
     } else if (currentSort === 'author') {
       groupKey = ann.author || 'User';
     } else if (currentSort === 'modifiedDate') {
-      const d = new Date(ann.modifiedAt);
-      groupKey = isNaN(d.getTime()) ? 'Unknown' : d.toLocaleDateString();
+      groupKey = dayKey(ann.modifiedAt);
     } else if (currentSort === 'creationDate') {
-      const d = new Date(ann.createdAt);
-      groupKey = isNaN(d.getTime()) ? 'Unknown' : d.toLocaleDateString();
+      groupKey = dayKey(ann.createdAt);
     } else if (currentSort === 'color') {
       groupKey = ann.color || ann.strokeColor || '#000';
     } else if (currentSort === 'subject') {
@@ -662,12 +775,11 @@ function buildAnnotationsList(filterValue) {
   if (currentSort === 'page') {
     groupKeys.sort((a, b) => a - b);
   } else if (currentSort === 'space' || currentSort === 'markupGroup') {
-    groupKeys.sort((a, b) => (a === '' ? 1 : b === '' ? -1
-      : a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })));
+    groupKeys.sort((a, b) => (a === '' ? 1 : b === '' ? -1 : naturalCollator.compare(a, b)));
   } else if (currentSort === 'modifiedDate' || currentSort === 'creationDate') {
     // Keep insertion order (already sorted by date)
   } else {
-    groupKeys.sort((a, b) => String(a).localeCompare(String(b)));
+    groupKeys.sort((a, b) => textCollator.compare(String(a), String(b)));
   }
 
   // A Page header click can reverse page groups as well as rows. Other
@@ -708,66 +820,105 @@ function buildAnnotationsList(filterValue) {
     sectionMarkups.get(top ? groupHome.get(top.id) : key).push(ann);
   }));
 
+  // A column sort asks each markup's value once, not twice per comparison.
+  const sortValues = new Map();
+  const sortValue = (ann, column) => {
+    let value = sortValues.get(ann);
+    if (value === undefined && !sortValues.has(ann)) { value = columnValue(ann, column); sortValues.set(ann, value); }
+    return value;
+  };
+
   const pushMarkup = (ann, key, depth = 0, mgAncestors = '') => {
-    const hasStatus = statusKey(ann.status) !== 'none';
+    const listedAnn = byId.get(ann.id);
+    if (listedAnn) listed.push(listedAnn);
     // Only an open thread builds its reply rows (#491: no work for what is
     // not shown).
     const threadOpen = openThreads.has(ann.id);
-    const replies = markupReplies(ann);
-    const replyCount = replies.length;
-    // Status changes are part of the thread (the external editor shows who set what).
-    const history = Array.isArray(ann.statusHistory) && ann.statusHistory.length ? statusHistory(ann) : [];
-    const threadCount = replyCount + history.length;
-    const preview = listPreview(ann, byId) || ann.text;
-
-    flatItems.push(reuse(`annotation:${ann.id}`, {
-      isHeader: false,
-      groupKey: key,
-      // Inside a markup group: its depth and the groups above (fold keys).
-      depth,
-      mgAncestors,
-      id: ann.id,
-      page: ann.page,
-      type: ann.type,
-      typeLabel: displayName(ann),
-      color: ann.color || ann.strokeColor || '#000',
-      text: preview ? preview.substring(0, 50) + (preview.length > 50 ? '...' : '') : null,
-      meta: `[${ann.author || 'User'}] - ${formatDate(ann.modifiedAt)}`,
-      author: ann.author || 'User',
-      subject: ann.subject || '',
-      subjectLabel: markupSubjectLabel(ann.subject, displayName(ann)),
-      date: formatDate(ann.modifiedAt || ann.createdAt),
-      ownLock: !!ann.locked,
-      customTextValue: ann.markupTextValue || '',
-      customTextValue2: ann.markupTextValue2 || '',
-      customChoiceValue: choiceValue(ann.markupChoiceValue, definedChoice?.options),
-      customChoiceValue2: choiceValue(ann.markupChoiceValue2, definedSecondChoice?.options),
-      customNumberValue: definedNumber ? numberText(ann.markupNumberValue) : '',
-      customNumberValue2: definedSecondNumber ? numberText(ann.markupNumberValue2) : '',
-      customFormulaValue: formulaText(formulaNumberSourceValue(ann, definedFormula), definedFormula,
-        ann.markupChoiceValue, definedChoice),
-      customCheckmarkValue: definedCheckmark ? checkmarkValue(ann.markupCheckmarkValue) : null,
-      ...expressionFields(ann, defs.expressionResults),
-      layerName: markupLayerName(doc, ann),
-      // The row eye: its own Hidden flag, or hidden by its layer.
-      hidden: !!ann.hidden,
-      layerHidden: layerHiddenOf(ann),
-      pageLabel: markupPageLabel(doc, ann.page),
-      // Capture photos + File Attachment file (capture.js).
-      attachmentCount: attachmentCount(ann),
-      attachmentNames: attachmentNames(ann).join('; '),
-      spaceName: spaceOf(ann),
-      statusKey: statusKey(ann.status),
-      statusColor: hasStatus ? statusColor(ann.status, doc?.markupStatusSet) : null,
-      statusTitle: hasStatus ? statusLabel(ann.status, doc?.markupStatusSet) : null,
-      statusBy: hasStatus ? (ann.statusBy || '') : '',
-      locked: !!(ann.locked || ann.readOnly),
-      replyCount,
-      threadCount,
-      threadOpen,
-      selected: selectedIds.has(String(ann.id))
-    }));
+    const selected = selectedIds.has(String(ann.id));
+    const correction = listPreview(ann, byId);
+    const layerName = markupLayerName(doc, ann);
+    const layerHidden = layerHiddenOf(ann);
+    const pageLabel = pageLabelOf(ann.page);
+    const spaceName = spaceOf(ann);
+    const expression = expressionFields(ann, defs.expressionResults);
+    const expressionText = defs.expressionResults ? JSON.stringify(expression) : '';
+    const fieldsHash = markupFieldsHash(ann);
+    const rowKey = `annotation:${ann.id}`;
+    const cached = rowCache.get(ann);
+    let row;
+    if (cached && cached.fieldsHash === fieldsHash && cached.context === rowContext && cached.key === key
+      && cached.depth === depth && cached.mgAncestors === mgAncestors && cached.threadOpen === threadOpen
+      && cached.selected === selected && cached.correction === correction && cached.layerName === layerName
+      && cached.layerHidden === layerHidden && cached.pageLabel === pageLabel && cached.spaceName === spaceName
+      && cached.expressionText === expressionText && nextItems.get(rowKey) !== cached.row) {
+      row = cached.row;
+    } else {
+      const hasStatus = statusKey(ann.status) !== 'none';
+      const replyCount = markupReplies(ann).length;
+      // Status changes are part of the thread (the external editor shows who set what).
+      const historyCount = Array.isArray(ann.statusHistory) && ann.statusHistory.length ? statusHistory(ann).length : 0;
+      const preview = correction || ann.text;
+      const item = {
+        isHeader: false,
+        groupKey: key,
+        // Inside a markup group: its depth and the groups above (fold keys).
+        depth,
+        mgAncestors,
+        id: ann.id,
+        page: ann.page,
+        type: ann.type,
+        typeLabel: displayName(ann),
+        color: ann.color || ann.strokeColor || '#000',
+        text: preview ? preview.substring(0, 50) + (preview.length > 50 ? '...' : '') : null,
+        meta: `[${ann.author || 'User'}] - ${formatDate(ann.modifiedAt)}`,
+        author: ann.author || 'User',
+        subject: ann.subject || '',
+        subjectLabel: markupSubjectLabel(ann.subject, displayName(ann)),
+        date: formatDate(ann.modifiedAt || ann.createdAt),
+        ownLock: !!ann.locked,
+        customTextValue: ann.markupTextValue || '',
+        customTextValue2: ann.markupTextValue2 || '',
+        customChoiceValue: choiceValue(ann.markupChoiceValue, definedChoice?.options),
+        customChoiceValue2: choiceValue(ann.markupChoiceValue2, definedSecondChoice?.options),
+        customNumberValue: definedNumber ? numberText(ann.markupNumberValue) : '',
+        customNumberValue2: definedSecondNumber ? numberText(ann.markupNumberValue2) : '',
+        customFormulaValue: formulaText(formulaNumberSourceValue(ann, definedFormula), definedFormula,
+          ann.markupChoiceValue, definedChoice),
+        customCheckmarkValue: definedCheckmark ? checkmarkValue(ann.markupCheckmarkValue) : null,
+        ...expression,
+        layerName,
+        // The row eye: its own Hidden flag, or hidden by its layer.
+        hidden: !!ann.hidden,
+        layerHidden,
+        pageLabel,
+        // Capture photos + File Attachment file (capture.js).
+        attachmentCount: attachmentCount(ann),
+        attachmentNames: attachmentNames(ann).join('; '),
+        spaceName,
+        statusKey: statusKey(ann.status),
+        statusColor: hasStatus ? statusColor(ann.status, doc?.markupStatusSet) : null,
+        statusTitle: hasStatus ? statusLabel(ann.status, doc?.markupStatusSet) : null,
+        statusBy: hasStatus ? (ann.statusBy || '') : '',
+        locked: !!(ann.locked || ann.readOnly),
+        replyCount,
+        threadCount: replyCount + historyCount,
+        threadOpen,
+        selected,
+      };
+      // A markup object that is new (undo puts back copies) keeps the row of
+      // the previous build when nothing in it changed.
+      const previous = nextItems.has(rowKey) ? null : previousItems.get(rowKey);
+      row = previous && sameItem(previous, item) ? previous : item;
+      rowCache.set(ann, {
+        row, fieldsHash, context: rowContext, key, depth, mgAncestors, threadOpen, selected, correction,
+        layerName, layerHidden, pageLabel, spaceName, expressionText,
+      });
+    }
+    if (!nextItems.has(rowKey)) nextItems.set(rowKey, row); // a second row with the same id keeps its own object
+    flatItems.push(row);
     if (threadOpen) {
+      const replies = markupReplies(ann);
+      const history = Array.isArray(ann.statusHistory) && ann.statusHistory.length ? statusHistory(ann) : [];
       const thread = [
         ...replies.map((reply, index) => ({ kind: 'reply', date: reply.createdAt, index, reply })),
         ...history.map((entry, index) => ({ kind: 'status', date: entry.date, index: replies.length + index, entry })),
@@ -836,13 +987,21 @@ function buildAnnotationsList(filterValue) {
       locked: leden.some(a => a.locked || a.readOnly),
       nested: leden.some(a => pathOf(a).length > depth + 1),
     }));
+    // The listed markups of each subgroup, in row order (one pass).
+    const perSub = new Map();
+    for (const ann of leden) {
+      const sub = pathOf(ann)[depth + 1];
+      if (!sub) continue;
+      if (!perSub.has(sub.id)) perSub.set(sub.id, []);
+      perSub.get(sub.id).push(ann);
+    }
     const gedaan = new Set();
     for (const ann of leden) {
       const sub = pathOf(ann)[depth + 1];
       if (!sub) { pushMarkup(ann, key, depth + 1, ancestors); continue; }
       if (gedaan.has(sub.id)) continue;
       gedaan.add(sub.id);
-      pushGroup(sub, leden.filter(a => pathOf(a)[depth + 1]?.id === sub.id), key, depth + 1, ancestors);
+      pushGroup(sub, perSub.get(sub.id), key, depth + 1, ancestors);
     }
   };
 
@@ -892,7 +1051,7 @@ function buildAnnotationsList(filterValue) {
 
 
     // Annotation item entries; a group at the place of its first row.
-    const rijen = sortMarkupRows(sectionMarkups.get(key) || [], activeColumnSort, columnValue);
+    const rijen = sortMarkupRows(sectionMarkups.get(key) || [], activeColumnSort, sortValue);
     // The rows of each group in this section, in row order (one pass).
     const perGroep = new Map();
     for (const ann of rijen) {
@@ -912,8 +1071,7 @@ function buildAnnotationsList(filterValue) {
   });
 
   previousItems = nextItems;
-  listedMarkups = flatItems.filter(item => !item.isHeader && !item.isReply && !item.isReplyInput)
-    .map(item => byId.get(item.id)).filter(Boolean);
+  listedMarkups = listed;
   setItems(flatItems);
   toonSelectieInLijst(doc, flatItems);
 }

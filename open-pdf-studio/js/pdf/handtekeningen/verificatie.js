@@ -1,3 +1,4 @@
+import { perfRecord } from '../../core/perf.js';
 // Handtekeningen van een geopend document laten verifiëren (Rust:
 // pdf_signature_list) en de balk boven de pagina bijwerken. Start alleen bij
 // handtekeningvelden (spec §7.3); het openen wacht hier niet op.
@@ -75,7 +76,15 @@ async function verifieer(doc, pad) {
   if (!isTauri()) return;
   const bron = pad || doc.saveTargetPath || doc.filePath;
   if (!bron || String(bron).startsWith('__memory__') || !doc.pdfDoc) return;
-  const heeft = await heeftHandtekeningvelden(doc.pdfDoc);
+  const _sv0 = performance.now();
+  // Of het formulier handtekeningvelden heeft, staat in de catalogus die de
+  // pdf-lib-worker bij openen leest (een paar velddicts). PDF.js'
+  // getFieldObjects() leest daarvoor álle annotaties van álle bladen: seconden
+  // op een grote tekening, en zolang wacht het eerste blad in de PDF.js-worker
+  // op zijn markeringen. Alleen zonder antwoord van de catalogus die vraag.
+  const uitCatalogus = await handtekeningveldenUitCatalogus(doc);
+  const heeft = uitCatalogus ?? await heeftHandtekeningvelden(doc.pdfDoc);
+  perfRecord('signature.fieldsCheck', performance.now() - _sv0);
   if (doc._handtekeningVerzoek !== verzoek) return;
   if (!heeft) {
     zetUitkomst(doc, 'geen', null, '');
@@ -85,7 +94,9 @@ async function verifieer(doc, pad) {
   doc.handtekeningToestand = 'bezig';
   if (isActief(doc)) toonBalkVoorActiefDocument();
   try {
+    const _sv1 = performance.now();
     const lijst = await invoke('pdf_signature_list', { pad: bron });
+    perfRecord('signature.verify', performance.now() - _sv1);
     if (doc._handtekeningVerzoek !== verzoek) return;
     const items = Array.isArray(lijst) ? lijst : [];
     // Geen enkel item (bv. velden die pdf.js wel en de verifier niet ziet):
@@ -204,4 +215,28 @@ export async function bevestigOpslaanMetHandtekeningen(doc, doelPad = null) {
 export async function opslaanMaaktHandtekeningenOngeldig(doc) {
   await wachtOpVerificatie(doc);
   return handtekeningenInGevaar(doc);
+}
+
+// true/false uit de pdf-lib-catalogus (pdf-lib-catalog.js), of null als die
+// er niet is (geen worker, onleesbaar) of niet binnen CATALOGUS_WACHT_MS komt:
+// de catalogus wacht tot het eerste blad getekend is, op een zware tekening
+// enkele seconden; tot dan is er niets op te slaan dat hierop wacht.
+const CATALOGUS_WACHT_MS = 20000;
+
+async function handtekeningveldenUitCatalogus(doc) {
+  try {
+    const { pdfLibCatalog } = await import('../loader.js');
+    let wacht;
+    const catalogus = await Promise.race([
+      pdfLibCatalog(doc),
+      new Promise((resolve) => { wacht = setTimeout(() => resolve(null), CATALOGUS_WACHT_MS); }),
+    ]);
+    clearTimeout(wacht);
+    const sleutels = catalogus?.catalogKeys;
+    if (!Array.isArray(sleutels) || sleutels.length === 0) return null;
+    if (!sleutels.includes('AcroForm')) return false;
+    return typeof catalogus.signatureFields === 'boolean' ? catalogus.signatureFields : null;
+  } catch {
+    return null;
+  }
 }

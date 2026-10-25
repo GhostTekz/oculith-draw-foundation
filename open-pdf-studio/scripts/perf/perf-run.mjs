@@ -5,24 +5,25 @@
 // memory, checks them against the budgets, and compares them with the
 // previous run in the results folder.
 //
-// Usage: node scripts/perf/perf-run.mjs <app-binary> <workload-dir> <results-dir> [--label name] [--force]
+// Usage: node scripts/perf/perf-run.mjs <app-binary> <workload-dir> <results-dir> [--label name] [--log file] [--force]
 // Make workloads with scripts/perf/make-workload.mjs. Refuses to run while
 // the app is already open (a second launch would hand over to it), unless
 // --force.
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, readdir, readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
-const positional = args.filter((a, i) => !a.startsWith('--') && !(args[i - 1] === '--label'));
+const positional = args.filter((a, i) => !a.startsWith('--') && !['--label', '--log'].includes(args[i - 1]));
 const [binaryArg, workloadArg, resultsArg] = positional;
 if (!binaryArg || !workloadArg || !resultsArg) {
   console.error('Usage: node scripts/perf/perf-run.mjs <app-binary> <workload-dir> <results-dir> [--label name] [--force]');
   process.exit(2);
 }
 const binary = resolve(binaryArg), workloads = resolve(workloadArg), results = resolve(resultsArg);
+const logFile = args.includes('--log') ? resolve(args[args.indexOf('--log') + 1]) : null;
 const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
 
 // Budgets (ms unless noted). A run fails a measure over budget, or more
@@ -69,6 +70,22 @@ async function call(name, params = {}, timeoutMs = 120_000) {
   return result;
 }
 
+// Resident memory (MB) of a process and its descendants, by process name.
+function rssByName(pid) {
+  const out = {};
+  const visit = (p) => {
+    try {
+      const status = execFileSync('cat', [`/proc/${p}/status`]).toString();
+      const name = /Name:\s+(\S+)/.exec(status)?.[1] || 'unknown';
+      out[name] = (out[name] || 0) + Math.round(Number(/VmRSS:\s+(\d+)/.exec(status)?.[1] || 0) / 1024);
+      const kids = execFileSync('pgrep', ['-P', String(p)]).toString().trim().split('\n').filter(Boolean);
+      for (const k of kids) visit(k);
+    } catch { /* gone, or no children */ }
+  };
+  visit(pid);
+  return out;
+}
+
 // Resident memory (MB) of a process and its children (the web process).
 function rssMB(pid) {
   let total = 0;
@@ -110,8 +127,11 @@ async function main() {
   const app = spawn(binary, ['--mcp-server', '--mcp-port', String(port)], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   let ready = false;
   const tail = [];
+  const { createWriteStream } = await import('node:fs');
+  const log = logFile ? createWriteStream(logFile) : null;
   const watch = (s) => s.on('data', (c) => {
     const text = String(c);
+    log?.write(text);
     if (text.includes('[mcp-bridge] WebView ready')) ready = true;
     for (const line of text.split('\n')) if (line.trim()) { tail.push(line); if (tail.length > 40) tail.shift(); }
   });
@@ -155,8 +175,13 @@ async function main() {
       r.pages = opened.page_count ?? opened.count ?? opened.pages;
       await sleep(3000); // background loading after first paint
       // Zoom in and out around the middle of the view, then page through.
-      for (let k = 0; k < 10; k++) { await call('app_wheel_zoom', { x: 800, y: 500, deltaY: -120 }); await sleep(60); }
-      for (let k = 0; k < 10; k++) { await call('app_wheel_zoom', { x: 800, y: 500, deltaY: 120 }); await sleep(60); }
+      // Spins of the wheel, one notch a frame, as the OS delivers them.
+      for (let k = 0; k < 3; k++) {
+        await call('app_wheel_zoom', { x: 800, y: 500, deltaY: -120, steps: 8 });
+        await sleep(400);
+        await call('app_wheel_zoom', { x: 800, y: 500, deltaY: 120, steps: 8 });
+        await sleep(400);
+      }
       for (let p = 2; p <= Math.min(6, r.pages || 1); p++) { await call('app_go_to_page', { page: p }); await sleep(400); }
       await call('app_go_to_page', { page: 1 });
       await sleep(1000);
@@ -173,6 +198,7 @@ async function main() {
       r['stall.longest'] = Math.round(snap.stalls?.longest || 0);
       r['stall.count'] = snap.stalls?.count || 0;
       r['rss.totalMB'] = rssMB(app.pid);
+      r.rssByProcess = rssByName(app.pid);
       } catch (error) {
         // A step that fails or times out is a result too: record it, keep
         // what was measured, and go on with the next workload.
@@ -182,10 +208,14 @@ async function main() {
         r['rss.totalMB'] = rssMB(app.pid);
       }
       // Each workload in its own tab, closed after it: memory is per workload.
-      await call('app_close_tab', {}).catch(() => {});
+      // A close that fails leaves the drawing open under the next ones, and
+      // their memory figures would add up: stop then.
+      const tc = Date.now();
+      await call('app_close_tab', { index: 0, force: true });
+      r.close = Date.now() - tc;
       await sleep(1000);
       run.workloads[file] = r;
-      console.log(`${file}: open ${r['open.firstPaint'] ?? '-'} ms, save ${r.save ?? '-'} ms, ${r.markups ?? '-'} markups, ${r['rss.totalMB']} MB${r.error ? ` (${r.error})` : ''}`);
+      console.log(`${file}: open ${r['open.firstPaint'] ?? '-'} ms, save ${r.save ?? '-'} ms, close ${r.close} ms, ${r.markups ?? '-'} markups, ${r['rss.totalMB']} MB${r.error ? ` (${r.error})` : ''}`);
     }
     await call('app_perf_snapshot', { flush: true }).catch(() => {});
     // Compare with the previous run and the budgets.
@@ -215,6 +245,10 @@ async function main() {
     throw error;
   } finally {
     stop();
+    // The saved copies of every workload are in here; in a RAM-backed /tmp
+    // they would hold memory until a reboot.
+    await sleep(2000);
+    await rm(temp, { recursive: true, force: true }).catch(() => {});
   }
 }
 

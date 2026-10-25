@@ -3,6 +3,9 @@ import { readGroupBy, writeGroupBy } from '../../../ui/panels/markup-columns.js'
 
 const [items, setItems] = createSignal([]);
 const [countText, setCountText] = createSignal('0 annotations');
+// Sheets whose markups are read, while some are not yet ({ loaded, total }),
+// else null.
+const [sheetsPending, setSheetsPending] = createSignal(null);
 const [emptyMessage, setEmptyMessage] = createSignal('');
 // Group By (the rows' grouping): Subject by default, as the external editor; the choice is
 // remembered on this device.
@@ -152,6 +155,7 @@ function collapseAllGroups(allKeys) {
 export {
   items, setItems,
   countText, setCountText,
+  sheetsPending, setSheetsPending,
   emptyMessage, setEmptyMessage,
   sortMode, setSortMode,
   columnSort, setColumnSort,

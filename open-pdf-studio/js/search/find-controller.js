@@ -489,7 +489,7 @@ async function replaceInPdfContent(doc, result, replaceText) {
     if (!doc.filePath) return null;
 
     const loaderMod = await import('../pdf/loader.js');
-    const pdfBytes = loaderMod.getCachedPdfBytes(doc.filePath);
+    const pdfBytes = await loaderMod.getPdfBytes(doc.filePath);
     if (!pdfBytes) return null;
 
     const pdfLib = await import('pdf-lib');
@@ -528,6 +528,7 @@ async function replaceInPdfContent(doc, result, replaceText) {
     loaderMod.setCachedPdfBytes(doc.filePath, newBytesArr);
 
     // Reload pdf.js document
+    loaderMod.forgetPdfRangeSource(doc);
     const pdfjsLib = await import('pdfjs-dist');
     doc.pdfDoc = await pdfjsLib.getDocument({
       data: newBytesArr.slice(),
@@ -538,8 +539,8 @@ async function replaceInPdfContent(doc, result, replaceText) {
       isEvalSupported: false,
       verbosity: 0,
     }).promise;
-    doc._sharedPdfLibDoc = null;
-    doc._sharedPdfLibDocPromise = null;
+    const { forgetPdfLibReads } = await import('../pdf/pdf-lib-session.js');
+    forgetPdfLibReads(doc);
     doc.modified = true;
 
     return { type: 'pdfContent', oldText: matchText, newText: replaceText };

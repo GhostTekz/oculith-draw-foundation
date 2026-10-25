@@ -17,6 +17,7 @@ import { isTauri, invoke } from '../core/platform.js';
 import { nativeOcgSelectionForPath } from './native-ocg-selection.js';
 import { sourceRenderRevision, sourceRenderCurrent, sourceWriteActive } from './source-render-revision.js';
 import { closeBitmap } from './bitmap-lifetime.js';
+import { registerBitmapCache, enforceBitmapBudget } from './bitmap-budget.js';
 
 // Map<key, { bitmap: ImageBitmap, w, h, scale }>
 const _cache = new Map();
@@ -26,9 +27,9 @@ const _pending = new Map(); // key -> Promise
 const _epochs = new Map();
 const _epoch = path => _epochs.get(path) || 0;
 
-// Per-page LRU bookkeeping (drop oldest entries above limit)
+// Per-page LRU bookkeeping (drop oldest entries above limit). Bytes are
+// bounded by the shared bitmap budget (bitmap-budget.js).
 const MAX_ENTRIES = 12;
-const MAX_BYTES = 128 * 1024 * 1024;
 
 function _key(filePath, pageNum, rotation, zoomBucket) {
   return `${filePath}:${pageNum}:${(rotation || 0) % 360}:${zoomBucket}`;
@@ -107,9 +108,20 @@ export function setCachedBitmapEntry(filePath, pageNum, rotation, zoomBucket, bi
   return true;
 }
 
+// A quick low-resolution render of a whole page (page-preview.js), shown
+// until a real bitmap lands. It has its own key, so it is never the exact
+// match for a zoom bucket: getBestAvailableBitmap returns it only when no
+// bucket of the page is cached.
+const PREVIEW_BUCKET = 'preview';
+
+/** Keep `bitmap` as the page's preview. False when the file changed since `sourceRevision`. */
+export function setPreviewBitmap(filePath, pageNum, rotation, bitmap, w, h, scale, sourceRevision) {
+  return setCachedBitmapEntry(filePath, pageNum, rotation, PREVIEW_BUCKET, bitmap, w, h, scale, sourceRevision);
+}
+
 // Find the best available cached bitmap for a target bucket: prefer exact
 // match, otherwise the nearest available bucket (lower preferred for speed,
-// higher acceptable as fallback during downscale).
+// higher acceptable as fallback during downscale), and the preview last.
 export function getBestAvailableBitmap(filePath, pageNum, rotation, targetBucket) {
   const exact = getCachedBitmap(filePath, pageNum, rotation, targetBucket);
   if (exact) return exact;
@@ -126,7 +138,7 @@ export function getBestAvailableBitmap(filePath, pageNum, rotation, targetBucket
     const e = getCachedBitmap(filePath, pageNum, rotation, b);
     if (e) return e;
   }
-  return null;
+  return getCachedBitmap(filePath, pageNum, rotation, PREVIEW_BUCKET);
 }
 
 // The sidebar can reuse a decoded whole-page preview regardless of its zoom
@@ -152,16 +164,27 @@ export function getLargestCachedBitmap(filePath, pageNum, rotation) {
   return best;
 }
 
-function _evictIfNeeded() {
+function _cacheBytes() {
   let bytes = 0;
   for (const entry of _cache.values()) bytes += entry.w * entry.h * 4;
-  while (_cache.size > MAX_ENTRIES || (_cache.size > 1 && bytes > MAX_BYTES)) {
-    const oldest = _cache.keys().next().value;
-    const entry = _cache.get(oldest);
-    bytes -= entry.w * entry.h * 4;
-    _cache.delete(oldest);
-    closeBitmap(entry.bitmap);
-  }
+  return bytes;
+}
+
+// Drop the least recently used entry; the newest one always stays.
+function _evictOldest() {
+  if (_cache.size <= 1) return 0;
+  const oldest = _cache.keys().next().value;
+  const entry = _cache.get(oldest);
+  _cache.delete(oldest);
+  closeBitmap(entry.bitmap);
+  return entry.w * entry.h * 4;
+}
+
+registerBitmapCache('page-bitmaps', { bytes: _cacheBytes, evictOldest: _evictOldest });
+
+function _evictIfNeeded() {
+  while (_cache.size > MAX_ENTRIES && _evictOldest() > 0) { /* drop the oldest */ }
+  enforceBitmapBudget();
 }
 
 /**

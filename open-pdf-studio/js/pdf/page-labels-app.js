@@ -6,7 +6,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import { getActiveDocument, getPageRotation } from '../core/state.js';
-import { getCachedPdfBytes, ensureAnnotationsForPage } from './loader.js';
+import { getPdfBytes, ensureAnnotationsForPage } from './loader.js';
 import { getCacheKey, reloadFromBytes } from './page-manager.js';
 import { recordPageStructure } from '../core/undo-manager.js';
 import { writePageLabels, cleanPageLabel } from './page-labels.js';
@@ -35,7 +35,7 @@ export async function applyDocumentLabels(labels) {
   if (!doc?.pdfDoc) return false;
   await loadAllAnnotations(doc);
   if (getActiveDocument() !== doc) return false;
-  const currentBytes = getCachedPdfBytes(getCacheKey());
+  const currentBytes = await getPdfBytes(getCacheKey());
   if (!currentBytes) return false;
   const pdf = await PDFDocument.load(currentBytes, { ignoreEncryption: true });
   writePageLabels(pdf, labels);

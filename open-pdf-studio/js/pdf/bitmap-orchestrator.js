@@ -26,6 +26,8 @@ import {
     ensureProgressiveBitmapForCurrentView,
     isExtremePage,
     isHeavyPage,
+    isRenderSuperseded,
+    renderLane,
 } from './progressive-render.js';
 import { createInflightKeyGate } from './inflight-key-gate.js';
 import { regioOpRenderRaster } from './device-pixel.js';
@@ -51,6 +53,10 @@ const TILE_BUFFER_FRACTION = 0.25;
 
 let _bitmapGen = 0;
 const _tileRequests = createInflightKeyGate();
+// The view tile and the neighbour prefetch share _tileRequests: a result is
+// used only while its token is current, and the generation only grows, so a
+// queued request on this lane with an older generation is safe to drop.
+const VIEW_TILE_LANE = renderLane('view-tile');
 
 export function cancelBitmapRendersForFile(filePath) {
     if (viewport.filePath !== filePath) return;
@@ -553,6 +559,8 @@ export async function ensureTileForCurrentView(canvas, opties = {}) {
             regionWPt: bufferedRegion.w,
             regionHPt: bufferedRegion.h,
             ocgVisibility: selection.ocgVisibility,
+            renderLane: VIEW_TILE_LANE,
+            renderGeneration: requestToken.generation,
         });
         if (!_tileRequests.isCurrent(requestToken) || !sourceRenderCurrent(filePath, sourceRevision)) return;
         const bytes = rgbaData instanceof Uint8Array ? rgbaData : new Uint8Array(rgbaData);
@@ -585,7 +593,7 @@ export async function ensureTileForCurrentView(canvas, opties = {}) {
             console.log(`[tile-orch] cached p${pageNum} @ z=${requestedZoom.toFixed(2)} reg=${regionBucket}`);
         }
     } catch (e) {
-        console.warn('[tile-orch] render failed:', e);
+        if (!isRenderSuperseded(e)) console.warn('[tile-orch] render failed:', e);
     } finally {
         const afgerond = _tileRequests.finish(requestToken);
         if (afgerond && geplaatst && canvas) {
@@ -681,6 +689,8 @@ export async function prefetchNeighborWhileCovered(canvas) {
             regionWPt: region.w,
             regionHPt: region.h,
             ocgVisibility: selection.ocgVisibility,
+            renderLane: VIEW_TILE_LANE,
+            renderGeneration: requestToken.generation,
         });
         if (!_tileRequests.isCurrent(requestToken) || !sourceRenderCurrent(filePath, sourceRevision)) return;
         const bytes = rgbaData instanceof Uint8Array ? rgbaData : new Uint8Array(rgbaData);
@@ -704,7 +714,7 @@ export async function prefetchNeighborWhileCovered(canvas) {
         };
         await tileCacheSet(filePath, pageNum, zoomBucket, rotation, regionBucket, imageData, regionMeta, sourceRevision);
     } catch (e) {
-        console.warn('[tile-orch] prefetch faalde:', e);
+        if (!isRenderSuperseded(e)) console.warn('[tile-orch] prefetch faalde:', e);
     } finally {
         const afgerond = _tileRequests.finish(requestToken);
         if (!afgerond || !canvas) return;

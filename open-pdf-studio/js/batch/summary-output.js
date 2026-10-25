@@ -4,12 +4,14 @@
 // and a totals table). Measurement totals add calibrated values per unit
 // only; an uncalibrated value stays "Scale not set" and is counted apart.
 
-import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { edition } from '../editions/active.js';
 import { buildXlsxSheets } from '../pdf/office-files.js';
 import { printable, wrap } from '../annotations/markup-pdf.js';
 import { drawBrandMark } from '../pdf/brand-mark-pdf.js';
+
+// fontkit (about 0.5 MB) loads with the first report, not with the editor.
+const loadFontkit = () => import('@pdf-lib/fontkit').then((m) => m.default);
 
 /** Sort (and subtotal) columns the dialog offers. `file` keeps file and page order. */
 export const SUMMARY_SORT_KEYS = Object.freeze(['file', 'subject', 'status', 'author', 'type', 'pageLabel']);
@@ -166,6 +168,7 @@ const shortDate = (value) => {
  * LiberationSans (characters it cannot draw are shown as [U+XXXX]).
  */
 export async function summaryPdf(summary, fontBytes) {
+  const fontkit = await loadFontkit();
   if (!fontBytes?.byteLength) throw new Error('The bundled summary font is unavailable.');
   const document = await PDFDocument.create();
   document.registerFontkit(fontkit);

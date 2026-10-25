@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 // De schaal op één punt van een pagina, uit de bronnen van het document, in
 // één vaste volgorde (#400). Dit is de gedeelde regel achter
 // scale-bar.getScaleForPoint, en daarmee achter getMeasureScale én de lichte
@@ -125,8 +126,16 @@ export function verzamelSchaalBronnen(doc) {
   const schaalbalken = [];
   const gebieden = new Map();
   const annotaties = doc && Array.isArray(doc.annotations) ? doc.annotations : [];
-  for (const a of annotaties) {
-    const type = a.type;
+  // Het type lezen uit de ruwe lijst: via de store ging elke annotatie door
+  // een proxy, op 20.000 markeringen een flink deel van het openen. Alleen
+  // een bron zelf komt uit de store, zodat een opzoeking haar actuele maten
+  // en schaal volgt; de lengte via de store telt toevoegen en verwijderen.
+  const ruw = annotaties[$RAW] || annotaties;
+  const n = annotaties.length;
+  for (let i = 0; i < n; i++) {
+    const type = ruw[i]?.type;
+    if (type !== 'viewport' && type !== 'scaleBar' && type !== 'scaleRegion') continue;
+    const a = annotaties[i];
     if (type === 'viewport') {
       voegToe(viewports, a.page, a);
     } else if (type === 'scaleBar') {

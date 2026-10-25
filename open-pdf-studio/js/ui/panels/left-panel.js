@@ -96,11 +96,28 @@ function attachScrollListener() {
   const tc = getContainerRef();
   if (tc) {
     tc.addEventListener('scroll', handleThumbnailScroll);
+    observeStripSize(tc);
     scrollListenerAttached = true;
   } else {
     // Retry until SolidJS sets the ref
     setTimeout(attachScrollListener, 100);
   }
+}
+
+// The rows on screen are measured when the document opens, often while the
+// panel is still hidden: every row then measures 0 x 0 and none counts as
+// visible. A large set paints only the rows on screen, so opening the
+// Thumbnails panel afterwards showed spinners until the user scrolled. Measure
+// again whenever the strip changes size: the panel opens, expands, or the
+// window is resized.
+let stripResizeObserver = null;
+let observedStrip = null;
+function observeStripSize(tc) {
+  if (typeof ResizeObserver === 'undefined' || observedStrip === tc) return;
+  stripResizeObserver ??= new ResizeObserver(() => handleThumbnailScroll());
+  if (observedStrip) stripResizeObserver.unobserve(observedStrip);
+  stripResizeObserver.observe(tc);
+  observedStrip = tc;
 }
 
 // Handle scroll in thumbnails container - debounced

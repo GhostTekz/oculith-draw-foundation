@@ -1,5 +1,5 @@
 import { state, getActiveDocument } from "../core/state.js";
-import { getCachedPdfBytes } from "./loader.js";
+import { getPdfBytes } from "./loader.js";
 import { getCacheKey, reloadFromBytes } from "./page-manager.js";
 import { renderPageOffscreen, parsePageRange } from "./exporter.js";
 import { recordPageStructure } from "../core/undo-manager.js";
@@ -38,7 +38,7 @@ export async function cropMargins(applyTo, rangeStr, paddingMm, threshold) {
   if (!getActiveDocument()?.pdfDoc) return { cropped: 0, skipped: 0 };
 
   const cacheKey = getCacheKey();
-  const currentBytes = getCachedPdfBytes(cacheKey);
+  const currentBytes = await getPdfBytes(cacheKey);
   if (!currentBytes) return { cropped: 0, skipped: 0 };
 
   const doc = getActiveDocument();

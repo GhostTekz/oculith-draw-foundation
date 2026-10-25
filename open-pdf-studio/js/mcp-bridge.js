@@ -43,7 +43,7 @@ try { window.__consoleRing = CONSOLE_RING; } catch { /* noop */ }
 // Patterns the render pipeline uses: [render], [tile], [wheel-zoom],
 // [PERF], [pre-render], STALE markers. Adjust if more subsystems need
 // capture later.
-const CONSOLE_CAPTURE_RE = /\[render\]|\[tile\]|\[wheel-zoom\]|\[PERF\]|\[pre-render\]|\[thumb\]|\[bitmap-orch\]|\[tile-orch\]|\[prog\]|\[prog-guard\]|\[pbc\]|\[bo\]|STALE|JANK/;
+const CONSOLE_CAPTURE_RE = /\[render\]|\[tile\]|\[wheel-zoom\]|\[PERF\]|\[pre-render\]|\[thumb\]|\[bitmap-orch\]|\[tile-orch\]|\[prog\]|\[prog-guard\]|\[pbc\]|\[bo\]|STALE|JANK|\[takeoff\]|\[engine\]/;
 
 function _captureConsole(level, args) {
   try {
@@ -712,6 +712,12 @@ async function handlePerfSnapshot(params) {
   const doc = getActiveDocument();
   if (params?.flush) await perf.perfFlush('snapshot');
   if (params?.reset) perf.perfReset();
+  // Memory experiments: let go of one kind of data on the active document,
+  // to measure what it holds (the next use rebuilds it).
+  const release = Array.isArray(params?.release) ? params.release : [];
+  if (doc && release.includes('pdf-lib')) { (await import('./pdf/pdf-lib-session.js')).forgetPdfLibReads(doc); }
+  if (doc && release.includes('pdfjs-pages')) { try { await doc.pdfDoc?.cleanup?.(); } catch { /* busy */ } }
+  if (release.includes('list')) { try { const { setAnnotationItems } = await import('./bridge.js'); setAnnotationItems([]); } catch { /* no list */ } }
   return { ok: true, ...snap, markups: doc?.annotations?.length || 0, pages: doc?.pdfDoc?.numPages || 0, at: Date.now() };
 }
 
@@ -933,10 +939,16 @@ async function handleWheelZoom(params) {
     deltaX: 0, deltaY, deltaZ: 0,
     deltaMode: 0, // 0 = pixel
   };
-  const ev = new WheelEvent('wheel', wheelInit);
-  // Dispatch from `target` so e.target / closest('canvas') match real OS
-  // behavior; the event bubbles up to .main-view which has the listener.
-  target.dispatchEvent(ev);
+  // `steps` > 1: a spin of the wheel, one notch per animation frame (as an
+  // OS delivers them), not one notch per bridge request.
+  const steps = Math.max(1, Math.min(60, Math.round(Number(params?.steps) || 1)));
+  for (let i = 0; i < steps; i++) {
+    if (i) await new Promise((r) => requestAnimationFrame(() => r()));
+    const ev = new WheelEvent('wheel', wheelInit);
+    // Dispatch from `target` so e.target / closest('canvas') match real OS
+    // behavior; the event bubbles up to .main-view which has the listener.
+    target.dispatchEvent(ev);
+  }
   return {
     ok: true, x, y, deltaY, ctrlKey,
     target: describeTarget(target),

@@ -333,6 +333,29 @@ export async function writeBinaryFileAtomic(path, data) {
   return true;
 }
 
+// Incremental save: append `extra` to the PDF at `path` only if the file still
+// has `original`'s length, first KB and last 64 KB. Rejects with an
+// "append-mismatch" error otherwise (the caller then writes the whole file).
+export async function appendBinaryFileAtomic(path, original, extra) {
+  if (!isTauri()) throw new Error('append-unavailable');
+  const head = original.subarray(0, Math.min(1024, original.length));
+  const tail = original.subarray(Math.max(0, original.length - 65536));
+  const body = new Uint8Array(head.length + tail.length + extra.length);
+  body.set(head, 0);
+  body.set(tail, head.length);
+  body.set(extra, head.length + tail.length);
+  const mobile = window.__TAURI__?.os?.type?.() === 'android';
+  await getTauriCore().invoke('append_file_atomic', mobile ? { data: Array.from(body) } : body, {
+    headers: {
+      'x-opds-path': encodeURIComponent(path),
+      'x-opds-expected-len': String(original.length),
+      'x-opds-head-len': String(head.length),
+      'x-opds-tail-len': String(tail.length),
+    },
+  });
+  return true;
+}
+
 export async function fileExists(path) {
   if (!isTauri()) return false;
 

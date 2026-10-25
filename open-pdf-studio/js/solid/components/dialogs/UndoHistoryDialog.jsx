@@ -4,6 +4,7 @@ import { closeDialog } from '../../stores/dialogStore.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { state } from '../../../core/state.js';
 import { undoSteps, redoSteps } from '../../../core/undo-manager.js';
+import { undoStackOf, redoStackOf, trackUndoHistory } from '../../../core/undo-stacks.js';
 import { historyRows, undoEntryInfo } from '../../../core/undo-history.js';
 import { typeName } from '../../../quantities/categories.js';
 
@@ -20,8 +21,9 @@ export default function UndoHistoryDialog() {
   const doc = () => state.documents[state.activeDocumentIndex];
   const rows = createMemo(() => {
     tick();
+    trackUndoHistory();
     const d = doc();
-    return historyRows(d?.undoStack ? [...d.undoStack] : [], d?.redoStack ? [...d.redoStack] : []);
+    return historyRows([...undoStackOf(d)], [...redoStackOf(d)]);
   });
 
   const label = (row) => {

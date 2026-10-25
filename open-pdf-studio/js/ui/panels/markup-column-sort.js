@@ -11,6 +11,10 @@ export function nextMarkupColumnSort(current, column) {
   };
 }
 
+// localeCompare() sets up the locale's collation on every call; one collator
+// serves every sort.
+const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
 /** Sort displayed rows within a group; the caller retains its group/filter order. */
 export function sortMarkupRows(rows, sort, valueForColumn) {
   if (!sort || !markupColumns.includes(sort.column)) return rows;
@@ -26,6 +30,6 @@ export function sortMarkupRows(rows, sort, valueForColumn) {
       if (bv === null || bv === undefined) return factor;
       return factor * (av < bv ? -1 : av > bv ? 1 : 0);
     }
-    return factor * String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+    return factor * naturalCollator.compare(String(av), String(bv));
   });
 }

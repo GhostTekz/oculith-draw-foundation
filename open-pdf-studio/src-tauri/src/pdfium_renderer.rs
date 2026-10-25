@@ -421,7 +421,9 @@ pub struct CachedPixmap {
 /// scale_q = round(scale*10000), rotation). An entry limit alone does not
 /// bound memory when construction sheets produce large RGBA buffers.
 const PIXMAP_CACHE_MAX_ENTRIES: usize = 40;
-const PIXMAP_CACHE_MAX_BYTES: usize = 256 * 1024 * 1024;
+// The page keeps its own bitmap caches; this one only spares a re-render
+// of a page just shown, so it stays small (it was 256 MB of duplicates).
+const PIXMAP_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
 
 pub struct PixmapCache {
     map: HashMap<(String, u32, u32, i32), Arc<CachedPixmap>>,

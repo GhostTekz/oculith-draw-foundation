@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import { pdfjsAssets } from './scripts/pdfjs-assets.mjs';
+import { preloadMain } from './scripts/preload-main.mjs';
 import { readFileSync } from 'fs';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
@@ -8,7 +9,7 @@ const edition = 'community';
 
 export default defineConfig({
   cacheDir: process.env.OCUDRAW_VITE_CACHE_DIR || undefined,
-  plugins: [solidPlugin(), pdfjsAssets()],
+  plugins: [solidPlugin(), pdfjsAssets(), preloadMain()],
   resolve: {
     alias: [
       // PDF.js 6's modern build calls Map.prototype.getOrInsertComputed and

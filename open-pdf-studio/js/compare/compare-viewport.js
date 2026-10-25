@@ -11,7 +11,7 @@
 // Where opts = { oldPath, newPath, oldPage, newPage, scale, offset }
 
 import * as pdfjsLib from 'pdfjs-dist';
-import { getCachedPdfBytes } from '../pdf/loader.js';
+import { getCachedPdfBytes, getPdfBytes } from '../pdf/loader.js';
 import { drawHighlights } from './overlay-renderer.js';
 import { detectChanges } from './change-detector.js';
 import {
@@ -74,7 +74,7 @@ function _imgCacheSet(key, v) {
 
 async function _getDoc(filePath) {
   if (_docCache.has(filePath)) return _docCache.get(filePath);
-  const bytes = getCachedPdfBytes(filePath);
+  const bytes = await getPdfBytes(filePath);
   if (!bytes) throw new Error('Compare: no cached bytes for ' + filePath);
   const source = bytes.slice();
   const doc = await pdfjsLib.getDocument({

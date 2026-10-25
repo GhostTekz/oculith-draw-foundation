@@ -1,5 +1,8 @@
 import { getActiveDocument } from '../../core/state.js';
-import { PDFName, PDFString, PDFHexString } from 'pdf-lib';
+import { PDFName, PDFHexString } from 'pdf-lib';
+// The key and the reader live in style-presets-read.js: the pdf-lib worker
+// reads them without the app state this writer uses.
+import { STYLE_PRESETS_CATALOG_KEY } from './style-presets-read.js';
 
 /**
  * Persistence of named line-style presets INSIDE the PDF.
@@ -16,7 +19,7 @@ import { PDFName, PDFString, PDFHexString } from 'pdf-lib';
  * literal PDF strings do not escape reliably.
  */
 
-export const STYLE_PRESETS_CATALOG_KEY = 'OPS_StylePresets';
+export { STYLE_PRESETS_CATALOG_KEY, readStylePresetsFromCatalog } from './style-presets-read.js';
 
 /**
  * Write the active document's presets into the pdf-lib document's catalog.
@@ -39,38 +42,4 @@ export function saveStylePresetsToCatalog(pdfDocLib, presetsArg) {
     PDFName.of(STYLE_PRESETS_CATALOG_KEY),
     PDFHexString.fromText(JSON.stringify(presets))
   );
-}
-
-/**
- * Read presets back from a pdf-lib document's catalog.
- * Returns [] when absent or malformed. Entries are sanity-checked
- * (must have a string name and a props object).
- */
-export function readStylePresetsFromCatalog(pdfDocLib) {
-  try {
-    const context = pdfDocLib.context;
-    const catalog = context.lookup(context.trailerInfo.Root);
-    if (!catalog) return [];
-    const raw = catalog.lookup(PDFName.of(STYLE_PRESETS_CATALOG_KEY));
-    let text = null;
-    if (raw instanceof PDFHexString) {
-      text = raw.decodeText();
-    } else if (raw instanceof PDFString) {
-      text = raw.decodeText();
-    }
-    if (!text) return [];
-    const arr = JSON.parse(text);
-    if (!Array.isArray(arr)) return [];
-    return arr.filter(p =>
-      p && typeof p === 'object' &&
-      typeof p.name === 'string' && p.name.length > 0 &&
-      p.props && typeof p.props === 'object'
-    ).map(p => ({
-      id: typeof p.id === 'string' && p.id ? p.id : `sp_${Math.random().toString(36).slice(2, 10)}`,
-      name: p.name,
-      props: p.props,
-    }));
-  } catch {
-    return [];
-  }
 }

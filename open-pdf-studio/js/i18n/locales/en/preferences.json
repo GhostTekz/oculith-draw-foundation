@@ -196,7 +196,9 @@
     "confirmBeforeDeleting": "Confirm before deleting annotations",
     "navigation": "Navigation",
     "wheelZoomWithoutCtrl": "Zoom with mouse wheel (without holding Ctrl)",
-    "dynamicScaling": "Auto-scale markups"
+    "dynamicScaling": "Auto-scale markups",
+    "saving": "Saving",
+    "incrementalSave": "Fast save: append changes to the end of the file instead of rewriting it"
   },
   "pageDisplay": {
     "rendering": "Rendering",

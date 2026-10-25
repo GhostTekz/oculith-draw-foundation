@@ -53,6 +53,14 @@ export async function loadPreferences() {
       if (loaded.defaultViewMode === undefined || loaded.defaultViewMode === 'continuous') {
         loaded.defaultViewMode = 'single';
       }
+      // Incremental save is on by default now. Preferences are stored whole,
+      // so every profile saved before holds the old default `false`: turn it
+      // on once. The marker stays, so a user who turns it off afterwards
+      // keeps it off.
+      if (loaded.incrementalSaveTurnedOn !== true) {
+        loaded.incrementalSave = true;
+        loaded.incrementalSaveTurnedOn = true;
+      }
       // Merge with defaults to ensure all keys exist
       state.preferences = voegSamenMetStandaarden(DEFAULT_PREFERENCES, loaded);
     }

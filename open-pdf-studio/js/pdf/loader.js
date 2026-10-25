@@ -1,5 +1,6 @@
 import { perfRecord } from '../core/perf.js';
 import { state, getNextUntitledName, getActiveDocument } from '../core/state.js';
+import { clearUndoHistory } from '../core/undo-stacks.js';
 import { showLoading, hideLoading } from '../ui/chrome/dialogs.js';
 import { updateAllStatus } from '../ui/chrome/status-bar.js';
 import { setViewMode, fitPage } from './renderer.js';
@@ -18,26 +19,151 @@ import { verifieerHandtekeningen } from './handtekeningen/verificatie.js';
 import { edition } from '../editions/active.js';
 
 // Sub-module imports
-import { extractAnnotationColors } from './loader/color-extraction.js';
+import { extractAnnotationColors, applyDeferredRichText } from './loader/color-extraction.js';
 import { extractStampImagesHybrid } from './loader/image-extraction.js';
+import { pageAnnotations, keepPageAnnotations } from './page-annotations.js';
+import { buildStampSheet } from './loader/stamp-sheet.js';
+import { renderStampSheet } from './loader/stamp-sheet-render.js';
 import { convertAndPushAnnotations as _convertAndPushAnnotations } from './loader/convert-page.js';
 import { loadIfNeeded } from './queued-load.js';
-import { leesAnnotatieLagen, pasGelezenLagenToe } from './saver/annotatie-lagen.js';
+import { pasGelezenLagenToe } from './saver/annotatie-lagen.js';
+import { readCatalogFields } from './pdf-lib-catalog.js';
+import { PdfLibSession, WorkerUnavailable, workersUsable, forgetPdfLibReads } from './pdf-lib-session.js';
+import { applyMarkupColumns } from './markup-columns.js';
+import { bewaar as bewaarKnipsel } from '../annotations/vector-snippet-store.js';
 import { writeUntitledBacking } from './untitled-backing.js';
 import { getTemplateDirs } from './template-scope.js';
 import { sourceRenderRevision, sourceWriteActive } from './source-render-revision.js';
-import { isLargeOpen, openAnnotationWindow, pageTypeChunks } from './large-open.js';
+import { isLargeOpen, openAnnotationWindow, pageTypeChunks, LARGE_FILE_BYTES, RANGE_OPEN_BYTES } from './large-open.js';
+import { yieldToMain } from '../core/yield-to-main.js';
+import { noteActivity } from './pdfjs-idle-cleanup.js';
+import { FileRangeSource, createRangeTransport, onRangeSourceFailed, RANGE_CHUNK_BYTES } from './file-range.js';
 
 
 // Cache for original PDF bytes (used by saver to avoid re-reading)
 const originalBytesCache = new Map(); // filePath -> Uint8Array
 
+// A large file is not read whole at open: PDF.js reads it by range through
+// a FileRangeSource (file-range.js), kept here by path. getPdfBytes reads
+// the whole opened version on demand, in chunks, and caches it; from then
+// on the source serves PDF.js from those same bytes and lets the file go.
+const rangeSources = new Map(); // filePath -> FileRangeSource
+const wholeReads = new Map();   // filePath -> Promise<Uint8Array>
+
+const PDFJS_OPTIONS = {
+  cMapUrl: '/pdfjs/web/cmaps/',
+  cMapPacked: true,
+  standardFontDataUrl: '/pdfjs/web/standard_fonts/',
+  wasmUrl: '/pdfjs/web/wasm/',
+  isEvalSupported: false,
+  verbosity: 0,
+};
+
+// PDF.js over a range source: only the ranges a page needs, no background
+// fetch of the rest of the file.
+function pdfjsRangeParams(source) {
+  return {
+    ...PDFJS_OPTIONS,
+    range: createRangeTransport(pdfjsLib, source),
+    rangeChunkSize: RANGE_CHUNK_BYTES,
+    disableAutoFetch: true,
+    disableStream: true,
+  };
+}
+
+// Once per opened file (a source reports its first failure only).
+onRangeSourceFailed((source) => {
+  console.error('[loader] file changed on disk while open:', source.path);
+  showMessage(i18next.t('fileChangedOnDisk', {
+    defaultValue: 'This file was changed by another program while it was open. Close it and open it again to see the current version.',
+  }));
+});
+
+/**
+ * The bytes in the cache for `filePath`: a large file opened by range has
+ * none until getPdfBytes read it. Use getPdfBytes where the whole file is
+ * needed.
+ */
 export function getCachedPdfBytes(filePath) {
   return originalBytesCache.get(filePath);
 }
 
+/** The PDF bytes for `filePath` (or a memory key), read on demand: Promise<Uint8Array|undefined>. */
+export async function getPdfBytes(filePath) {
+  const cached = originalBytesCache.get(filePath);
+  if (cached) return cached;
+  const source = rangeSources.get(filePath);
+  if (!source) return undefined;
+  let pending = wholeReads.get(filePath);
+  if (!pending) {
+    pending = source.readAll().then(async (bytes) => {
+      // A save or edit set newer bytes meanwhile: those are the file's now.
+      if (!originalBytesCache.has(filePath) && rangeSources.get(filePath) === source) {
+        originalBytesCache.set(filePath, bytes);
+        await source.adopt(bytes);
+      }
+      return originalBytesCache.get(filePath) || bytes;
+    }).finally(() => { wholeReads.delete(filePath); });
+    wholeReads.set(filePath, pending);
+  }
+  return pending;
+}
+
+/** The byte length of `filePath` as opened, without reading it. */
+export function getPdfByteLength(filePath) {
+  return originalBytesCache.get(filePath)?.length ?? rangeSources.get(filePath)?.length ?? null;
+}
+
+// The document no longer reads from its range source (closed, or reloaded
+// from new bytes).
+function forgetRangeSource(filePath) {
+  const source = rangeSources.get(filePath);
+  if (!source) return;
+  rangeSources.delete(filePath);
+  void source.close();
+}
+
+/** A reload from new bytes replaced the PDF.js document of `doc`. */
+export function forgetPdfRangeSource(doc) {
+  const source = doc?._rangeSource;
+  if (!source) return;
+  doc._rangeSource = null;
+  if (rangeSources.get(doc.filePath) === source) rangeSources.delete(doc.filePath);
+  for (const [path, s] of rangeSources) if (s === source) rangeSources.delete(path);
+  void source.close();
+}
+
 export function setCachedPdfBytes(filePath, bytes) {
   originalBytesCache.set(filePath, bytes);
+}
+
+/** The file was renamed or moved: its cached bytes and range source move along. */
+export function moveCachedPdfBytes(oldPath, newPath) {
+  if (!oldPath || !newPath || oldPath === newPath) return;
+  const cached = originalBytesCache.get(oldPath);
+  originalBytesCache.delete(oldPath);
+  if (cached) originalBytesCache.set(newPath, cached);
+  const source = rangeSources.get(oldPath);
+  rangeSources.delete(oldPath);
+  if (source) {
+    source.path = newPath;
+    rangeSources.set(newPath, source);
+  }
+}
+
+// A file at least RANGE_OPEN_BYTES, opened for range reads; null for a
+// smaller file or where range reads are unavailable (it is read whole).
+async function openLargeRangeSource(filePath) {
+  let source;
+  try {
+    source = await FileRangeSource.open(filePath);
+  } catch (e) {
+    console.warn('[loader] range reads unavailable, reading the whole file:', e?.message ?? e);
+    return null;
+  }
+  if (source.length >= RANGE_OPEN_BYTES) return source;
+  await source.close();
+  return null;
 }
 
 /**
@@ -47,10 +173,10 @@ export function setCachedPdfBytes(filePath, bytes) {
 export async function reloadDocumentFromBytes(doc, bytes) {
   if (!doc) return;
 
-  doc._sharedPdfLibDoc = null;
-  doc._sharedPdfLibDocPromise = null;
+  forgetPdfLibReads(doc);
 
   // Replace the pdf.js document with one loaded from the new bytes
+  forgetPdfRangeSource(doc);
   doc.pdfDoc = await pdfjsLib.getDocument({
     data: bytes.slice(), // copy — pdf.js transfers the buffer
     cMapUrl: '/pdfjs/web/cmaps/',
@@ -67,8 +193,10 @@ export async function reloadDocumentFromBytes(doc, bytes) {
 export function clearCachedPdfBytes(filePath) {
   if (filePath) {
     originalBytesCache.delete(filePath);
+    forgetRangeSource(filePath);
   } else {
     originalBytesCache.clear();
+    for (const path of [...rangeSources.keys()]) forgetRangeSource(path);
   }
 }
 
@@ -92,28 +220,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = import.meta.env?.DEV
  * numPages. Re-attaches the wrapper to the new pdfDoc so the next bug hit
  * also recovers automatically.
  */
-function _attachPdfDocGetPageRecovery(doc, filePath) {
-  if (!doc?.pdfDoc) return;
-  const orig = doc.pdfDoc.getPage.bind(doc.pdfDoc);
-  doc.pdfDoc.getPage = async function (pageNum) {
+function _attachPdfDocGetPageRecovery(docArg, filePath) {
+  if (!docArg?.pdfDoc) return;
+  const orig = docArg.pdfDoc.getPage.bind(docArg.pdfDoc);
+  // The PDF.js document outlives its tab in caches keyed by the document
+  // (native-ocg-selection.js): reaching the document through a WeakRef keeps
+  // this wrapper from holding a closed one.
+  const docRef = new WeakRef(docArg);
+  docArg.pdfDoc.getPage = async function (pageNum) {
     try {
       return await orig(pageNum);
     } catch (e) {
+      const doc = docRef.deref();
       const msg = e?.message || '';
-      if (msg === 'Invalid page request.' && Number.isInteger(pageNum)
+      if (doc && msg === 'Invalid page request.' && Number.isInteger(pageNum)
           && pageNum > 0 && pageNum <= doc.pdfDoc.numPages) {
         console.warn(`[loader] PDF.js pagesMapper out of sync (numPages=${doc.pdfDoc.numPages}, requested ${pageNum}); reloading doc to reset.`);
-        const cached = originalBytesCache.get(filePath);
-        if (!cached) throw e;
-        const fresh = await pdfjsLib.getDocument({
-          data: cached.slice(),
-          cMapUrl: '/pdfjs/web/cmaps/',
-          cMapPacked: true,
-          standardFontDataUrl: '/pdfjs/web/standard_fonts/',
-    wasmUrl: '/pdfjs/web/wasm/',
-          isEvalSupported: false,
-          verbosity: 0,
-        }).promise;
+        // The version this document opened: its range source, else the cache.
+        const source = doc._rangeSource;
+        const cached = source ? null : originalBytesCache.get(filePath);
+        if (!source && !cached) throw e;
+        const fresh = await pdfjsLib.getDocument(source
+          ? pdfjsRangeParams(source)
+          : { ...PDFJS_OPTIONS, data: cached.slice() }).promise;
         doc.pdfDoc = fresh;
         _attachPdfDocGetPageRecovery(doc, filePath); // protect future calls
         return await doc.pdfDoc.getPage(pageNum);
@@ -215,7 +344,8 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     //
     // Race / correctness:
     //   - !isActive() (user switched tab during async) → skip paint
-    //   - doc.pdfDoc already set (proper render won the race) → skip paint
+    //   - doc.pdfDoc already set → kept as the page's preview and painted
+    //     only while the view has no bitmap of the page yet (page-preview.js)
     //   - Pre-render fails (parse error, etc.) → silent, normal flow continues
     //   - scale=1.0 means w pixels = w points; viewport stretches to user zoom
     //   - originX/originY assumed 0; if MediaBox origin is non-zero (rare),
@@ -224,20 +354,28 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     // The preview is an optimisation: its checks (is page 1 heavy? are the
     // render workers up?) and render run beside the file read instead of
     // before it; the heavy-page probe alone parsed the whole file first.
+    //
+    // A HEAVY page (large content stream) gets a low-resolution preview
+    // instead (page-preview.js): a whole-page render at PREVIEW_SCALE on a
+    // render worker, at thumbnail priority, so a tile already queued on that
+    // worker goes first. The worker keeps the page it parsed, so its later
+    // tiles are raster work only: the parse the preview pays was due there
+    // anyway, and it starts seconds earlier than the first tile would. An
+    // extreme page (scene engine) gets none: a PDFium parse of it holds a
+    // gigabyte per worker. Either result is kept as the page's preview and
+    // shown until the real bitmap lands, also after PDF.js has opened.
     void (async () => {
       let _preT0 = performance.now();
-      // Zware pagina's (grote content-stream) slaan de pre-render over: een
-      // whole-page render kost daar SECONDEN en zou — gepind op één worker —
-      // vóór de progressieve tegels in de rij staan. Het progressieve pad
-      // levert de eerste content daar zelf. (isHeavyPage cachet per bestand;
-      // de check zelf kost ~100 ms eenmalig.)
-      let _skipPre = false;
+      let _heavy = false;
+      let _extreme = false;
       if (filePath && isTauri()) {
         try {
           const prog = await import('./progressive-render.js');
-          _skipPre = !!(state.preferences && state.preferences.progressiveRender)
-            && await prog.isHeavyPage(filePath, 1);
-          if (_skipPre) console.log('[prog-guard] zware pagina → cold-open pre-render overgeslagen');
+          if (state.preferences && state.preferences.progressiveRender) {
+            _heavy = await prog.isHeavyPage(filePath, 1);
+            _extreme = _heavy && await prog.isExtremePage(filePath, 1);
+          }
+          if (_extreme) console.log('[prog-guard] extreme page → cold-open preview skipped');
         } catch {}
       }
       // The pre-render is an optimisation, not a requirement: when the PDFium
@@ -246,97 +384,130 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
       // PDF.js parses the same bytes — on large documents that doubles peak
       // memory during boot and can take the whole load down. Skip it then.
       let _poolReady = false;
-      if (filePath && isTauri() && !_skipPre) {
+      if (filePath && isTauri() && !_extreme) {
         try { _poolReady = await invoke('worker_pool_ready'); } catch { _poolReady = false; }
         if (!_poolReady) console.log('[prog-guard] worker pool not ready → cold-open pre-render skipped');
       }
-      if (filePath && isTauri() && !_skipPre && _poolReady) {
-        const { renderPdfPage: _renderPdfPage } = await import('./engine-router.js');
-        _renderPdfPage({
+      if (!filePath || !isTauri() || _extreme || !_poolReady) return;
+      const sourceRevision = sourceRenderRevision(filePath);
+      const preview = await import('./page-preview.js');
+      let request;
+      let scale = 1.0;
+      if (_heavy) {
+        scale = preview.PREVIEW_SCALE;
+        const { nativeOcgSelectionForPath } = await import('./native-ocg-selection.js');
+        // workerOnly: thumbnail priority, never an in-process render.
+        request = invoke('render_pdf_page', {
           path: filePath,
           pageIndex: 0,
-          scale: 1.0,
+          scale,
           rotation: 0,
-        }).then(async (rgbaData) => {
-          if (!rgbaData || isClosed() || doc.pdfDoc || !isActive()) return;
-          try {
-            const bytes = rgbaData instanceof Uint8Array ? rgbaData : new Uint8Array(rgbaData);
-            if (bytes.length <= 8) return;
-            const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
-            const w = view.getUint32(0, true);
-            const h = view.getUint32(4, true);
-            const rgba = new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, bytes.length - 8);
-            const imageData = new ImageData(rgba, w, h);
-            const bitmap = await createImageBitmap(imageData);
-            if (isClosed() || doc.pdfDoc || !isActive()) { bitmap.close(); return; }
+          workerOnly: true,
+          ocgVisibility: nativeOcgSelectionForPath(filePath).ocgVisibility,
+        });
+      } else {
+        const { renderPdfPage: _renderPdfPage } = await import('./engine-router.js');
+        request = _renderPdfPage({ path: filePath, pageIndex: 0, scale, rotation: 0 });
+      }
+      request.then(async (rgbaData) => {
+        if (isClosed() || !isActive()) return;
+        try {
+          const decoded = preview.decodeWireBitmap(rgbaData);
+          if (!decoded) return;
+          const { w, h, rgba } = decoded;
+          const bitmap = await createImageBitmap(new ImageData(rgba, w, h));
+          if (isClosed() || !isActive()) { bitmap.close(); return; }
+          if (!_heavy && !doc.pdfDoc) {
+            // Before PDF.js: the viewport takes the page from the bitmap.
             const vp = await import('./pdf-viewport.js');
             vp.setPage(filePath, 1, w, h, 0, 0, 0);
             window.__pdfViewport.currentBitmap = bitmap;
             window.__pdfViewport.pageType = 'raster';
             window.__pdfViewport.dirty = true;
+            const { setPreviewBitmap } = await import('./page-bitmap-cache.js');
+            setPreviewBitmap(filePath, 1, 0, bitmap, w, h, scale, sourceRevision);
+            perfRecord('page.preview', performance.now() - _t0);
             console.log(`[PERF] cold-open preview painted: ${(performance.now() - _preT0).toFixed(0)}ms (${w}x${h})`);
-          } catch (e) {
-            console.warn('[PERF] cold-open preview paint failed:', e?.message ?? e);
+            return;
           }
-        }).catch((e) => {
-          console.warn('[PERF] cold-open pre-render failed:', e?.message ?? e);
-        });
-      }
-
+          const shown = await preview.showPagePreview({
+            filePath, pageNum: 1, rotation: 0, bitmap, w, h, scale, sourceRevision,
+          });
+          if (shown) perfRecord('page.preview', performance.now() - _t0);
+          console.log(`[PERF] cold-open preview ${shown ? 'painted' : 'kept'}: ${(performance.now() - _preT0).toFixed(0)}ms (${w}x${h}, scale ${scale})`);
+        } catch (e) {
+          console.warn('[PERF] cold-open preview paint failed:', e?.message ?? e);
+        }
+      }).catch((e) => {
+        console.warn('[PERF] cold-open pre-render failed:', e?.message ?? e);
+      });
     })();
 
     let typedArray;
+    let rangeSource = null;
+    let fileBytes = 0;
+    forgetPdfRangeSource(doc);
 
     if (preloadedData) {
       // Use pre-loaded bytes (e.g. from virtual printer capture, or browser file input)
       typedArray = preloadedData instanceof Uint8Array ? preloadedData : new Uint8Array(preloadedData);
       originalBytesCache.set(filePath, typedArray.slice());
     } else {
+      let desktop = false;
       if (isTauri()) {
         // Lock the file to prevent other apps from writing while we have it open
         // (skip on Android — content:// URIs don't support filesystem locking)
         const { isMobile } = await import('../core/platform.js');
         if (isClosed()) return;
-        if (!isMobile()) {
+        desktop = !isMobile();
+        if (desktop) {
           await lockFile(filePath);
           if (isClosed()) return;
         }
       }
 
-      // Read file using Tauri fs plugin or web file cache
       const _rd0 = performance.now();
-      const data = await readBinaryFile(filePath);
-      perfRecord('open.readFile', performance.now() - _rd0);
-      if (isClosed()) return;
-      if (!data) throw new Error('File system access not available');
-      // The bytes read are the saver's original; pdf.js gets its own copy
-      // (it transfers the buffer to a web worker, which detaches it). One
-      // copy of the file, not two: `new Uint8Array(uint8Array)` copied too.
-      const original = data instanceof Uint8Array ? data : new Uint8Array(data);
-      originalBytesCache.set(filePath, original);
-      typedArray = original.slice();
+      // A large file is read by range (PDF.js asks for what a page needs);
+      // a smaller one is read whole, as before.
+      if (desktop) rangeSource = await openLargeRangeSource(filePath);
+      if (isClosed()) { void rangeSource?.close(); return; }
+      if (rangeSource) {
+        perfRecord('open.rangeOpen', performance.now() - _rd0);
+        forgetRangeSource(filePath);
+        originalBytesCache.delete(filePath);
+        rangeSources.set(filePath, rangeSource);
+        doc._rangeSource = rangeSource;
+        fileBytes = rangeSource.length;
+      } else {
+        // Read file using Tauri fs plugin or web file cache
+        const data = await readBinaryFile(filePath);
+        perfRecord('open.readFile', performance.now() - _rd0);
+        if (isClosed()) return;
+        if (!data) throw new Error('File system access not available');
+        // The bytes read are the saver's original; pdf.js gets its own copy
+        // (it transfers the buffer to a web worker, which detaches it). One
+        // copy of the file, not two: `new Uint8Array(uint8Array)` copied too.
+        const original = data instanceof Uint8Array ? data : new Uint8Array(data);
+        originalBytesCache.set(filePath, original);
+        typedArray = original.slice();
+      }
     }
-    const fileBytes = typedArray.byteLength || typedArray.length;
-    console.log(`[PERF] File read done: ${(performance.now() - _t0).toFixed(0)}ms, size: ${fileBytes} bytes`);
+    if (typedArray) fileBytes = typedArray.byteLength || typedArray.length;
+    console.log(`[PERF] File read done: ${(performance.now() - _t0).toFixed(0)}ms, size: ${fileBytes} bytes${rangeSource ? ' (by range)' : ''}`);
     perfRecord('open.read', performance.now() - _t0);
 
     // Load PDF using pdf.js (this transfers the buffer to a worker)
-    doc.pdfDoc = await pdfjsLib.getDocument({
-      data: typedArray,
-      cMapUrl: '/pdfjs/web/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: '/pdfjs/web/standard_fonts/',
-    wasmUrl: '/pdfjs/web/wasm/',
-      isEvalSupported: false,
-      verbosity: 0,
-    }).promise;
+    doc.pdfDoc = await pdfjsLib.getDocument(rangeSource
+      ? pdfjsRangeParams(rangeSource)
+      : { ...PDFJS_OPTIONS, data: typedArray }).promise;
     if (isClosed()) return;
     console.log(`[PERF] PDF.js getDocument done: ${(performance.now() - _t0).toFixed(0)}ms, pages: ${doc.pdfDoc.numPages}`);
     perfRecord('open.pdfjs', performance.now() - _t0);
     const largeOpen = isLargeOpen({ numPages: doc.pdfDoc.numPages, byteLength: fileBytes });
     doc._largeOpen = largeOpen;
-    // pdf-lib parses the whole file on the main thread. A large set waits
-    // until the sheet on screen actually needs those colors or catalog fields.
+    // The pdf-lib read of the whole file (in a worker where there are
+    // workers) waits on a large set until the sheet on screen actually needs
+    // those colors or catalog fields.
     if (largeOpen) doc._deferSharedPdfLib = true;
 
     // ─── PDF.js v5.4 multi-doc pagesMapper RECOVERY PATCH ─────────────────
@@ -426,18 +597,25 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     import('./native-ocg-selection.js').then(m => m.initializeNativeOcgSelection(doc)).catch(() => {});
     doc._loadedAnnotationPages.clear();
     if (doc._annotationPagesReady) doc._annotationPagesReady.clear();
+    annotationReads.delete(doc);
     doc._pagesNeedingColorUpdate.clear();
-    doc._sharedPdfLibDoc = null;
-    doc._sharedPdfLibDocPromise = null;
-    doc.undoStack = [];
-    doc.redoStack = [];
+    forgetPdfLibReads(doc);
+    clearUndoHistory(doc);
     doc.selectedAnnotation = null;
     doc.selectedAnnotations = [];
     doc.currentPage = 1;
+    resetFirstPaint(doc);
 
-    // Eagerly start pdf-lib loading in background (don't await - runs in parallel with first paint).
+    // Start the pdf-lib read early, once the first sheet is on screen
+    // (pdfLibSource). Even in a worker, the parse competes with the first
+    // page render for the CPU; where it runs on the main thread, started
+    // before the page bitmap came back, it held that bitmap off the screen.
     // A large set leaves this until a sheet needs it. See _deferSharedPdfLib.
-    if (!doc._deferSharedPdfLib) getSharedPdfLibDoc(doc);
+    if (!doc._deferSharedPdfLib) {
+      afterFirstPaint(doc).then(() => {
+        if (!isClosed() && !doc._deferSharedPdfLib) pdfLibSource(doc);
+      });
+    }
 
     // UI operations — only if this is the active document
     if (isActive()) {
@@ -524,99 +702,36 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     }
     console.log(`[PERF] bookmarks DONE: ${(performance.now() - _t0).toFixed(0)}ms`);
 
-    // Load named line-style presets from the PDF catalog (data-only,
-    // non-blocking — waits on the shared pdf-lib doc that is already
-    // loading eagerly in the background).
+    // Catalog fields (line-style presets, Tool Chest sequence counters, the
+    // Markups List columns, spaces, scale viewports): read once with pdf-lib
+    // (pdf-lib-catalog.js, in the worker where there is one) and applied
+    // here. Data only and non-blocking; a value the user set while the read
+    // ran is kept.
     {
       if (!Array.isArray(doc.stylePresets)) doc.stylePresets = [];
-      getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-        if (isClosed() || !pdfLibDoc) return;
-        const { readStylePresetsFromCatalog } = await import('./saver/style-presets.js');
-        if (isClosed()) return;
-        const presets = readStylePresetsFromCatalog(pdfLibDoc);
-        if (isClosed()) return;
-        if (presets.length > 0) doc.stylePresets = presets;
+      pdfLibCatalog(doc).then((catalog) => {
+        if (isClosed() || !catalog) return;
+        if (catalog.stylePresets?.length > 0) doc.stylePresets = catalog.stylePresets;
       }).catch(() => { /* presets zijn optioneel — negeer leesfouten */ });
     }
     // Tool Chest sequence counters (OPS_ToolSequences): a reopened PDF
     // continues D-01, D-02, ... A placement made while the catalog was still
     // loading keeps the higher value.
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readToolSequencesFromCatalog } = await import('./saver/tool-sequences-catalog.js');
-      if (isClosed()) return;
-      const fromFile = readToolSequencesFromCatalog(pdfLibDoc);
+    pdfLibCatalog(doc).then((catalog) => {
+      if (isClosed() || !catalog) return;
+      const fromFile = catalog.toolSequences || {};
       const current = doc.toolSequences && typeof doc.toolSequences === 'object' ? doc.toolSequences : {};
       for (const [key, next] of Object.entries(fromFile)) {
         if (!Number.isInteger(current[key]) || current[key] < next) current[key] = next;
       }
       doc.toolSequences = current;
     }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readMarkupTextColumn, readMarkupSecondTextColumn } = await import('./markup-text-column.js');
-      if (isClosed()) return;
-      // A user may have named a column while the catalog was still loading.
-      if (!doc.markupTextColumnName) doc.markupTextColumnName = readMarkupTextColumn(pdfLibDoc);
-      if (!doc.markupTextColumn2Name) doc.markupTextColumn2Name = readMarkupSecondTextColumn(pdfLibDoc);
-      if (isActive()) {
-        const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
-        if (!isClosed()) updateAnnotationsList();
-      }
-    }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readMarkupChoiceColumn } = await import('./markup-choice-column.js');
-      if (isClosed()) return;
-      if (!doc.markupChoiceColumn) doc.markupChoiceColumn = readMarkupChoiceColumn(pdfLibDoc);
-      if (!doc.markupChoiceColumn2) {
-        const { readMarkupSecondChoiceColumn } = await import('./markup-second-choice-column.js');
-        if (isClosed()) return;
-        doc.markupChoiceColumn2 = readMarkupSecondChoiceColumn(pdfLibDoc);
-      }
-      if (isActive()) {
-        const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
-        if (!isClosed()) updateAnnotationsList();
-      }
-    }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readMarkupNumberColumn } = await import('./markup-number-column.js');
-      if (isClosed()) return;
-      if (!doc.markupNumberColumn) doc.markupNumberColumn = readMarkupNumberColumn(pdfLibDoc);
-      if (!doc.markupNumberColumn2) {
-        const { readMarkupSecondNumberColumn } = await import('./markup-second-number-column.js');
-        if (isClosed()) return;
-        doc.markupNumberColumn2 = readMarkupSecondNumberColumn(pdfLibDoc);
-      }
-      if (isActive()) {
-        const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
-        if (!isClosed()) updateAnnotationsList();
-      }
-    }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readMarkupCheckmarkColumn } = await import('./markup-checkmark-column.js');
-      const { readMarkupStatusSet } = await import('./markup-status-set.js');
-      if (isClosed()) return;
-      if (!doc.markupCheckmarkColumn) doc.markupCheckmarkColumn = readMarkupCheckmarkColumn(pdfLibDoc);
-      if (!doc.markupStatusSet && doc.markupStatusSet !== false) doc.markupStatusSet = readMarkupStatusSet(pdfLibDoc);
-      if (isActive()) {
-        const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
-        if (!isClosed()) updateAnnotationsList();
-      }
-    }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readMarkupFormulaColumn } = await import('./markup-formula-column.js');
-      if (isClosed()) return;
-      if (!doc.markupFormulaColumn) doc.markupFormulaColumn = readMarkupFormulaColumn(pdfLibDoc);
-      const { readFormulaCaptions } = await import('./formula-captions-pdf.js');
-      if (isClosed()) return;
-      if (doc.formulaCaptions == null) doc.formulaCaptions = readFormulaCaptions(pdfLibDoc);
-      const { readAssemblies } = await import('./assemblies-pdf.js');
-      if (isClosed()) return;
-      if (doc.assemblies == null) doc.assemblies = readAssemblies(pdfLibDoc);
+    // The Markups List columns, status set, Custom Captions and assemblies.
+    // A user may have named a column while the catalog was still loading.
+    pdfLibCatalog(doc).then(async (catalog) => {
+      if (isClosed() || !catalog) return;
+      applyMarkupColumns(doc, catalog);
+      if (doc.assemblies == null) doc.assemblies = catalog.assemblies;
       if (isActive()) {
         const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
         if (!isClosed()) updateAnnotationsList();
@@ -631,12 +746,11 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     // Spaces (/OPS_Spaces per page) into doc.spaces. Until then the saver
     // keeps the file's spaces (spaces/pdf-spaces.js).
     doc._spacesRead = false;
-    getSharedPdfLibDoc(doc).then(async (pdfLibDoc) => {
-      if (isClosed() || !pdfLibDoc) return;
-      const { readSpaces } = await import('../spaces/pdf-spaces.js');
+    pdfLibCatalog(doc).then(async (catalog) => {
+      if (isClosed() || !catalog) return;
       const { takeOverSpaces } = await import('../spaces/model.js');
       if (isClosed()) return;
-      if (takeOverSpaces(doc, readSpaces(pdfLibDoc)) && isActive()) {
+      if (takeOverSpaces(doc, catalog.spaces || []) && isActive()) {
         const m = await import('../annotations/rendering.js');
         if (isClosed()) return;
         if (doc.viewMode === 'continuous') m.redrawContinuous(); else m.redrawAnnotations();
@@ -654,7 +768,7 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     // Daarna pas de oude documentschaal uit localStorage: die gaat naar de
     // pagina's zonder paginaschaal (migrateDocumentScale). Lukt het lezen
     // niet, dan blijft hij zoals vroeger de schaal van het hele document.
-    import('./pdf-viewports.js').then(async ({ leesPdfViewports, beginViewportLezing, rondViewportLezingAf }) => {
+    import('./pdf-viewports.js').then(async ({ beginViewportLezing, rondViewportLezingAf }) => {
       if (isClosed()) return;
       const kenmerk = beginViewportLezing(doc);
       let paginaAantal = 0;
@@ -662,13 +776,12 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
       // annotaties in het model. Tot dan laat de saver ze in het bestand staan.
       doc._eigenViewportsGelezen = false;
       try {
-        const pdfLibDoc = await getSharedPdfLibDoc(doc);
-        const geldig = !isClosed() && pdfLibDoc;
-        if (rondViewportLezingAf(doc, kenmerk, geldig ? leesPdfViewports(pdfLibDoc) : null) && geldig) {
-          paginaAantal = pdfLibDoc.getPageCount();
-          const { leesEigenViewports } = await import('./viewports-vp.js');
+        const catalog = await pdfLibCatalog(doc);
+        const geldig = !isClosed() && catalog && catalog.viewports;
+        if (rondViewportLezingAf(doc, kenmerk, geldig ? catalog.viewports : null) && geldig) {
+          paginaAantal = catalog.pageCount;
           const { neemEigenViewportsOver } = await import('../annotations/named-viewports.js');
-          if (!isClosed() && neemEigenViewportsOver(doc, leesEigenViewports(pdfLibDoc)) && isActive()) {
+          if (!isClosed() && catalog.ownViewports && neemEigenViewportsOver(doc, catalog.ownViewports) && isActive()) {
             const m = await import('../annotations/rendering.js');
             if (doc.viewMode === 'continuous') m.redrawContinuous(); else m.redrawAnnotations();
           }
@@ -694,6 +807,10 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
       import('../annotations/scale-bar.js').then(async ({ detectScaleFromPdf }) => {
         if (isClosed() || doc.measureScale) return;
         try {
+          // It reads the page text: after the sheet is painted, with the
+          // text layer's PDF.js request (page-text-content.js).
+          if (doc._firstPaint) await untilOrAfter(doc._firstPaint, 10_000);
+          if (isClosed() || doc.measureScale) return;
           const result = await detectScaleFromPdf(1, doc);
           if (isClosed() || doc.measureScale) return;
           if (result && result.ratio > 0) {
@@ -1042,8 +1159,7 @@ export async function createBlankPDF(widthPt, heightPt, numPages) {
     // Reset annotation storage and state
     resetAnnotationStorage();
     doc.annotations = [];
-    doc.undoStack = [];
-    doc.redoStack = [];
+    clearUndoHistory(doc);
     doc.selectedAnnotation = null;
     doc.selectedAnnotations = [];
     doc.currentPage = 1;
@@ -1114,8 +1230,7 @@ export async function openUntitledPDFBytes(bytes, displayName, { widthPt, height
   if (widthPt > 0 && heightPt > 0) doc.pageDims = { 1: { widthPt, heightPt } };
   resetAnnotationStorage();
   doc.annotations = [];
-  doc.undoStack = [];
-  doc.redoStack = [];
+  clearUndoHistory(doc);
   doc.selectedAnnotation = null;
   doc.selectedAnnotations = [];
   doc.currentPage = 1;
@@ -1149,8 +1264,7 @@ export function cancelAnnotationLoading(doc) {
   doc._loadedAnnotationPages.clear();
   if (doc._annotationPagesReady) doc._annotationPagesReady.clear();
   doc._pagesNeedingColorUpdate.clear();
-  doc._sharedPdfLibDoc = null;
-  doc._sharedPdfLibDocPromise = null;
+  forgetPdfLibReads(doc);
 }
 
 // Mark all annotation pages as loaded (prevents background loader from overwriting after page ops)
@@ -1165,17 +1279,253 @@ export function markAllAnnotationPagesLoaded(numPages, doc) {
   }
 }
 
-// A large open queues catalog readers until a sheet asks for pdf-lib.
+// ─── pdf-lib reads at open ───────────────────────────────────────────────
+// The catalog fields and each page's markup data (colors, private keys,
+// layers: extractAnnotationColors) come from a pdf-lib parse of the file.
+// Where there are workers it runs in one (pdf-lib-session.js), so the main
+// thread neither spends the parse nor keeps its object graph; elsewhere
+// (node tests, a worker that failed) it runs here on the shared pdf-lib
+// document, as before.
+//
+// doc._pdfLibSource (PdfLibReads) holds them for the bytes the document
+// opened with. forgetPdfLibReads (pdf-lib-session.js) drops it on a reset,
+// new bytes or a close; the next read starts over.
+
+// A large open queues the catalog readers and the sheets until a sheet asks
+// for pdf-lib.
 function releaseSharedPdfLib(doc) {
   if (!doc?._deferSharedPdfLib) return;
   doc._deferSharedPdfLib = false;
   const waiters = doc._pdfLibWaiters || [];
   doc._pdfLibWaiters = null;
-  const pending = getSharedPdfLibDoc(doc);
+  const pending = pdfLibSource(doc);
   for (const waiter of waiters) pending.then(waiter, () => waiter(null));
 }
 
-// Get or lazily load the shared pdf-lib document for color extraction
+// With sheets still unread the worker stays for them, but not for ever: after
+// this long without a request it goes, and the next sheet parses anew.
+const PDF_LIB_UNUSED_MS = 90_000;
+
+// Every sheet's markups are in the model: the worker can go when idle.
+function allSheetsRead(doc) {
+  const total = doc?.pdfDoc?.numPages || 0;
+  return total > 0 && !!doc._annotationPagesReady && doc._annotationPagesReady.size >= total
+    && !(doc._pagesNeedingColorUpdate?.size > 0);
+}
+
+// A class, not a plain object: the document store would hand back a proxy
+// of a plain object, and `doc._pdfLibSource === source` would never hold.
+class PdfLibReads {
+  constructor() {
+    this.bytes = null;       // the file bytes these reads describe
+    this.reader = null;      // or the FileRangeSource they come from
+    this.session = null;     // PdfLibSession, or null when reading in place
+    this.catalog = null;     // readCatalogFields() of the file
+    this.settled = false;    // the catalog read is done (or failed)
+    this.unreadable = false; // pdf-lib could not read the file
+    this.ready = null;       // Promise<this>
+    this.pdfjs = null;       // the PDF.js transport of the document these bytes opened
+  }
+}
+
+/** The document's pdf-lib reads, started on first use: Promise<source|null>. */
+function pdfLibSource(doc) {
+  if (!doc) return Promise.resolve(null);
+  if (doc._pdfLibSource) return doc._pdfLibSource.ready;
+  if (doc._deferSharedPdfLib) {
+    return new Promise((resolve) => {
+      if (!doc._pdfLibWaiters) doc._pdfLibWaiters = [];
+      doc._pdfLibWaiters.push(resolve);
+    });
+  }
+  const bytes = originalBytesCache.get(doc.filePath);
+  // A file opened by range: the worker gets it in chunks from the source.
+  const reader = bytes ? null : doc._rangeSource || null;
+  if (!bytes && !reader) return Promise.resolve(null);
+  // Welke versie van het bestand de markeringen beschrijven: een /Annots-plek
+  // telt voor PDFium alleen zolang het bestand op schijf dezelfde versie is
+  // (ap-render-state.js).
+  doc._pdfLibBronRevisie = sourceWriteActive(doc.filePath) ? -1 : sourceRenderRevision(doc.filePath);
+  const source = new PdfLibReads();
+  // The bytes PDF.js opened: a save replaces the cached bytes but not the
+  // open PDF.js document, and a sheet read later must match that one.
+  source.bytes = bytes;
+  source.reader = reader;
+  source.pdfjs = doc.pdfDoc?._transport || null;
+  doc._pdfLibSource = source;
+  source.ready = openPdfLibSource(doc, source).catch((e) => {
+    console.warn('[loader] pdf-lib read failed:', e?.message ?? e);
+    source.unreadable = true;
+    source.settled = true;
+    return source;
+  });
+  return source.ready;
+}
+
+/** The catalog fields (pdf-lib-catalog.js) of `doc`, or null. */
+export function pdfLibCatalog(doc = getActiveDocument()) {
+  return pdfLibSource(doc).then((source) => source?.catalog || null);
+}
+
+async function openPdfLibSource(doc, source) {
+  const current = () => doc._pdfLibSource === source;
+  let catalog = null;
+  if (workersUsable()) {
+    const t0 = performance.now();
+    const session = new PdfLibSession(() => source.bytes || source.reader, {
+      canIdle: (idleMs) => current() && (allSheetsRead(doc) || idleMs >= PDF_LIB_UNUSED_MS),
+      // A parse kept here for stamp images or an edition reader goes too.
+      onIdle: () => { if (current() && !doc._sharedPdfLibDocPromise) doc._sharedPdfLibDoc = null; },
+    });
+    source.session = session;
+    try {
+      const opened = await session.open();
+      catalog = opened.catalog;
+      console.log(`[PERF] pdf-lib worker ready: ${(performance.now() - t0).toFixed(0)}ms (parse ${opened.parseMs.toFixed(0)}ms)`);
+      perfRecord('load.pdfLibWorker', performance.now() - t0);
+      perfRecord('load.pdfLibParseWorker', opened.parseMs);
+      perfRecord('load.pdfLibCatalog', opened.catalogMs);
+    } catch (e) {
+      session.close({ now: true });
+      source.session = null;
+      // A file pdf-lib cannot read fails the same way here: do not parse it
+      // again on the main thread.
+      if (!(e instanceof WorkerUnavailable)) throw e;
+      console.warn('[loader] pdf-lib worker unavailable, reading in place:', e.message);
+    }
+  }
+  if (!catalog) {
+    const pdfLibDoc = await getSharedPdfLibDoc(doc);
+    if (!pdfLibDoc) throw new Error('No file bytes');
+    const t0 = performance.now();
+    catalog = readCatalogFields(pdfLibDoc);
+    perfRecord('load.pdfLibCatalog', performance.now() - t0);
+  }
+  source.catalog = catalog;
+  source.settled = true;
+  // Annotatielagen (#468): de lijst lezen zodra het document er is — vóór
+  // de annotaties die dit document nodig hebben hun laag opzoeken. Eén keer
+  // per geopend bestand; daarna is het model de waarheid. Not from a read
+  // that a reset replaced: the document may hold another file by now.
+  if (current() && pasGelezenLagenToe(doc, catalog.layers)) {
+    import('./native-ocg-selection.js').then(m => m.initializeNativeOcgSelection(doc)).catch(() => {});
+    refreshAnnotationLayers();
+    if (state.documents[state.activeDocumentIndex] === doc) {
+      import('../annotations/rendering.js').then((m) => {
+        if (doc.viewMode === 'continuous') m.redrawContinuous(); else m.redrawAnnotations();
+      }).catch(() => {});
+    }
+  }
+  return source;
+}
+
+const NO_PAGE_DATA = Object.freeze({ colors: null, imageSources: 0, images: null, pdfLibDoc: null });
+
+// One page's markup data from `source`: { colors, imageSources, images, pdfLibDoc }.
+// colors is extractAnnotationColors' Map (null when unreadable). From the
+// worker, imageSources counts the page's image markups and images holds
+// their pictures (null when the worker could not make them: then they need
+// a pdf-lib document here); in place, pdfLibDoc is that document.
+// `withList`: from the worker also list, the page's markups in the shape of
+// PDF.js getAnnotations() when the page holds only the editor's own simple
+// markups (loader/own-markup-list.js), else null.
+async function pageMarkupData(doc, source, pageNum, { withList = false } = {}) {
+  if (!source || source.unreadable) return NO_PAGE_DATA;
+  const t0 = performance.now();
+  if (source.session) {
+    try {
+      const answer = await source.session.colors(pageNum, { withList });
+      for (const bytes of answer.snippets || []) bewaarKnipsel(bytes);
+      applyDeferredRichText(answer.colors);
+      perfRecord('load.colorsWorker', answer.ms);
+      if (answer.images) perfRecord('load.stampsWorker', answer.imagesMs);
+      if (withList) perfRecord('load.ownListWorker', answer.listMs);
+      perfRecord('load.colors', performance.now() - t0);
+      const images = Array.isArray(answer.images) ? new Map(answer.images) : null;
+      return { colors: answer.colors, imageSources: answer.imageSources || 0, images, pdfLibDoc: null,
+        list: Array.isArray(answer.list) ? answer.list : null };
+    } catch (e) {
+      // A reset closed the session, or the file could not be read there.
+      if (!(e instanceof WorkerUnavailable)) {
+        if (doc._pdfLibSource === source) console.warn(`[loader] page ${pageNum}: pdf-lib worker:`, e?.message ?? e);
+        return NO_PAGE_DATA;
+      }
+      // The worker died: this document reads in place from now on.
+      source.session = null;
+    }
+  }
+  const pdfLibDoc = await getSharedPdfLibDoc(doc).catch(() => null);
+  if (!pdfLibDoc) return NO_PAGE_DATA;
+  const colors = await extractAnnotationColors(pageNum, pdfLibDoc);
+  perfRecord('load.colors', performance.now() - t0);
+  return { colors, imageSources: 0, images: null, pdfLibDoc };
+}
+
+// The pdf-lib document the stamp images of a page come from: the one the
+// colors came from, or, after a worker read, a parse here only when the
+// page has image markups.
+async function stampPdfLibDoc(doc, data) {
+  if (!data) return null;
+  if (data.pdfLibDoc) return data.pdfLibDoc;
+  if (!data.imageSources || data.images) return null;
+  const t0 = performance.now();
+  const pdfLibDoc = await getSharedPdfLibDoc(doc).catch(() => null);
+  perfRecord('load.stampPdfLib', performance.now() - t0);
+  return pdfLibDoc;
+}
+
+// The pictures of a page's stamps and image markups (/IT /SquareImage), or
+// null when it has none. A plain Square (an app-made rectangle) carries no
+// picture: a page of those costs nothing here.
+async function pageStampImages(doc, page, viewport, annotations, pageNum, data) {
+  const stampAnnots = annotations.filter(a => a.subtype === 'Stamp');
+  const hasSquareImages = annotations.some(a => a.subtype === 'Square' && a.it === 'SquareImage');
+  if (stampAnnots.length === 0 && !hasSquareImages) return null;
+  const t0 = performance.now();
+  let map = null;
+  try {
+    const images = data?.images || null;
+    map = await extractStampImagesHybrid(
+      page, viewport, stampAnnots, pageNum, images ? null : await stampPdfLibDoc(doc, data),
+      { images, onStep: perfRecord, stampSheet: stampSheetFor(doc, page, pageNum, data) },
+    );
+  } catch (e) {
+    console.warn('[loader] hybrid stamp extraction failed:', e);
+  }
+  console.log(`[PERF] page ${pageNum}: stampExtraction (${stampAnnots.length} stamps): ${(performance.now() - t0).toFixed(0)}ms`);
+  perfRecord('load.stamps', performance.now() - t0);
+  return map;
+}
+
+// Stamps drawn from their own appearance (loader/stamp-sheet.js) instead of
+// a render of the sheet under them: built where the colors were read (the
+// pdf-lib worker, or the parse here), when that read is of the PDF.js
+// document `page` belongs to. Null when there is no such read.
+function stampSheetFor(doc, page, pageNum, data) {
+  const source = doc._pdfLibSource;
+  if (!source || !source.pdfjs || source.pdfjs !== page?._transport) return null;
+  let build = null;
+  if (data?.pdfLibDoc) build = (ids) => buildStampSheet(data.pdfLibDoc, pageNum, ids);
+  else if (source.session) build = (ids) => source.session.stampSheet(pageNum, ids);
+  if (!build) return null;
+  return async (stamps) => {
+    const ids = stamps.map((s) => s.id).filter(Boolean);
+    if (!ids.length) return null;
+    const t0 = performance.now();
+    const sheet = await build(ids);
+    perfRecord('load.stampSheetBuild', performance.now() - t0);
+    if (!sheet) return null;
+    return renderStampSheet(sheet, { rotation: page.rotate || 0, options: PDFJS_OPTIONS, onStep: perfRecord });
+  };
+}
+
+/**
+ * The whole file as a pdf-lib document on this thread, parsed on first use
+ * and kept until the document's reads are reset (or, after a worker read,
+ * until its worker goes idle). The loader itself needs it only where
+ * workers are unavailable and for stamp images; an edition reader that
+ * takes a pdf-lib document uses it too.
+ */
 export async function getSharedPdfLibDoc(doc) {
   if (!doc) {
     doc = getActiveDocument();
@@ -1183,40 +1533,83 @@ export async function getSharedPdfLibDoc(doc) {
   if (!doc) return null;
   if (doc._sharedPdfLibDoc) return doc._sharedPdfLibDoc;
   if (doc._sharedPdfLibDocPromise) return doc._sharedPdfLibDocPromise;
-  if (doc._deferSharedPdfLib) {
-    return new Promise((resolve) => {
-      if (!doc._pdfLibWaiters) doc._pdfLibWaiters = [];
-      doc._pdfLibWaiters.push(resolve);
-    });
+  let pdfBytes = doc._pdfLibSource?.bytes || originalBytesCache.get(doc.filePath);
+  // Opened by range: the whole file, read here on demand.
+  if (!pdfBytes && doc._rangeSource) {
+    pdfBytes = doc._rangeSource.memory
+      || (rangeSources.get(doc.filePath) === doc._rangeSource ? await getPdfBytes(doc.filePath) : await doc._rangeSource.readAll());
   }
-  const pdfBytes = originalBytesCache.get(doc.filePath);
   if (!pdfBytes) return null;
-  // Welke versie van het bestand de markeringen beschrijven: een /Annots-plek
-  // telt voor PDFium alleen zolang het bestand op schijf dezelfde versie is
-  // (ap-render-state.js).
-  doc._pdfLibBronRevisie = sourceWriteActive(doc.filePath) ? -1 : sourceRenderRevision(doc.filePath);
+  if (doc._sharedPdfLibDoc) return doc._sharedPdfLibDoc;
+  if (doc._sharedPdfLibDocPromise) return doc._sharedPdfLibDocPromise;
   const _pll0 = performance.now();
   console.log(`[PERF] PDFDocument.load START (${(pdfBytes.length / 1024 / 1024).toFixed(1)} MB)`);
-  doc._sharedPdfLibDocPromise = PDFDocument.load(pdfBytes, { ignoreEncryption: true }).then(pdfLibDoc => {
+  const promise = PDFDocument.load(pdfBytes, { ignoreEncryption: true }).then(pdfLibDoc => {
     console.log(`[PERF] PDFDocument.load DONE: ${(performance.now() - _pll0).toFixed(0)}ms`);
     perfRecord('load.pdfLibParse', performance.now() - _pll0);
-    doc._sharedPdfLibDoc = pdfLibDoc;
-    doc._sharedPdfLibDocPromise = null;
-    // Annotatielagen (#468): de lijst lezen zodra het document er is — vóór
-    // de annotaties die dit document nodig hebben hun laag opzoeken. Eén keer
-    // per geopend bestand; daarna is het model de waarheid.
-    if (pasGelezenLagenToe(doc, leesAnnotatieLagen(pdfLibDoc))) {
-      import('./native-ocg-selection.js').then(m => m.initializeNativeOcgSelection(doc)).catch(() => {});
-      refreshAnnotationLayers();
-      if (state.documents[state.activeDocumentIndex] === doc) {
-        import('../annotations/rendering.js').then((m) => {
-          if (doc.viewMode === 'continuous') m.redrawContinuous(); else m.redrawAnnotations();
-        }).catch(() => {});
-      }
+    // A reset meanwhile: the caller gets this parse, the document does not keep it.
+    if (doc._sharedPdfLibDocPromise === promise) {
+      doc._sharedPdfLibDoc = pdfLibDoc;
+      doc._sharedPdfLibDocPromise = null;
     }
     return pdfLibDoc;
+  }, (e) => {
+    if (doc._sharedPdfLibDocPromise === promise) doc._sharedPdfLibDocPromise = null;
+    throw e;
   });
-  return doc._sharedPdfLibDocPromise;
+  doc._sharedPdfLibDocPromise = promise;
+  return promise;
+}
+
+// The first sheet of a document on screen (renderer.js calls notePagePainted
+// once its bitmap was drawn, or at once on a path without a bitmap of its
+// own). The pdf-lib parse waits for it, up to FIRST_PAINT_WAIT_MS.
+const FIRST_PAINT_WAIT_MS = 1500;
+
+function resetFirstPaint(doc) {
+  let klaar;
+  doc._firstPaint = new Promise((resolve) => { klaar = resolve; });
+  doc._firstPaintDone = klaar;
+  doc._firstPaintDeadline = null;
+}
+
+/** renderer.js: the page of `doc` is on screen. */
+export function notePagePainted(doc) {
+  if (!doc?._firstPaintDone) return;
+  doc._firstPaintDone();
+  doc._firstPaintDone = null;
+}
+
+// Wait until the first sheet of `doc` is painted, up to FIRST_PAINT_WAIT_MS
+// (one budget for the document, however many waits share it). Nothing to
+// wait for once it was painted.
+async function untilFirstPaint(doc, span) {
+  if (!doc?._firstPaintDone) return;
+  doc._firstPaintDeadline ??= performance.now() + FIRST_PAINT_WAIT_MS;
+  const rest = doc._firstPaintDeadline - performance.now();
+  if (rest <= 0) return;
+  const t0 = performance.now();
+  let wacht;
+  await Promise.race([doc._firstPaint, new Promise((r) => { wacht = setTimeout(r, rest); })]);
+  clearTimeout(wacht);
+  perfRecord(span, performance.now() - t0);
+}
+
+// Before the pdf-lib parse starts: wait until the first sheet is painted.
+// Nothing to wait for once the parse ran or is running.
+async function afterFirstPaint(doc) {
+  if (!doc?._firstPaintDone || doc._pdfLibSource) return;
+  await untilFirstPaint(doc, 'load.waitPaint');
+}
+
+// The settled pdf-lib reads of `doc` in a worker, when they describe the
+// PDF.js document `page` belongs to (a reload or a save replaces one of
+// them): only then may they stand in for PDF.js getAnnotations().
+function ownListSource(doc, page) {
+  const source = doc._pdfLibSource;
+  if (!source?.settled || source.unreadable || !source.session) return null;
+  if (!source.pdfjs || source.pdfjs !== page?._transport || doc.pdfDoc?._transport !== source.pdfjs) return null;
+  return source;
 }
 
 // Load annotations for a single page on-demand (called when user navigates to a page)
@@ -1224,74 +1617,99 @@ export async function getSharedPdfLibDoc(doc) {
 async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false) {
   if (!doc || !doc.pdfDoc) return;
   const _sp0 = performance.now();
+  // PDF.js keeps what it parses for this: freed after a quiet spell.
+  noteActivity(doc);
 
   const page = await doc.pdfDoc.getPage(pageNum);
   const viewport = page.getViewport({ scale: 1 });
   console.log(`[PERF] page ${pageNum}: getPage: ${(performance.now() - _sp0).toFixed(0)}ms`);
+  perfRecord('load.getPage', performance.now() - _sp0);
 
-  const annotations = await page.getAnnotations();
+  // The pdf-lib worker already holds this file: on a page of only the
+  // editor's own simple markups it lists them as PDF.js would, together
+  // with their colors, and PDF.js is not asked (loader/own-markup-list.js).
+  let data = null;
+  let annotations = null;
+  const parsedSource = ownListSource(doc, page);
+  if (parsedSource) {
+    const _ol0 = performance.now();
+    data = await pageMarkupData(doc, parsedSource, pageNum, { withList: true });
+    if (!state.documents.includes(doc)) return;
+    if (data.list) {
+      annotations = keepPageAnnotations(page, data.list);
+      perfRecord('load.ownList', performance.now() - _ol0);
+    } else {
+      perfRecord('load.ownListMiss', performance.now() - _ol0);
+    }
+  }
+  if (!annotations) {
+    const _ga0 = performance.now();
+    annotations = await pageAnnotations(page);
+    perfRecord('load.getAnnotationsPdfjs', performance.now() - _ga0);
+  }
   console.log(`[PERF] page ${pageNum}: getAnnotations (${annotations.length} annots): ${(performance.now() - _sp0).toFixed(0)}ms`);
   perfRecord('load.getAnnotations', performance.now() - _sp0);
+  noteAnnotationsRead(doc, pageNum);
 
   if (annotations.length === 0) return;
 
-  const stampAnnots = annotations.filter(a => a.subtype === 'Stamp');
   const hasSquareAnnotations = annotations.some(a => a.subtype === 'Square');
   const hasCircleAnnotations = annotations.some(a => a.subtype === 'Circle');
   const hasLineAnnotations = annotations.some(a => a.subtype === 'Line');
   const needsExtraData = annotations.some(a => ['FreeText', 'Square', 'Circle', 'Line', 'PolyLine', 'Polygon', 'Ink', 'Text', 'Highlight', 'Underline', 'StrikeOut', 'Squiggly', 'Stamp', 'Caret', 'Link'].includes(a.subtype));
 
-  let stampImageMap = null;
-  let annotColorMap = null;
-
-  // Resolve pdf-lib doc early so both stamp images and colors can use it
-  let pdfLibDoc = doc._sharedPdfLibDoc || null;
-  if (!pdfLibDoc && (waitForColors || hasSquareAnnotations || hasCircleAnnotations || hasLineAnnotations)) {
+  // The pdf-lib reads of this document: colors and stamp images. A document
+  // that is not a large set reads them anyway (loadPDF starts them after
+  // the first paint): wait for them rather than read the colors twice.
+  let source = doc._pdfLibSource?.settled ? doc._pdfLibSource : null;
+  if (!source && (waitForColors || hasSquareAnnotations || hasCircleAnnotations || hasLineAnnotations
+      || (needsExtraData && !doc._deferSharedPdfLib))) {
+    await afterFirstPaint(doc);
+    if (!state.documents.includes(doc)) return;
     const _pl0 = performance.now();
     releaseSharedPdfLib(doc);
-    pdfLibDoc = await getSharedPdfLibDoc(doc);
-    console.log(`[PERF] page ${pageNum}: getSharedPdfLibDoc: ${(performance.now() - _pl0).toFixed(0)}ms`);
+    source = await pdfLibSource(doc);
+    console.log(`[PERF] page ${pageNum}: pdf-lib ready: ${(performance.now() - _pl0).toFixed(0)}ms`);
     perfRecord('load.waitPdfLib', performance.now() - _pl0);
+    // A parse in place held the main thread: let a bitmap or a frame through first.
+    await yieldToMain();
   }
 
-  if (stampAnnots.length > 0 || hasSquareAnnotations) {
-    const _st0 = performance.now();
-    try {
-      const pdfPage = await doc.pdfDoc.getPage(pageNum);
-      const extractViewport = pdfPage.getViewport({ scale: 1 });
-      stampImageMap = await extractStampImagesHybrid(
-        pdfPage, extractViewport, stampAnnots, pageNum, pdfLibDoc,
-      );
-    } catch (e) {
-      console.warn('[loader] hybrid stamp extraction failed:', e);
-    }
-    console.log(`[PERF] page ${pageNum}: stampExtraction (${stampAnnots.length} stamps): ${(performance.now() - _st0).toFixed(0)}ms`);
-    perfRecord('load.stamps', performance.now() - _st0);
-  }
-
-  if (needsExtraData) {
-    if (pdfLibDoc) {
+  if (needsExtraData && !data) {
+    if (source) {
       const _ce0 = performance.now();
-      annotColorMap = await extractAnnotationColors(pageNum, pdfLibDoc);
+      data = await pageMarkupData(doc, source, pageNum);
       console.log(`[PERF] page ${pageNum}: colorExtraction: ${(performance.now() - _ce0).toFixed(0)}ms`);
-      perfRecord('load.colors', performance.now() - _ce0);
+      await yieldToMain();
     } else {
       // On-demand path: pdf-lib not ready, skip colors for now
       doc._pagesNeedingColorUpdate.add(pageNum);
     }
   }
+  const annotColorMap = data?.colors || null;
+
+  // What follows holds the main thread in long pieces (a stamp render, the
+  // conversion and push of thousands of markups): let the first sheet's
+  // bitmap reach the screen first.
+  await untilFirstPaint(doc, 'load.waitPaintConvert');
+  if (!state.documents.includes(doc)) return;
+
+  const stampImageMap = await pageStampImages(doc, page, viewport, annotations, pageNum, data);
 
   const _cv0 = performance.now();
-  await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc);
-  refineLoadedAreas(doc, pageNum);
+  const pushed = await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc,
+    { onStep: perfRecord });
+  refineLoadedAreas(pushed);
   console.log(`[PERF] page ${pageNum}: convertAnnotations (${annotations.length}): ${(performance.now() - _cv0).toFixed(0)}ms`);
   console.log(`[PERF] page ${pageNum}: TOTAL: ${(performance.now() - _sp0).toFixed(0)}ms`);
   perfRecord('load.convert', performance.now() - _cv0);
   perfRecord('load.page', performance.now() - _sp0);
 }
 
-function refineLoadedAreas(doc, pageNum) {
-  const loaded = (doc?.annotations || []).filter((ann) => ann.page === pageNum && (
+// The models a page load just pushed, not every model of the document: per
+// sheet a walk over all markups made a whole-set load quadratic.
+function refineLoadedAreas(models) {
+  const loaded = (models || []).filter((ann) => ann && (
     ann.type === 'measureArea' || ann.type === 'filledArea' || ann.type === 'polygon' || ann.type === 'cloudPolyline'
   ));
   if (!loaded.length) return;
@@ -1327,35 +1745,82 @@ export async function ensureAnnotationsForPage(pageNum, doc) {
     await laden;
   } finally {
     annotationPageLoads.get(doc)?.delete(pageNum);
+    noteAnnotationsRead(doc, pageNum);
   }
 }
 // Running annotation loads per document and page (ensureAnnotationsForPage).
 const annotationPageLoads = new WeakMap();
+
+// Per document and page: settles once the page's annotation list was read
+// (from PDF.js or the pdf-lib worker), or its load ended. The text layer
+// waits for it (renderer.js): its own PDF.js request parses the whole page
+// and would otherwise sit in front of the markups in the PDF.js worker.
+const annotationReads = new WeakMap();
+
+function annotationReadEntry(doc, pageNum) {
+  let pages = annotationReads.get(doc);
+  if (!pages) { pages = new Map(); annotationReads.set(doc, pages); }
+  let entry = pages.get(pageNum);
+  if (!entry) {
+    let done;
+    const promise = new Promise((resolve) => { done = resolve; });
+    entry = { promise, done };
+    pages.set(pageNum, entry);
+  }
+  return entry;
+}
+
+function noteAnnotationsRead(doc, pageNum) {
+  if (doc) annotationReadEntry(doc, pageNum).done();
+}
+
+/** Settles once the annotation list of `pageNum` of `doc` was read. */
+export function annotationsRead(doc, pageNum) {
+  if (!doc || doc._annotationPagesReady?.has(pageNum)) return Promise.resolve();
+  return annotationReadEntry(doc, pageNum).promise;
+}
 
 // On a large set the sheet on screen loads first; the other sheets' markups
 // follow in the background, one sheet at a time with the window free in
 // between, so stamps and the Markups List are complete without visiting
 // every sheet. A sheet the user opens meanwhile loads at once (its load is
 // shared, ensureAnnotationsForPage).
-function loadOtherSheetsLater(doc) {
-  setTimeout(async () => {
-    const total = doc.pdfDoc?.numPages || 0;
-    let loaded = 0;
-    const refreshList = async () => {
-      if (getActiveDocument() !== doc) return;
-      const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
-      updateAnnotationsList();
-    };
-    for (let p = 1; p <= total; p++) {
-      if (!state.documents.includes(doc) || !doc.pdfDoc) return;
-      if (doc._loadedAnnotationPages?.has(p)) continue;
-      await ensureAnnotationsForPage(p, doc);
-      loaded += 1;
-      if (loaded % 8 === 0) await refreshList();
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    }
-    if (loaded) await refreshList();
-  }, 1500);
+// Sheets read and in the document (the large-open path reads a sheet's
+// markups when it is shown, like Bluebeam, not all of them after opening).
+export function annotationSheetsLoaded(doc = getActiveDocument()) {
+  const total = doc?.pdfDoc?.numPages || 0;
+  if (!doc?._largeOpen) return { loaded: total, total };
+  const loaded = doc._annotationPagesReady ? doc._annotationPagesReady.size : total;
+  return { loaded: Math.min(loaded, total), total };
+}
+
+/**
+ * Read every sheet's markups that has not been read yet (for what needs the
+ * whole document: the Markups List's every-sheet view, totals, an edition's
+ * whole-drawing work). `onProgress({ loaded, total })` after each sheet.
+ */
+export async function ensureAllAnnotations(doc = getActiveDocument(), { onProgress } = {}) {
+  const total = doc?.pdfDoc?.numPages || 0;
+  for (let p = 1; p <= total; p++) {
+    if (!state.documents.includes(doc) || !doc.pdfDoc) return;
+    if (doc._annotationPagesReady?.has(p)) continue;
+    await ensureAnnotationsForPage(p, doc);
+    onProgress?.(annotationSheetsLoaded(doc));
+  }
+  const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
+  if (getActiveDocument() === doc) updateAnnotationsList();
+}
+
+// How long the neighbours of a large set wait for the sheet on screen.
+const NEIGHBOUR_WAIT_MS = 4000;
+
+// `promise` settled or `ms` passed, whichever is first.
+function untilOrAfter(promise, ms) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).catch(() => {}),
+    new Promise((resolve) => { timer = setTimeout(resolve, ms); }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 // Load existing annotations from PDF
@@ -1371,12 +1836,20 @@ export async function loadExistingAnnotations(doc) {
     const pages = openAnnotationWindow(doc.currentPage || 1, doc.pdfDoc.numPages);
     for (const pageNum of pages) {
       if (!state.documents.includes(doc)) return;
+      // A neighbour's getPage and getAnnotations queue in the same PDF.js
+      // worker as the sheet on screen: its text, link and form layers go
+      // first (renderer.js sets doc._visibleLayers), up to a few seconds.
+      if (pageNum !== (doc.currentPage || 1) && doc._visibleLayers) {
+        const _nw0 = performance.now();
+        await untilOrAfter(doc._visibleLayers, NEIGHBOUR_WAIT_MS);
+        perfRecord('load.neighbourWait', performance.now() - _nw0);
+        if (!state.documents.includes(doc)) return;
+      }
       await ensureAnnotationsForPage(pageNum, doc);
     }
     // Catalog fields (scale viewports, spaces, columns) follow the open
     // sheet, once, instead of starting a full-file parse before first paint.
     releaseSharedPdfLib(doc);
-    loadOtherSheetsLater(doc);
     return;
   }
 
@@ -1418,11 +1891,14 @@ export async function loadExistingAnnotations(doc) {
     if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
 
     // Fetch all annotations in this batch in parallel
-    const annotResults = await Promise.all(pages.map(page => page.getAnnotations()));
+    const annotResults = await Promise.all(pages.map(page => pageAnnotations(page)));
     if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
+    for (const p of pagesToLoad) noteAnnotationsRead(doc, p);
 
-    // Resolve pdf-lib doc once per batch (cached after first call)
-    const pdfLibDoc = await getSharedPdfLibDoc(doc);
+    // The pdf-lib reads, once per batch (started on the first)
+    await afterFirstPaint(doc);
+    if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
+    const source = await pdfLibSource(doc);
     if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
 
     // Process each page's annotations — yield after every page to keep UI responsive
@@ -1443,39 +1919,29 @@ export async function loadExistingAnnotations(doc) {
         continue;
       }
 
-      const stampAnnots = annotations.filter(a => a.subtype === 'Stamp');
-      const hasSquareAnnotations = annotations.some(a => a.subtype === 'Square');
       const needsExtraData = annotations.some(a => ['FreeText', 'Square', 'Circle', 'Line', 'PolyLine', 'Polygon', 'Ink', 'Text', 'Highlight', 'Underline', 'StrikeOut', 'Squiggly', 'Stamp', 'Caret', 'Link'].includes(a.subtype));
 
       let stampImageMap = null;
-      let annotColorMap = null;
+      let data = null;
 
-      if (stampAnnots.length > 0 || hasSquareAnnotations) {
-        try {
-          stampImageMap = await extractStampImagesHybrid(
-            pages[i], viewport, stampAnnots, pageNum, pdfLibDoc,
-          );
-        } catch (e) {
-          console.warn('[loader] hybrid stamp extraction failed:', e);
-        }
+      if (needsExtraData && source) {
+        data = await pageMarkupData(doc, source, pageNum);
         if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
       }
+      const annotColorMap = data?.colors || null;
 
-      if (needsExtraData && pdfLibDoc) {
-        annotColorMap = await extractAnnotationColors(pageNum, pdfLibDoc);
-        if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
-      }
+      stampImageMap = await pageStampImages(doc, pages[i], viewport, annotations, pageNum, data);
+      if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) return;
 
-      await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc);
-      refineLoadedAreas(doc, pageNum);
+      refineLoadedAreas(await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc));
       if (doc._annotationPagesReady) doc._annotationPagesReady.add(pageNum);
     }
   }
 
   // Fix up pages that were loaded on-demand without color data
   if (doc._pagesNeedingColorUpdate.size > 0 && loadId === doc._annotationLoadId && state.documents.includes(doc)) {
-    const pdfLibDoc = await getSharedPdfLibDoc(doc);
-    if (pdfLibDoc && loadId === doc._annotationLoadId && state.documents.includes(doc)) {
+    const source = await pdfLibSource(doc);
+    if (source && !source.unreadable && loadId === doc._annotationLoadId && state.documents.includes(doc)) {
       const { invalidateScaleRegionCache } = await import('../annotations/scale-region.js');
       for (const pageNum of doc._pagesNeedingColorUpdate) {
         if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) break;
@@ -1501,33 +1967,18 @@ export async function loadExistingAnnotations(doc) {
         const page = await pdfDoc.getPage(pageNum);
         if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) break;
         const viewport = page.getViewport({ scale: 1 });
-        const annotations = await page.getAnnotations();
+        const annotations = await pageAnnotations(page);
         if (loadId !== doc._annotationLoadId || !state.documents.includes(doc)) break;
 
         if (annotations.length === 0) { restoreViewports(); continue; }
 
-        const stampAnnots = annotations.filter(a => a.subtype === 'Stamp');
-        const hasSquareAnnotations = annotations.some(a => a.subtype === 'Square');
         const needsExtraData = annotations.some(a => ['FreeText', 'Square', 'Circle', 'Line', 'PolyLine', 'Polygon', 'Ink', 'Text', 'Highlight', 'Underline', 'StrikeOut', 'Squiggly', 'Stamp', 'Caret', 'Link'].includes(a.subtype));
 
-        let stampImageMap = null;
-        let annotColorMap = null;
+        const data = needsExtraData ? await pageMarkupData(doc, source, pageNum) : null;
+        const annotColorMap = data?.colors || null;
+        const stampImageMap = await pageStampImages(doc, page, viewport, annotations, pageNum, data);
 
-        if (stampAnnots.length > 0 || hasSquareAnnotations) {
-          try {
-            stampImageMap = await extractStampImagesHybrid(
-              page, viewport, stampAnnots, pageNum, pdfLibDoc,
-            );
-          } catch (e) {
-            console.warn('[loader] hybrid stamp extraction failed:', e);
-          }
-        }
-        if (needsExtraData) {
-          annotColorMap = await extractAnnotationColors(pageNum, pdfLibDoc);
-        }
-
-        await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc);
-        refineLoadedAreas(doc, pageNum);
+        refineLoadedAreas(await _convertAndPushAnnotations(annotations, pageNum, viewport, stampImageMap, annotColorMap, doc));
         restoreViewports();
       }
       doc._pagesNeedingColorUpdate.clear();

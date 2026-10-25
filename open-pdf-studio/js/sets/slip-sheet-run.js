@@ -12,7 +12,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { state } from '../core/state.js';
 import { cacheWebFile, extractFileName, fileExists, invoke, isTauri, readBinaryFile } from '../core/platform.js';
 import { createTab, updateTabBar, updateWindowTitle } from '../ui/chrome/tabs.js';
-import { ensureAnnotationsForPage, getCachedPdfBytes, loadPDFIfNeeded } from '../pdf/loader.js';
+import { ensureAnnotationsForPage, getPdfBytes, loadPDFIfNeeded } from '../pdf/loader.js';
 import { goToPage } from '../pdf/renderer.js';
 import { savePDF } from '../pdf/saver.js';
 import { outputPathMatchesSource } from '../compare/revision-markup-pdf.js';
@@ -162,7 +162,7 @@ export async function runSlipSheet({ register, rows, pageCounts, revision, align
     target.saveTargetPath = null;
     updateTabBar();
     updateWindowTitle();
-    const bytes = getCachedPdfBytes(output);
+    const bytes = await getPdfBytes(output);
     if (!bytes?.length) throw new Error(`Could not read back ${extractFileName(output)}.`);
     if (!isTauri()) cacheWebFile(output, bytes);
     outputs.set(filePath, { path: output, fingerprint: await fingerprintPdfBytes(bytes) });

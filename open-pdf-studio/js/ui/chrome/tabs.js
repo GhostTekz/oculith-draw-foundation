@@ -1,5 +1,6 @@
 import { state, createDocument, getActiveDocument, findDocumentByPath, clearSelection } from '../../core/state.js';
 import { appVersion } from '../../core/app-version.js';
+import { undoStackOf } from '../../core/undo-stacks.js';
 import { renderPage, renderContinuous, clearPdfView } from '../../pdf/renderer.js';
 import { hideFormFieldsBar } from '../../pdf/form-layer.js';
 import { redrawAnnotations, redrawContinuous, updateQuickAccessButtons } from '../../annotations/rendering.js';
@@ -457,12 +458,8 @@ export async function renameDocument(index, newName) {
     await lockFile(newPath);
 
     // Update PDF byte cache
-    const { getCachedPdfBytes, setCachedPdfBytes, clearCachedPdfBytes } = await import('../../pdf/loader.js');
-    const cached = getCachedPdfBytes(oldPath);
-    if (cached) {
-      setCachedPdfBytes(newPath, cached);
-      clearCachedPdfBytes(oldPath);
-    }
+    const { moveCachedPdfBytes } = await import('../../pdf/loader.js');
+    moveCachedPdfBytes(oldPath, newPath);
 
     // Update document state
     const doc = getActiveDocument();
@@ -526,7 +523,7 @@ export function markDocumentModified(doc = getActiveDocument()) {
 export function markDocumentSaved(doc = getActiveDocument()) {
   if (doc) {
     doc.modified = false;
-    doc.savedUndoStackLength = (doc.undoStack || []).length;
+    doc.savedUndoStackLength = undoStackOf(doc).length;
     updateTabBar();
     updateWindowTitle();
   }

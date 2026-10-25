@@ -1,4 +1,5 @@
 import { pdfjsRecord } from './pdfjs-record.js';
+import { pageAnnotations } from './page-annotations.js';
 import { state, getActiveDocument } from '../core/state.js';
 import { AnnotationLayer } from 'pdfjs-dist';
 import { showFormFieldsBar as showBar, hideFormFieldsBar as hideBar } from '../bridge.js';
@@ -82,10 +83,12 @@ export function getAnnotIdToFieldName(doc = getActiveDocument()) {
 export async function createFormLayer(page, viewport, container, pageNum, isCurrent = () => true) {
   const doc = getActiveDocument();
   const annotIdToFieldName = getAnnotIdToFieldName(doc);
-  const annotations = await page.getAnnotations({ intent: 'display' });
+  const annotations = await pageAnnotations(page);
   if (!isCurrent()) return null;
 
-  const widgetAnnotations = annotations.filter(ann => ann.subtype === 'Widget');
+  // Copies: the answer is shared (page-annotations.js) and the annotation
+  // layer below works on its own objects.
+  const widgetAnnotations = annotations.filter(ann => ann.subtype === 'Widget').map(ann => ({ ...ann }));
   if (widgetAnnotations.length === 0) return null;
 
   for (const ann of widgetAnnotations) {

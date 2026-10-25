@@ -1,10 +1,13 @@
 import type { DocumentState } from '../../types/document.js';
+import { attachUndoHistory } from '../undo-stacks.js';
 
 /**
  * Creates a new document state object
  */
 export function createDocument(filePath: string | null = null): DocumentState {
-  return {
+  // The undo/redo arrays move out of the object into undo-stacks.js before
+  // the document enters the store; doc.undoStack/redoStack stay readable.
+  return attachUndoHistory({
     id: Date.now() + Math.random().toString(36).substr(2, 9),
     filePath: filePath,
     fileName: filePath ? filePath.split(/[\\/]/).pop()! : 'Untitled',
@@ -47,10 +50,11 @@ export function createDocument(filePath: string | null = null): DocumentState {
     _annotationPagesReady: new Set(),
     _sharedPdfLibDoc: null,
     _sharedPdfLibDocPromise: null,
+    _pdfLibSource: null,
     _pagesNeedingColorUpdate: new Set(),
     _annotationLoadId: 0,
     _isLoading: false,
-  };
+  });
 }
 
 let untitledCounter = 0;

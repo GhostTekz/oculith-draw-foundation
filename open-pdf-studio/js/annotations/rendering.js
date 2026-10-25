@@ -1,3 +1,4 @@
+import { $RAW } from 'solid-js/store';
 import { perfRecord } from '../core/perf.js';
 import { apInBitmap } from '../pdf/ap-render-state.js';
 import { state, getActiveDocument, getPageRotation, imageCache } from '../core/state.js';
@@ -18,7 +19,7 @@ import { drawSegmentLabels, drawCentroidMarker } from './rendering/measure-extra
 import { drawCustomCaption } from './rendering/custom-caption-draw.js';
 import { drawRaceway } from './rendering/raceway-draw.js';
 import { liveJunction } from './raceway-links.js';
-import { bumpAnnotationFrame, drawRacewayGesture } from '../tools/raceway/live-preview.js';
+import { bumpAnnotationFrame, annotationFrame, drawRacewayGesture } from '../tools/raceway/live-preview.js';
 import { maatlijnTekst } from './maat-label.js';
 import { maatlijnVelden } from './maatlijn-geometrie.js';
 import { tagWeergaveParams } from '../plattegrond/ruimte-koppeling.js';
@@ -467,11 +468,11 @@ function thinLw(width) {
   const scherm = laag('schermlijndikte');
   if (width === 0 || !scherm) return weergaveLijndikte(width, { scherm: false });
   const vp = window.__pdfViewport;
-  const _doc = state.documents[state.activeDocumentIndex];
+  const st = lijndikteStaat();
   // Blank docs (no filePath) bypass the viewport singleton and use doc.scale.
-  const scale = _weergaveZoom ?? ((vp && vp.active && _doc?.filePath)
+  const scale = _weergaveZoom ?? ((vp && vp.active && st.filePath)
     ? vp.zoom
-    : (_doc?.scale || 1));
+    : (st.docScale || 1));
   // Lineweight display OFF ('TL'): EVERYTHING renders as a true hairline —
   // exactly 1 screen pixel at any zoom (CAD LWDISPLAY off). Below 100 % zoom
   // a stroke gets at least one screen pixel.
@@ -490,9 +491,28 @@ function thinLw(width) {
   return weergaveLijndikte(width, {
     scherm: true,
     zoom: scale,
+    dunneLijnen: st.dunneLijnen,
+    slepen: st.slepen,
+  });
+}
+
+// What thinLw reads from the store, once per drawn frame: it runs for every
+// stroke, and through the store each call cost several proxy reads (a
+// noticeable part of drawing 20,000 markups). The viewport zoom stays live.
+let _lijndikteStaat = null;
+let _lijndikteFrame = -1;
+function lijndikteStaat() {
+  const frame = annotationFrame();
+  if (_lijndikteStaat && _lijndikteFrame === frame) return _lijndikteStaat;
+  const doc = state.documents[state.activeDocumentIndex];
+  _lijndikteFrame = frame;
+  _lijndikteStaat = {
+    filePath: doc?.filePath || null,
+    docScale: doc?.scale,
     dunneLijnen: !!state.preferences?.thinLines,
     slepen: !!(state.isDragging || state.isResizing || state.gMoveMode || state.gRotateMode),
-  });
+  };
+  return _lijndikteStaat;
 }
 
 // Pick the textbox edge whose midpoint is closest to (kx, ky).
@@ -1646,7 +1666,7 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         // .naturalWidth — support both so crop works with and without tint.
         const srcW = imgSrc.naturalWidth || imgSrc.width || 0;
         const srcH = imgSrc.naturalHeight || imgSrc.height || 0;
-        if (laag('bewerkhulp') && activeCropAnnotation() === annotation && srcW > 0 && srcH > 0) {
+        if (laag('bewerkhulp') && activeCropAnnotation()?.id === annotation.id && srcW > 0 && srcH > 0) {
           // Bijsnij-modus: de VOLLEDIGE bron tekenen op het vak waar hij
           // hoort, zodat de weggesneden rand (gedimd door de overlay)
           // zichtbaar blijft en een greep weer naar buiten kan. De
@@ -3054,6 +3074,52 @@ export function redrawAnnotations(lightweight = false) {
   try { return redrawAnnotationsNow(lightweight); } finally { perfRecord(lightweight ? 'redraw.frame' : 'redraw.full', performance.now() - perfT0); }
 }
 
+// ── Markup-layer cache (zie redrawAnnotationsNow) ──
+let _laag = { canvas: null };
+let _laagVers = false; // de volgende frame tekent vers (na een gebaar)
+let _laagTimer = 0;
+let _laagCanvas = null;
+function laagCanvas(w, h) {
+  if (!_laagCanvas) _laagCanvas = document.createElement('canvas');
+  if (_laagCanvas.width !== w || _laagCanvas.height !== h) { _laagCanvas.width = w; _laagCanvas.height = h; }
+  return _laagCanvas.getContext('2d');
+}
+const selectieSleutel = (ids) => [...ids].sort().join('|');
+function inverteerMatrix([a, b, c, d, e, f]) {
+  const det = a * d - b * c || 1e-12;
+  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}
+// 150 ms na het laatste frame uit de laag: één verse, scherpe tekening (die
+// de laag ook vernieuwt).
+function planLaagVernieuwing() {
+  if (_laagTimer) clearTimeout(_laagTimer);
+  _laagTimer = setTimeout(() => {
+    _laagTimer = 0;
+    _laagVers = true;
+    redrawAnnotations(true);
+  }, 150);
+}
+/**
+ * Forget a closed document's draw state: the draw lookup and the markup
+ * layer held it (and its markups) until the next redraw of another one.
+ */
+export function forgetDocumentDrawState(doc) {
+  if (_drawLookupDoc === doc) {
+    _drawLookup = { byId: new Map(), always: [] };
+    _drawLookupDoc = null;
+    _drawLookupToken = null;
+    _lastIndexedCount = -1;
+    spatialIndex.clear();
+  }
+  if (_laag.doc === doc) {
+    _laag = { canvas: null };
+    if (_laagCanvas) { _laagCanvas.width = 0; _laagCanvas.height = 0; }
+  }
+}
+
+/** Laat de volgende teken-frame de markeringenlaag vers opbouwen. */
+export function invalidateMarkupLayer() { _laagVers = true; }
+
 function redrawAnnotationsNow(lightweight = false) {
   bumpAnnotationFrame();
   notifyRedrawn(lightweight);
@@ -3061,10 +3127,14 @@ function redrawAnnotationsNow(lightweight = false) {
   if (_naHertekenen) _naHertekenen();
 
   // Read scale and annotations from the active document directly
-  // (bypass createMutable proxy getter caching)
+  // (bypass createMutable proxy getter caching). The markups are drawn from
+  // the raw objects: through the store every field a draw reads went through
+  // a proxy trap, over a second of an open at 20,000 markups. A redraw is
+  // asked for explicitly, never tracked, so it loses nothing; the selection
+  // is matched by id.
   const doc = state.documents[state.activeDocumentIndex];
   const scale = doc ? doc.scale : 1;
-  const annotations = doc ? doc.annotations : [];
+  const annotations = doc ? (doc.annotations?.[$RAW] || doc.annotations) : [];
 
   // Pan and zoom call the lightweight path each frame. Reuse the spatial
   // lookup then; rebuild after edits, document changes, or count changes.
@@ -3282,26 +3352,82 @@ function redrawAnnotationsNow(lightweight = false) {
   // (pdf/ap-render-state.js): niet nog eens natekenen.
   const apAlGetekend = apInBitmap(doc, curPage);
   // Weergavefilters één keer per doorloop gelezen (view-filters.js).
-  const drawAnnotations = useViewport && annotations.length > 200
-    ? visibleDrawItems(spatialIndex, _drawLookup, curPage, vpX, vpY, vpW, vpH, doc?.selectedAnnotations, annotations)
-    : annotations;
-  metWeergaveDoorloop(() => metSchaalBronnen(() => drawAnnotations.forEach(annotation => {
-    if (annotation.page !== curPage) return;
-    if (apAlGetekend.has(annotation.id)) return;
-    if (_buitenBeeld(annotation, vpX, vpY, vpW, vpH)) return;
-    const vermenigvuldig = annotation.blendMode === 'multiply' && !!textHighlightCtx && !overlaptEerdere(annotation);
-    if (annotation.blendMode !== 'multiply' && annotation.type !== 'textHighlight') {
-      const b = annotationBounds(annotation, { goedkoop: true });
-      if (b) eerdereVakken.push(b);
-    }
-    const targetCtx = ((annotation.type === 'textHighlight' || vermenigvuldig) && textHighlightCtx)
-      ? textHighlightCtx
-      : annotationCtx;
+  // De markeringenlaag (layer-cache.js): bij een pan- of zoomframe het
+  // laatst volledig getekende beeld, verplaatst en geschaald naar de nieuwe
+  // weergave, in plaats van elke markering opnieuw te tekenen (op een blad
+  // met tienduizenden markeringen honderden ms per frame). Geselecteerde
+  // markeringen en die op de vermenigvuldig-laag worden altijd live getekend;
+  // 150 ms na het laatste zulke frame volgt een scherpe, volledige tekening.
+  const laagMag = useViewport && !!_vpMatrix && annotations.length > 200;
+  const geselecteerd = new Set((doc?.selectedAnnotations || []).map(a => a?.id).filter(Boolean));
+  const laagGeldig = laagMag && lightweight && !_laagVers && _laag.doc === doc && _laag.page === curPage
+    && _laag.count === annotations.length && _laag.selectie === selectieSleutel(geselecteerd) && !!_laag.canvas;
+  const tekenOp = (targetCtx, annotation) => {
     // Wrap each annotation in save/restore to prevent clip leaks between annotations
     targetCtx.save();
     drawAnnotation(targetCtx, annotation);
     targetCtx.restore();
-  })));
+  };
+  const laagT0 = performance.now();
+  if (laagGeldig) {
+    annotationCtx.save();
+    annotationCtx.setTransform(...vermenigvuldigMatrix(_vpMatrix, vermenigvuldigMatrix(inverteerMatrix(_laag.matrix), [1, 0, 0, 1, -_laag.pad, -_laag.pad])));
+    annotationCtx.drawImage(_laag.canvas, 0, 0);
+    annotationCtx.restore();
+    metWeergaveDoorloop(() => metSchaalBronnen(() => {
+      for (const annotation of _laag.live) {
+        const doelCtx = annotation.__laagOpMarkeer && textHighlightCtx ? textHighlightCtx : annotationCtx;
+        tekenOp(doelCtx, annotation.ann);
+      }
+    }));
+    planLaagVernieuwing();
+    perfRecord('redraw.layerReuse', performance.now() - laagT0);
+  } else {
+    const pad = laagMag ? Math.round(Math.min(800, 0.2 * Math.max(annotationCanvas.width, annotationCanvas.height))) : 0;
+    const padPagina = laagMag ? pad / ((vp?.zoom || 1) * _vpBacking) : 0;
+    const drawAnnotations = useViewport && annotations.length > 200
+      ? visibleDrawItems(spatialIndex, _drawLookup, curPage, vpX - padPagina, vpY - padPagina, vpW + 2 * padPagina, vpH + 2 * padPagina, doc?.selectedAnnotations, annotations)
+      : annotations;
+    let laagCtx = null;
+    if (laagMag) {
+      laagCtx = laagCanvas(annotationCanvas.width + 2 * pad, annotationCanvas.height + 2 * pad);
+      laagCtx.setTransform(1, 0, 0, 1, 0, 0);
+      laagCtx.clearRect(0, 0, laagCtx.canvas.width, laagCtx.canvas.height);
+      laagCtx.setTransform(...vermenigvuldigMatrix([1, 0, 0, 1, pad, pad], _vpMatrix));
+    }
+    const live = [];
+    metWeergaveDoorloop(() => metSchaalBronnen(() => drawAnnotations.forEach(annotation => {
+      if (annotation.page !== curPage) return;
+      if (apAlGetekend.has(annotation.id)) return;
+      if (_buitenBeeld(annotation, vpX - padPagina, vpY - padPagina, vpW + 2 * padPagina, vpH + 2 * padPagina)) return;
+      const vermenigvuldig = annotation.blendMode === 'multiply' && !!textHighlightCtx && !overlaptEerdere(annotation);
+      if (annotation.blendMode !== 'multiply' && annotation.type !== 'textHighlight') {
+        const b = annotationBounds(annotation, { goedkoop: true });
+        if (b) eerdereVakken.push(b);
+      }
+      const opMarkeer = (annotation.type === 'textHighlight' || vermenigvuldig) && !!textHighlightCtx;
+      if (laagCtx && (opMarkeer || geselecteerd.has(annotation.id))) {
+        // Live: bovenop de laag, ook in de frames die de laag hergebruiken.
+        live.push({ ann: annotation, __laagOpMarkeer: opMarkeer });
+        return;
+      }
+      tekenOp(opMarkeer ? textHighlightCtx : (laagCtx || annotationCtx), annotation);
+    })));
+    if (laagCtx) {
+      annotationCtx.save();
+      annotationCtx.setTransform(1, 0, 0, 1, 0, 0);
+      annotationCtx.drawImage(laagCtx.canvas, -pad, -pad);
+      annotationCtx.restore();
+      metWeergaveDoorloop(() => metSchaalBronnen(() => {
+        for (const item of live) tekenOp(item.__laagOpMarkeer ? textHighlightCtx : annotationCtx, item.ann);
+      }));
+      _laag = { canvas: laagCtx.canvas, matrix: _vpMatrix.slice(), pad, doc, page: curPage, count: annotations.length, selectie: selectieSleutel(geselecteerd), live };
+      _laagVers = false;
+      perfRecord('redraw.layerBuild', performance.now() - laagT0);
+    } else if (!laagMag) {
+      _laag.canvas = null;
+    }
+  }
 
   annotationCtx.globalAlpha = 1;
   annotationCtx.globalCompositeOperation = 'source-over';
