@@ -6,8 +6,8 @@
     "component": {
       "type": "application",
       "name": "Oculith Draw Foundation",
-      "version": "2026.67.0",
-      "bom-ref": "oculith-foundation:2026.67.0"
+      "version": "2026.68.0",
+      "bom-ref": "oculith-foundation:2026.68.0"
     },
     "properties": [
       {
@@ -16,11 +16,11 @@
       },
       {
         "name": "ocudraw:cargoLockSha256",
-        "value": "e5da76373f0f2c2e6aa8c37c8ce68a7cd6ad9e0432b8571da539443a7517e5b2"
+        "value": "6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61"
       },
       {
         "name": "ocudraw:npmLockSha256",
-        "value": "4df2b97c4f1d95b85995059d25cfed4f8c9f544053579518880f351169f06344"
+        "value": "ce9a8b86561c2cd05de5f10e6f266a0cacb3004f8a9ff8d6f73fcacf4feec928"
       },
       {
         "name": "ocudraw:scope",

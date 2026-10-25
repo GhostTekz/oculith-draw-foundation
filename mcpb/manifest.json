@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ocudraw-community",
   "display_name": "Oculith Draw Foundation",
-  "version": "2026.67.0",
+  "version": "2026.68.0",
   "tools": [
     {
       "name": "app_open_pdf",

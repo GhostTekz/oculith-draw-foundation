@@ -1,6 +1,6 @@
 {
   "name": "ocudraw-community",
-  "version": "2026.67.0",
+  "version": "2026.68.0",
   "description": "Oculith Draw Foundation, an open source PDF workspace",
   "scripts": {
     "prepare:native-runtime": "node scripts/native-runtime.mjs",

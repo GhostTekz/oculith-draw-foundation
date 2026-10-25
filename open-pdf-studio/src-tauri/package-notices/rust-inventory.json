@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "cargoLockSha256": "e5da76373f0f2c2e6aa8c37c8ce68a7cd6ad9e0432b8571da539443a7517e5b2",
+  "cargoLockSha256": "6babee9a062d294e7b30fd1a34b05d6a29ffb9d144c5a5d1c6647ffbcaa45b61",
   "metadataCommand": "cargo metadata --locked --format-version 1",
   "packageCount": 784,
   "missingLicenseMetadata": [],
@@ -2847,7 +2847,7 @@
     },
     {
       "name": "open-pdf-studio",
-      "version": "2026.67.0",
+      "version": "2026.68.0",
       "source": null,
       "workspace": true,
       "licenseField": "LGPL-3.0-or-later",
