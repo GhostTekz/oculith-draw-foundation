@@ -649,7 +649,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   min-width: 0;
   max-width: 100%;
   height: 20px;
-  padding: 0 2px;
+  padding: 0 16px 0 4px;
   border: 1px solid var(--theme-border);
   border-radius: var(--ox-r-xs);
   background: var(--theme-input-bg);
@@ -670,6 +670,29 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-size: var(--ox-fs-2xs);
 }
 #annotations-panel .annotation-cell-input:focus { outline: none; border-color: var(--ox-accent-line); }
+/* The Status and choice (Kind) dropdowns in a 24 px row: the toolkit's own
+   dropdown is taller than the row and was cut in half. Drawn flat at the
+   row's size, with their own arrow, and centred in their cell. */
+#annotations-panel .annotation-status-select,
+#annotations-panel select.annotation-cell-input {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  height: 20px;
+  min-height: 0;
+  line-height: 18px;
+  padding: 0 16px 0 4px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 9px) 8px, calc(100% - 5px) 8px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#annotations-panel .annotation-list-item .annotation-cell-customChoice,
+#annotations-panel .annotation-list-item .annotation-cell-customChoice2 { display: flex; align-items: center; }
+#annotations-panel .annotation-list-item .annotation-cell-status .annotation-status-select { flex: 1 1 auto; }
 #annotations-panel .annotation-reply-error { color: var(--ox-danger-ink); font-size: var(--ox-fs-2xs); }
 .markups-dock #annotations-panel .annotations-list-page-header {
   --ml-header-pad: 12px;
