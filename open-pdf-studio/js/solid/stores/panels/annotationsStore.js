@@ -23,7 +23,17 @@ const [allMarkupsHidden, setAllMarkupsHiddenRaw] = createSignal(false);
 // Column order is independent of Group By. It only changes the list rows,
 // never PDF markup visibility or the current document selection.
 const [columnSort, setColumnSort] = createSignal(null);
-const [filterMode, setFilterMode] = createSignal('all');
+// Which markups the list shows: the sheet on screen ('current', the default)
+// or every sheet ('all'). The choice is remembered.
+const FILTER_KEY = 'ocudraw-markups-list-filter';
+const storedFilter = (() => { try { return localStorage.getItem(FILTER_KEY); } catch { return null; } })();
+const [filterMode, setFilterModeSignal] = createSignal(storedFilter === 'all' || storedFilter === 'current' ? storedFilter
+  : (storedFilter && storedFilter !== 'null' ? storedFilter : 'current'));
+const setFilterMode = (value) => {
+  const next = setFilterModeSignal(value);
+  if (next === 'all' || next === 'current') { try { localStorage.setItem(FILTER_KEY, next); } catch { /* private mode */ } }
+  return next;
+};
 // Text search filters Markups List rows only; it does not hide canvas markups.
 const [searchQuery, setSearchQuery] = createSignal('');
 // Review-statussen (kleine letters: none/accepted/cancelled/completed/rejected)

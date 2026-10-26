@@ -2303,7 +2303,9 @@ export default function AnnotationsPanel() {
                     on:keydown={(event) => onMarkupKeyDown(item, event)}
                     on:contextmenu={(event) => onMarkupContextMenu(item, event)}
                   >
-                    <div class="annotation-cell annotation-cell-gutter">{rowEye(item)}</div>
+                    <div class="annotation-cell annotation-cell-gutter">
+                      {rowEye(item)}
+                    </div>
                     <For each={displayColumns()}>{(column) => columnCell(item, column)}</For>
                   </div>
                   </Show>
