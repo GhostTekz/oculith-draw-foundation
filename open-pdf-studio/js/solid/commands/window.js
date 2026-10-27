@@ -79,7 +79,7 @@ for (const panelId of PANEL_IDS) {
 
 registerCommand({
   // The left panel host as a whole (the old navigation panel button).
-  id: 'window.leftPanel', label: 'common:commands.leftPanel', icon: navigationIcon, category: C,
+  id: 'window.leftPanel', label: 'common:commands.leftPanel', icon: navigationIcon, shortcut: 'Ctrl+B', category: C,
   checked: () => { const h = getHost('left'); return !!h && h.tabs.length > 0 && !h.collapsed; },
   keywords: ['navigation', 'side panel'],
   run: () => toggleHost('left'),

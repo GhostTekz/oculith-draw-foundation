@@ -12,6 +12,21 @@ import { getPanelEntry, panelTooltip, panelTitle } from './panelRegistry.js';
 import { clickAccessTab, toggleHost } from './panelActions.js';
 import { showPanelTabMenu } from '../../stores/contextMenuStore.js';
 
+const isRtl = () => document.documentElement.dir === 'rtl';
+
+/** Chevrons point where the panel goes: in to collapse, out to expand (mirrored right to left). */
+export function sideToggleIcon(host, collapsed, rtl = isRtl()) {
+  const outward = (host === 'left') !== rtl ? 'chevrons-right' : 'chevrons-left';
+  const inward = outward === 'chevrons-right' ? 'chevrons-left' : 'chevrons-right';
+  return collapsed ? outward : inward;
+}
+
+function sideToggleTitle(host, collapsed, t) {
+  const side = host === 'left' ? 'Left' : 'Right';
+  const text = t(`panelHost.${collapsed ? 'expand' : 'collapse'}${side}`);
+  return host === 'left' ? `${text} (Ctrl+B)` : text;
+}
+
 export default function AccessBar(props) {
   const { t } = useTranslation('common');
   const items = () => accessBarItems(workspaceLayout(), props.host);
@@ -38,6 +53,14 @@ export default function AccessBar(props) {
         <button type="button" class="ws-access-toggle" title={t('panelHost.toggleBottom')}
           aria-expanded={!collapsed()} onClick={() => toggleHost('bottom')}
           innerHTML={lucide(collapsed() ? 'chevrons-right' : 'chevrons-down')} />
+      </Show>
+      {/* Left and right: the same toggle at the top of the bar, pointing the
+          way the panel will go; collapsed, the bar (and this) stays. */}
+      <Show when={props.host !== 'bottom' && items().length > 0}>
+        <button type="button" class={`ws-access-toggle ws-host-collapse ws-host-collapse-${props.host}`}
+          title={sideToggleTitle(props.host, collapsed(), t)} aria-label={sideToggleTitle(props.host, collapsed(), t)}
+          aria-expanded={!collapsed()} onClick={() => toggleHost(props.host)}
+          innerHTML={lucide(sideToggleIcon(props.host, collapsed()))} />
       </Show>
       <For each={items()}>{(item) => (
         <button type="button" role="tab" class={`ws-access-tab${item.active ? ' active' : ''}`}
