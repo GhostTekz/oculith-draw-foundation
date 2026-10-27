@@ -1028,6 +1028,7 @@
       "sideBySide": "Side-by-side",
       "continuousSideBySide": "Continuous side-by-side",
       "hidePanels": "Hide or show all panels",
+      "leftPanel": "Collapse or expand the left panel",
       "panelToolChest": "Tool Chest panel",
       "panelMarkupsList": "Markups List panel",
       "panelThumbnails": "Thumbnails panel",

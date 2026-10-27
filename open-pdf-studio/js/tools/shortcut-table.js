@@ -234,6 +234,7 @@ export const SHORTCUTS = [
 
   // Workspace: panels (the external editor keys) and the menu bar mnemonics.
   { id: 'hidePanels', keys: 'Shift+F4', category: 'view', builtin: true, run: 'window.hidePanels' },
+  { id: 'leftPanel', keys: 'Ctrl+B', category: 'view', builtin: true, run: 'window.leftPanel' },
   { id: 'panelToolChest', keys: 'Alt+X', category: 'view', builtin: true, run: 'window.panel.toolChest' },
   { id: 'panelMarkupsList', keys: 'Alt+L', category: 'view', builtin: true, run: 'window.panel.markupsList' },
   { id: 'panelThumbnails', keys: 'Alt+T', category: 'view', builtin: true, run: 'window.panel.thumbnails' },
