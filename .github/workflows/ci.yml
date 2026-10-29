@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   source-and-editor:
@@ -38,6 +37,10 @@ jobs:
         working-directory: open-pdf-studio
         timeout-minutes: 10
         run: CHROMIUM_PATH="$(command -v google-chrome)" node scripts/addon-recombination-smoke.mjs
+      - name: Independent add-on composition
+        working-directory: open-pdf-studio
+        timeout-minutes: 10
+        run: CHROMIUM_PATH="$(command -v google-chrome)" node scripts/addon-multi-smoke.mjs
       - name: Native compile
         run: |
           cargo build -p pdfium-worker --locked

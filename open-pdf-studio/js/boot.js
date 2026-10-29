@@ -3,15 +3,16 @@
 import { EARLY, HOST_API_VERSION, installHost, loadHostModules } from './plugin/host.js';
 import { finish, setEdition, setStatus, side, startLaunchScreen } from './launch-screen.js';
 import { edition as foundation } from './editions/community.js';
+import { composeAddons, resolvePluginEntries } from './editions/compose-addons.js';
 
 // The edition's word under the monolith: the last word of its product name.
 const editionWord = (edition) => edition.launchWord || String(edition.productName || '').split(' ').pop();
 const secondaryWindow = new URLSearchParams(location.search).get('view') === 'printqueue';
 
-async function findPlugin(options) {
+async function findPlugins() {
   const tauri = window.__TAURI__?.core;
-  if (!tauri?.invoke) return null;
-  try { return await tauri.invoke('edition_plugin', options); } catch { return null; }
+  if (!tauri?.invoke) return [];
+  return resolvePluginEntries((command, options) => tauri.invoke(command, options));
 }
 
 // A release build serves the plug-in beside the editor's files: the web view
@@ -19,11 +20,12 @@ async function findPlugin(options) {
 // editor's own modules load; it runs only once the interface is ready. A
 // development build hands over the program text, imported from a Blob.
 function preloadPlugin(found) {
-  if (!found.url) return;
+  if (!found.url) return null;
   const link = document.createElement('link');
   link.rel = 'modulepreload';
   link.href = found.url;
   document.head.append(link);
+  return link;
 }
 
 async function importPlugin(found) {
@@ -32,36 +34,63 @@ async function importPlugin(found) {
   try { return await import(/* @vite-ignore */ url); } finally { URL.revokeObjectURL(url); }
 }
 
-async function installPlugin(found) {
-  installHost();
-  preloadPlugin(found);
-  if (found.css) {
-    const style = document.createElement('style');
-    style.dataset.editionPlugin = '';
-    style.textContent = found.css;
-    document.head.append(style);
-  }
-  await loadHostModules(EARLY, { parallel: true });
+async function importEntry(found) {
+  const preload = preloadPlugin(found);
   let plugin;
   try {
     plugin = await importPlugin(found);
   } catch (error) {
-    // The served file could not be loaded: take the program text instead.
-    const inline = found.url ? await findPlugin({ inline: true }) : null;
+    // A served file can fail to load while the verified inline copy is usable.
+    const tauri = window.__TAURI__?.core;
+    let inline = null;
+    if (found.url && tauri?.invoke) {
+      try {
+        const entries = await tauri.invoke('edition_plugins', { inline: true });
+        inline = entries?.find((entry) => entry.id === found.id && entry.kind === found.kind);
+      } catch { /* old native build */ }
+      if (!inline && found.kind === 'edition') {
+        try { inline = await tauri.invoke('edition_plugin', { inline: true }); } catch { /* unavailable */ }
+      }
+    }
+    preload?.remove();
     if (!inline?.js) throw error;
     console.warn('[edition] the plug-in could not load from its URL; loading its text.', error);
     plugin = await importPlugin(inline);
   }
+  return { plugin, preload };
+}
+
+function addStyle(found) {
+  if (!found.css) return null;
+  const style = document.createElement('style');
+  style.dataset.editionPlugin = found.id;
+  style.textContent = found.css;
+  document.head.append(style);
+  return style;
+}
+
+async function installEdition(found) {
+  const { plugin, preload } = await importEntry(found);
   if (plugin.hostApiVersion !== HOST_API_VERSION) {
+    preload?.remove();
     throw new Error(`The edition plug-in needs plug-in interface ${plugin.hostApiVersion}; this editor provides ${HOST_API_VERSION}.`);
   }
-  const edition = plugin.createEdition();
-  globalThis.__ocudrawEdition = edition;
-  setEdition(editionWord(edition));
-  setStatus(`Loading ${editionWord(edition)}`);
-  await loadHostModules(plugin.requires || []);
-  await plugin.start?.();
-  return plugin;
+  let style;
+  try {
+    const edition = plugin.createEdition();
+    globalThis.__ocudrawEdition = edition;
+    setEdition(editionWord(edition));
+    setStatus(`Loading ${editionWord(edition)}`);
+    style = addStyle(found);
+    await loadHostModules(plugin.requires || []);
+    await plugin.start?.();
+    return { plugin, edition };
+  } catch (error) {
+    style?.remove();
+    preload?.remove();
+    delete globalThis.__ocudrawEdition;
+    throw error;
+  }
 }
 
 (async () => {
@@ -72,17 +101,61 @@ async function installPlugin(found) {
     setTimeout(resolve, 30000); // never kept behind the screen
   });
   setStatus('Loading');
-  const found = await findPlugin();
+  let found = await findPlugins();
   let plugin = null;
-  if (found?.url || found?.js) {
+  let base = foundation;
+  if (found.length) {
     try {
-      plugin = await installPlugin(found);
+      installHost();
+      await loadHostModules(EARLY, { parallel: true });
+    } catch (error) {
+      console.error('[edition] add-on host could not start; starting Foundation.', error);
+      found = [];
+    }
+  }
+  const editionEntry = found.find((entry) => entry.kind === 'edition' && (entry.url || entry.js));
+  if (editionEntry) {
+    try {
+      ({ plugin, edition: base } = await installEdition(editionEntry));
     } catch (error) {
       console.error('[edition] the plug-in could not load; starting without it.', error);
       delete globalThis.__ocudrawEdition;
-      plugin = null;
     }
   }
+  let contributions = found.filter((item) => item.kind === 'contribution');
+  let reservedTemplateIds = [];
+  if (contributions.length) {
+    try {
+      reservedTemplateIds = (await import('./symbols/registry.js')).listTemplates().map((template) => template.id);
+    } catch (error) {
+      console.error('[edition] add-on registry could not load; skipping independent add-ons.', error);
+      contributions = [];
+    }
+  }
+  let composed = base;
+  const acceptedIds = new Set();
+  for (const entry of contributions) {
+    let preload;
+    let style;
+    try {
+      if (!entry.url && !entry.js) throw new Error('Add-on has no program');
+      const imported = await importEntry(entry);
+      preload = imported.preload;
+      if (typeof imported.plugin.createAddon !== 'function') throw new Error('Add-on must export createAddon()');
+      const addon = await imported.plugin.createAddon();
+      if (acceptedIds.has(entry.id)) throw new Error(`Duplicate add-on id: ${entry.id}`);
+      const result = composeAddons(composed, [{ id: entry.id, addon }], { reservedTemplateIds });
+      if (result.rejected.length) throw result.rejected[0].error;
+      style = addStyle(entry);
+      composed = result.edition;
+      acceptedIds.add(entry.id);
+    } catch (error) {
+      style?.remove();
+      preload?.remove();
+      console.error(`[edition] add-on ${entry.id || '(unknown)'} could not load; skipping it.`, error);
+    }
+  }
+  if (acceptedIds.size) globalThis.__ocudrawEdition = composed;
   if (!plugin) setEdition(editionWord(foundation));
   setStatus('Starting');
   await import('./main.js');

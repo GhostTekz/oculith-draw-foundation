@@ -28,7 +28,7 @@ What Oculith Draw writes into a PDF. Markups are standard PDF annotations with a
 
 ### [Add-ons](ADDONS.md)
 
-How an optional local add-on connects to the editor, what the host validates, and how to install or remove the active package.
+How optional local add-ons connect to the editor, what the host validates, and how to install or remove full edition and [independent packages](ADDON-PACKAGES.md).
 
 ### [Building from source](BUILDING.md)
 
