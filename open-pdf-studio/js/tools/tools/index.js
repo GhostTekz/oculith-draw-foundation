@@ -2,6 +2,7 @@
  * Tool registration — imports all tools and registers them in the tool-registry
  */
 import { registerTool } from '../tool-registry.js';
+import { registerAddonBoxTools } from '../addon-box-tools.js';
 import { edition } from '../../editions/active.js';
 import { handTool } from './hand-tool.js';
 import { selectTool } from './select-tool.js';
@@ -184,4 +185,5 @@ export function registerAllTools() {
   registerTool('spaceRect', spaceRectTool);
   registerTool('spacePolygon', spacePolygonTool);
   for (const id of edition.tools?.shapeToolIds || []) registerTool(id, shapeTool);
+  registerAddonBoxTools(edition.boxTools);
 }
