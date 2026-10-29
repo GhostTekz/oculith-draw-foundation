@@ -3,7 +3,7 @@
 import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
 
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -105,6 +105,15 @@ export function validateAddon(addon, expectedId) {
     if (addon.apiVersion !== 2) throw new Error('PDF hooks require add-on API version 2');
     validatePdfContribution(expectedId, addon.pdf);
   }
+  if (addon.listGrouping != null) {
+    if (addon.apiVersion !== 2 || !addon.listGrouping || typeof addon.listGrouping !== 'object'
+        || Array.isArray(addon.listGrouping)
+        || Object.keys(addon.listGrouping).some((key) => !['paths', 'select'].includes(key))
+        || typeof addon.listGrouping.paths !== 'function'
+        || typeof addon.listGrouping.select !== 'function') {
+      throw new Error('List grouping requires add-on API version 2 and paths/select callbacks');
+    }
+  }
   if (addon.dialogs != null && (typeof addon.dialogs !== 'object' || Array.isArray(addon.dialogs))) {
     throw new Error('dialogs must be an object');
   }
@@ -160,6 +169,9 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
         ...Object.fromEntries(SLOTS.map((slot) => [slot, [...(edition[slot] || []), ...(addon[slot] || [])]])),
         panelIds: [...(edition.panelIds || []), ...(addon.panels || []).map((panel) => panel.id)],
         pdf: addon.pdf ? composePdfHooks(edition.pdf, id, addon.pdf) : edition.pdf,
+        listGroupings: addon.listGrouping
+          ? [...(edition.listGroupings || []), { id, ...addon.listGrouping }]
+          : (edition.listGroupings || []),
       };
       accepted.push(id);
     } catch (error) {

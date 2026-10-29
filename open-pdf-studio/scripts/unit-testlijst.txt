@@ -474,3 +474,5 @@ js/editions/compose-addons.test.mjs
 js/editions/pdf-hooks.test.mjs
 js/annotations/extension-overlay.test.mjs
 js/annotations/extension-pointer.test.mjs
+js/ui/panels/addon-list-groups.test.mjs
+js/ui/panels/addon-list-groups-browser.test.mjs
