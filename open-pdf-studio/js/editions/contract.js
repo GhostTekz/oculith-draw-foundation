@@ -19,6 +19,11 @@ export function assertEditionContract(edition) {
       throw new Error('Edition tool IDs are invalid.');
     }
   }
+  if (edition.boxTools != null && (!Array.isArray(edition.boxTools)
+      || edition.boxTools.some((tool) => typeof tool?.id !== 'string'
+        || !tool.id || !tool.style || typeof tool.style !== 'object'))) {
+    throw new Error('Edition boxTools must contain tool IDs and styles.');
+  }
   if (edition.rendering != null) {
     for (const name of ['isUnderlay', 'drawCaption', 'boxShape', 'drawPolygon']) {
       if (typeof edition.rendering[name] !== 'function') throw new Error(`Edition rendering ${name} must be a function.`);

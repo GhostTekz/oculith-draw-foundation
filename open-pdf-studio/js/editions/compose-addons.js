@@ -1,9 +1,10 @@
 // Small, additive UI contributions. This module has no editor imports so the
 // complete edition can be assembled before active.js is evaluated.
 import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
+import { validateBoxTools } from './box-tools.js';
 
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -114,6 +115,10 @@ export function validateAddon(addon, expectedId) {
       throw new Error('List grouping requires add-on API version 2 and paths/select callbacks');
     }
   }
+  if (addon.boxTools != null) {
+    if (addon.apiVersion !== 2) throw new Error('boxTools require add-on API version 2');
+    validateBoxTools(expectedId, addon.boxTools);
+  }
   if (addon.dialogs != null && (typeof addon.dialogs !== 'object' || Array.isArray(addon.dialogs))) {
     throw new Error('dialogs must be an object');
   }
@@ -163,6 +168,9 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
         ...(edition.fileCommands || []).map((command) => command.shortcut)]
         .filter(Boolean).map((key) => key.replace(/\s+/g, '').toLowerCase()));
       for (const key of shortcuts(addon)) if (usedKeys.has(key)) throw new Error(`Duplicate shortcut: ${key}`);
+      const boxTools = addon.boxTools ? validateBoxTools(id, addon.boxTools) : [];
+      const usedTools = new Set([...(edition.tools?.shapeToolIds || []), ...(edition.boxTools || []).map((tool) => tool.id)]);
+      for (const tool of boxTools) if (usedTools.has(tool.id)) throw new Error(`Duplicate tool id: ${tool.id}`);
       edition = {
         ...edition,
         dialogs: { ...edition.dialogs, ...addon.dialogs },
@@ -172,6 +180,7 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
         listGroupings: addon.listGrouping
           ? [...(edition.listGroupings || []), { id, ...addon.listGrouping }]
           : (edition.listGroupings || []),
+        boxTools: [...(edition.boxTools || []), ...boxTools],
       };
       accepted.push(id);
     } catch (error) {

@@ -30,6 +30,8 @@ import { activeDrawingToolPreset, applyActiveToolPreset, recordRecentTool, stamp
   setToolChestLayerListener } from './tool-chest-presets.js';
 import { edition } from '../editions/active.js';
 
+const addonBoxTools = new Map((edition.boxTools || []).map((tool) => [tool.id, tool.style]));
+
 // Scale-aware Tool Chest sets resize Drawing Mode tools to the calibrated
 // scale at the placement point (the same scale measurements use).
 setToolChestScaleResolver((page, x, y) => getMeasureScale(page, x, y));
@@ -61,6 +63,11 @@ export function buildAnnotationProps(tool, startX, startY, endX, endY, e) {
 function buildBaseAnnotationProps(tool, startX, startY, endX, endY, e) {
   const prefs = state.preferences;
   const o = state.toolOverrides || {};
+
+  if (addonBoxTools.has(tool)) {
+    return { ...buildBaseAnnotationProps('box', startX, startY, endX, endY, e),
+      ...addonBoxTools.get(tool), ...o };
+  }
 
   // Helpers
   function snap(sx, sy, ex, ey) {

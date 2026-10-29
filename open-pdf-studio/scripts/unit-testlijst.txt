@@ -476,3 +476,6 @@ js/annotations/extension-overlay.test.mjs
 js/annotations/extension-pointer.test.mjs
 js/ui/panels/addon-list-groups.test.mjs
 js/ui/panels/addon-list-groups-browser.test.mjs
+js/editions/box-tools.test.mjs
+js/tools/addon-box-tools-browser.test.mjs
+js/tools/addon-box-tools-foundation.test.mjs
