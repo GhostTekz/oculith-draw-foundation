@@ -1,11 +1,12 @@
 // PDF metadata contributions for independent add-ons. A v2 add-on receives
 // strings and document models, never a mutable pdf-lib document or dictionary.
 // Full-edition v1 hooks remain the base and run exactly as before.
-import { PDFArray, PDFDict, PDFHexString, PDFName, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFRef, PDFString } from 'pdf-lib';
 
 const BASE = Symbol('base PDF hooks');
 const ADDONS = Symbol('PDF add-ons');
-const FIELDS = new Set(['catalogKeys', 'legacyCatalogKeys', 'annotationKeys', 'applyCatalog', 'catalogForSave',
+const FIELDS = new Set(['catalogKeys', 'legacyCatalogKeys', 'annotationKeys', 'legacyAnnotationKeys',
+  'applyCatalog', 'catalogForSave',
   'decorateAnnotation', 'annotationForSave', 'extractAnnotationKeys', 'catalogForExtract']);
 const MAX_CATALOG_TEXT = 256 * 1024;
 const MAX_LEGACY_CATALOG_BYTES = 2 * 1024 * 1024;
@@ -89,7 +90,9 @@ export function validatePdfContribution(id, pdf) {
   const catalogKeys = declaredKeys(id, 'catalogKeys', pdf.catalogKeys);
   const legacyKeys = legacyCatalogKeys(pdf.legacyCatalogKeys);
   if (legacyKeys.some((key) => catalogKeys.includes(key))) throw new Error('Duplicate PDF catalog key');
-  const annotationKeys = declaredKeys(id, 'annotationKeys', pdf.annotationKeys);
+  const namespacedAnnotationKeys = declaredKeys(id, 'annotationKeys', pdf.annotationKeys);
+  const legacyAnnotationKeys = extractionTagKeys(pdf.legacyAnnotationKeys);
+  const annotationKeys = [...namespacedAnnotationKeys, ...legacyAnnotationKeys];
   // Extraction-only claims do not grant annotation load or save access.
   const extractAnnotationKeys = extractionTagKeys(pdf.extractAnnotationKeys);
   if (!catalogKeys.length && !legacyKeys.length && !annotationKeys.length) {
@@ -112,7 +115,7 @@ export function validatePdfContribution(id, pdf) {
     throw new Error('PDF extractAnnotationKeys requires catalogForExtract');
   }
   return { id, catalogKeys: [...catalogKeys, ...legacyKeys], legacyCatalogKeys: legacyKeys,
-    annotationKeys, extractAnnotationKeys, ...Object.fromEntries(
+    annotationKeys, legacyAnnotationKeys, extractAnnotationKeys, ...Object.fromEntries(
     [...FIELDS].filter((name) => typeof pdf[name] === 'function').map((name) => [name, pdf[name]])) };
 }
 
@@ -230,9 +233,38 @@ function annotationFields(extra, keys) {
   const fields = {};
   for (const key of keys) {
     const value = extra?.extensionFields?.[key];
-    if (typeof value === 'string' && value.length <= MAX_ANNOTATION_TEXT) fields[key] = value;
+    if (typeof value === 'string' && value.length <= MAX_ANNOTATION_TEXT
+        && encoder.encode(value).length <= MAX_ANNOTATION_TEXT) fields[key] = value;
   }
   return fields;
+}
+
+// The saver supplies the original page's refs. A loaded annotation can keep
+// or replace an owned legacy field only when its exact source still belongs
+// to this page, has the same name, and has the same PDF subtype.
+function verifiedAnnotationSource(model, target, tools) {
+  const source = model?.pdfSource;
+  if (!source) return null; // newly drawn markup
+  if (source.modelId !== model.id) throw new Error('PDF annotation source changed; save again.');
+  const context = tools.sourceContext;
+  const refs = tools.sourceRefs;
+  const ref = Array.isArray(refs)
+    ? refs.find((item) => item instanceof PDFRef && item.toString() === source.ref) : null;
+  if (!context || !ref) throw new Error('PDF annotation source changed; save again.');
+  const original = context.lookup(ref);
+  if (!(original instanceof PDFDict)) throw new Error('PDF annotation source is unreadable; save again.');
+  const name = original.get(PDFName.of('NM'));
+  const decoded = name == null ? '' : context.lookup(name);
+  if (decoded && (!(decoded instanceof PDFString || decoded instanceof PDFHexString)
+      || decoded.value.length > 4096)) throw new Error('PDF annotation source is unreadable; save again.');
+  let originalName;
+  try { originalName = decoded ? decoded.decodeText() : ''; }
+  catch { throw new Error('PDF annotation source is unreadable; save again.'); }
+  if ((source.nm ?? '') !== originalName
+      || original.get(PDFName.of('Subtype'))?.toString() !== target.get(PDFName.of('Subtype'))?.toString()) {
+    throw new Error('PDF annotation source changed; save again.');
+  }
+  return original;
 }
 
 /** Append one package without changing the existing full-edition hook object. */
@@ -244,7 +276,7 @@ export function composePdfHooks(current, id, contribution) {
   const annotationKeys = [...(base?.annotationKeys || [])];
   const owned = new Set([...catalogKeys, ...annotationKeys]);
   for (const addon of addons) {
-    for (const key of [...addon.catalogKeys, ...addon.annotationKeys, ...addon.extractAnnotationKeys]) {
+    for (const key of new Set([...addon.catalogKeys, ...addon.annotationKeys, ...addon.extractAnnotationKeys])) {
       if (owned.has(key)) throw new Error(`PDF key ownership collision: ${key}`);
       owned.add(key);
     }
@@ -313,7 +345,25 @@ export function composePdfHooks(current, id, contribution) {
       base?.writeAnnotation?.(model, dict, tools);
       for (const addon of addons) {
         const fields = textFields(addon.annotationForSave?.(model), addon.annotationKeys, MAX_ANNOTATION_TEXT, addon.id);
+        const original = addon.legacyAnnotationKeys.some((key) => Object.hasOwn(fields, key))
+          ? verifiedAnnotationSource(model, dict, tools) : null;
         for (const [key, value] of Object.entries(fields)) {
+          if (addon.legacyAnnotationKeys.includes(key)) {
+            if (encoder.encode(value).length > MAX_ANNOTATION_TEXT) {
+              throw new Error(`PDF ${addon.id} returned an oversized legacy annotation field: ${key}`);
+            }
+            const raw = original?.get(PDFName.of(key));
+            if (raw != null) {
+              const prior = tools.sourceContext.lookup(raw);
+              if (!(prior instanceof PDFString || prior instanceof PDFHexString)
+                  || prior.value.length > (MAX_ANNOTATION_TEXT + 1) * 4) {
+                throw new Error(`Cannot replace unreadable PDF legacy annotation key: ${key}`);
+              }
+              try {
+                if (prior.decodeText().length > MAX_ANNOTATION_TEXT) throw new Error('oversized');
+              } catch { throw new Error(`Cannot replace unreadable PDF legacy annotation key: ${key}`); }
+            }
+          }
           dict.set(tools.PDFName.of(key), tools.pdfTextString(value));
         }
       }

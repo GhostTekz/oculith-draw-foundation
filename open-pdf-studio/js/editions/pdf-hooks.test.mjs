@@ -290,6 +290,72 @@ test('an extraction-only legacy tag claim gives a bounded source-page snapshot',
   assert.equal(collision.accepted.length, 0);
 });
 
+test('exact legacy annotation claims are bounded and reject stale source identity', async () => {
+  const id = 'sample.legacy';
+  const tag = 'LAB_AreaTagV1';
+  const { edition, rejected } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyAnnotationKeys: [tag],
+    decorateAnnotation(model, fields) { model.area = fields[tag]; return model; },
+    annotationForSave(model) { return model.pdfSource ? {} : { [tag]: model.area }; },
+  } } }]);
+  assert.deepEqual(rejected, []);
+  assert.deepEqual(edition.pdf.annotationKeys, [tag]);
+  assert.equal(edition.pdf.decorateLoadedAnnotation({ type: 'polygon' },
+    { extensionFields: { [tag]: 'area-1', OtherTag: 'hidden' } }).area, 'area-1');
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 200]);
+  const raw = pdf.context.obj({ Type: 'Annot', Subtype: 'Polygon', NM: PDFString.of('area-markup'),
+    [tag]: PDFHexString.fromText('area-1') });
+  const ref = pdf.context.register(raw);
+  page.node.set(PDFName.of('Annots'), pdf.context.obj([ref]));
+  const model = { id: 'area-markup', area: 'area-1', pdfSource: {
+    ref: ref.toString(), modelId: 'area-markup', nm: 'area-markup',
+  } };
+  const target = pdf.context.obj({ Type: 'Annot', Subtype: 'Polygon', NM: PDFString.of('area-markup') });
+  const tools = { PDFName, pdfTextString: PDFHexString.fromText,
+    sourceContext: pdf.context, sourceRefs: [ref] };
+  edition.pdf.writeAnnotation(model, target, tools);
+  carryUnmodeledAnnotationKeys(pdf.context, [ref], model, target, edition.pdf.annotationKeysToSkipCarry);
+  assert.equal(target.get(PDFName.of(tag)), raw.get(PDFName.of(tag)), 'unchanged tag retains raw PDF object');
+  const writing = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyAnnotationKeys: [tag], annotationForSave: (markup) => ({ [tag]: markup.area }),
+  } } }]).edition.pdf;
+  for (const changed of [
+    { ...model, pdfSource: { ...model.pdfSource, ref: '9999 0 R' } },
+    { ...model, pdfSource: { ...model.pdfSource, nm: 'forged' } },
+    { ...model, pdfSource: { ...model.pdfSource, modelId: 'other' } },
+  ]) assert.throws(() => writing.writeAnnotation(changed, target, tools), /source changed/);
+  const tooLarge = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyAnnotationKeys: [tag], annotationForSave: () => ({ [tag]: '😀'.repeat(5000) }),
+  } } }]).edition.pdf;
+  assert.throws(() => tooLarge.writeAnnotation({ id: 'new' }, target, tools), /oversized/);
+  const editorOwned = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyAnnotationKeys: ['OPS_MarkupIdV1'],
+  } } }]);
+  assert.equal(editorOwned.accepted.length, 0);
+  const unreadable = pdf.context.obj({ Data: PDFString.of('opaque') });
+  raw.set(PDFName.of(tag), pdf.context.register(unreadable));
+  const untouched = pdf.context.obj({ Type: 'Annot', Subtype: 'Polygon', NM: PDFString.of('area-markup') });
+  edition.pdf.writeAnnotation(model, untouched, tools);
+  carryUnmodeledAnnotationKeys(pdf.context, [ref], model, untouched, edition.pdf.annotationKeysToSkipCarry);
+  assert.equal(pdf.context.lookup(untouched.get(PDFName.of(tag))), unreadable);
+  const replacing = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyAnnotationKeys: [tag], annotationForSave: () => ({ [tag]: 'replacement' }),
+  } } }]).edition.pdf;
+  assert.throws(() => replacing.writeAnnotation(model, untouched, tools), /unreadable/);
+  const unrelated = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Stamp',
+    NM: PDFString.of('external-image') }));
+  const externalModel = { id: 'external-image', pdfSource: {
+    ref: '9999 0 R', modelId: 'external-image', nm: 'external-image',
+  } };
+  assert.doesNotThrow(() => edition.pdf.writeAnnotation(externalModel,
+    pdf.context.obj({ Type: 'Annot', Subtype: 'Square' }),
+    { ...tools, sourceRefs: [unrelated] }), 'an unrelated stale source does not block the save');
+  const full = composeAddons({ ...foundation, pdf: { annotationKeys: [tag] } },
+    [{ id, addon: { apiVersion: 2, id, pdf: { legacyAnnotationKeys: [tag] } } }]);
+  assert.equal(full.accepted.length, 0);
+});
+
 test('legacy extraction rejects missing ownership, partial output, and malformed tags', async () => {
   const id = 'sample.legacy', catalog = 'LAB_DrawingStateV1', tag = 'LAB_AreaTagV1';
   const invalid = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {

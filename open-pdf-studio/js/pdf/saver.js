@@ -3288,7 +3288,8 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
           if (carriedFrom) annotDict.set(PDFName.of('OPS_CarriedFromV1'), pdfTextString(carriedFrom));
           const assemblyId = assemblyIdText(ann.assemblyId);
           if (assemblyId) annotDict.set(PDFName.of('OPS_AssemblyIdV1'), pdfTextString(assemblyId));
-          edition.pdf?.writeAnnotation?.(ann, annotDict, { PDFName, pdfTextString });
+          edition.pdf?.writeAnnotation?.(ann, annotDict, { PDFName, pdfTextString,
+            sourceContext: context, sourceRefs: annotsLijst instanceof PDFArray ? annotsLijst.asArray() : [] });
           // Vul-alfa bewaren (zie fillOpacity hierboven) — één plek voor elke
           // annotatiesoort, vlak voordat de dict de pagina in gaat.
           if (fillOpacity !== undefined && fillOpacity !== null && fillOpacity !== opacity

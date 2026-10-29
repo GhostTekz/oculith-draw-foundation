@@ -26,6 +26,7 @@ import { timeSlicer } from '../../core/yield-to-main.js';
 // Documenten waarvan de knipsel-bronpagina's al in de store staan: dat
 // uitpakken gebeurt één keer per document, bij het eerste knipsel dat we zien.
 const _knipselBronnenGelezen = new WeakSet();
+const _addonTextEncoder = new TextEncoder();
 
 // Tekst van een eigen sleutel (OPS_*). De saver schrijft niet-ASCII-tekst als
 // UTF-16-hex, waarvan `.value` de hex-cijfers is. decodePdfTextObject decodeert
@@ -362,7 +363,8 @@ export async function extractAnnotationColors(pageNum, pdfDoc, {
           // allocate a much larger string from untrusted PDF input.
           if (raw.value.length > (16384 + 1) * 4) continue;
           const value = leesPdfTekst(context, raw);
-          if (value && value.length <= 16384) fields[name] = value;
+          if (value && value.length <= 16384
+              && _addonTextEncoder.encode(value).length <= 16384) fields[name] = value;
         }
         if (Object.keys(fields).length) colors.extensionFields = fields;
       }
