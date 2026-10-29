@@ -67,6 +67,13 @@ test('extracted Foundation package carries exact notices and no private add-on f
     await writeFile(path.join(privateDirectory, 'manifest.json'), '{}');
     await assert.rejects(verifyFoundationPackage(root), /Private add-on file/);
     await rm(privateDirectory, { recursive: true });
+    for (const directory of ['edition', 'addons']) {
+      const candidate = path.join(root, directory, 'packages', 'vendor.optional', 'plugin.js');
+      await mkdir(path.dirname(candidate), { recursive: true });
+      await writeFile(candidate, 'private package');
+      await assert.rejects(verifyFoundationPackage(root), /Private add-on file/);
+      await rm(path.join(root, directory), { recursive: true });
+    }
 
     const libraryDirectory = path.join(root, 'usr', 'lib');
     await writeFile(path.join(libraryDirectory, 'libcompat.so.1'), 'ordinary runtime library');

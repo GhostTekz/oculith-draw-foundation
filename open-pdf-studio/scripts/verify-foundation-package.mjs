@@ -53,9 +53,8 @@ function requireOne(files, predicate, description) {
 function privateAddonPath(name) {
   const parts = name.toLowerCase().split('/');
   return parts.includes(privateProductDirectory)
-    || parts.some((part) => unlistedBinary.test(part) || privateExecutable.test(part))
-    || /(?:^|\/)edition\/plugin\.(?:js|css)$/.test(name)
-    || /(?:^|\/)addons\/active(?:\/|$)/.test(name);
+    || parts.includes('edition') || parts.includes('addons')
+    || parts.some((part) => unlistedBinary.test(part) || privateExecutable.test(part));
 }
 
 async function rejectNoticeSymlink(resources, target, packageName) {

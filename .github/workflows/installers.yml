@@ -38,9 +38,16 @@ jobs:
       LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libwayland-client.so*;libwayland-cursor.so*;libwayland-egl.so*;libwayland-server.so*;libxkbcommon.so*;libxcb-randr.so*;libxcb-render.so*;libxcb-shm.so*;libXau.so*;libXdmcp.so*'
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Audit receipts must name the commit that built the installer, not
+          # GitHub's temporary pull-request merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: 26
+      - name: Verify public source boundary
+        working-directory: open-pdf-studio
+        run: node scripts/community-export-verify.mjs --published
       - uses: dtolnay/rust-toolchain@stable
       - name: Native dependencies (Linux)
         if: runner.os == 'Linux'
@@ -69,6 +76,9 @@ jobs:
       - name: Build installer
         working-directory: open-pdf-studio
         run: npm run tauri:community -- --bundles ${{ matrix.bundle }}
+      - name: Verify public editor bundle
+        working-directory: open-pdf-studio
+        run: node scripts/community-export-verify.mjs --published --bundle
       - name: Provide pinned linuxdeploy (Linux)
         if: matrix.bundle == 'deb'
         shell: bash
