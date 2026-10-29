@@ -1,7 +1,9 @@
 // Small, additive UI contributions. This module has no editor imports so the
 // complete edition can be assembled before active.js is evaluated.
+import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
+
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -93,11 +95,15 @@ function shortcuts(addon) {
 
 export function validateAddon(addon, expectedId) {
   if (!addon || typeof addon !== 'object' || Array.isArray(addon)) throw new Error('Add-on must be an object');
-  if (addon.apiVersion !== 1 || typeof addon.id !== 'string' || !addon.id || addon.id !== expectedId) {
+  if (![1, 2].includes(addon.apiVersion) || typeof addon.id !== 'string' || !addon.id || addon.id !== expectedId) {
     throw new Error('Add-on API version or package id mismatch');
   }
   for (const field of Object.keys(addon)) {
     if (!ALLOWED.has(field)) throw new Error(`Unsupported add-on field: ${field}`);
+  }
+  if (addon.pdf != null) {
+    if (addon.apiVersion !== 2) throw new Error('PDF hooks require add-on API version 2');
+    validatePdfContribution(expectedId, addon.pdf);
   }
   if (addon.dialogs != null && (typeof addon.dialogs !== 'object' || Array.isArray(addon.dialogs))) {
     throw new Error('dialogs must be an object');
@@ -153,6 +159,7 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
         dialogs: { ...edition.dialogs, ...addon.dialogs },
         ...Object.fromEntries(SLOTS.map((slot) => [slot, [...(edition[slot] || []), ...(addon[slot] || [])]])),
         panelIds: [...(edition.panelIds || []), ...(addon.panels || []).map((panel) => panel.id)],
+        pdf: addon.pdf ? composePdfHooks(edition.pdf, id, addon.pdf) : edition.pdf,
       };
       accepted.push(id);
     } catch (error) {

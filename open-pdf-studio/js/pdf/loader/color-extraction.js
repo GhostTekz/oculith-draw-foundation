@@ -358,6 +358,9 @@ export async function extractAnnotationColors(pageNum, pdfDoc, {
           const key = annotDict.get(PDFName.of(name));
           const raw = key ? context.lookup(key) : null;
           if (!(raw instanceof PDFHexString || raw instanceof PDFString)) continue;
+          // Check the encoded representation before decodePdfTextObject can
+          // allocate a much larger string from untrusted PDF input.
+          if (raw.value.length > (16384 + 1) * 4) continue;
           const value = leesPdfTekst(context, raw);
           if (value && value.length <= 16384) fields[name] = value;
         }

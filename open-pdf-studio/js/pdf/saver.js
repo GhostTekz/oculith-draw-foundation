@@ -3320,7 +3320,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
           // installed in this editor. Keep those fields when editing its
           // ordinary shape, after verifying the original PDF object identity.
           carryUnmodeledAnnotationKeys(context, annotsLijst instanceof PDFArray ? annotsLijst.asArray() : [],
-            annRaw, annotDict, edition.pdf?.annotationKeys);
+            annRaw, annotDict, edition.pdf?.annotationKeysToSkipCarry ?? edition.pdf?.annotationKeys);
           const extRef = extVoorRegistratie(context, annRaw, annotDict, extPlan, { fillOpacity });
           // Wat the external editor op elke markering schrijft (/P, /NM, /Subj, datums, /RC,
           // /Measure): saver/ext-natief.js.
