@@ -4,7 +4,7 @@ import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
 import { validateBoxTools } from './box-tools.js';
 
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', 'documentTitle', 'authorName', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', 'launchActions', 'documentTitle', 'authorName', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -129,6 +129,16 @@ export function validateAddon(addon, expectedId) {
       throw new Error('Home actions need label and run callbacks');
     }
   }
+  if (addon.launchActions != null) {
+    if (addon.apiVersion !== 2 || !Array.isArray(addon.launchActions)) {
+      throw new Error('Launch actions require add-on API version 2 and an array');
+    }
+    entries('launch action', addon.launchActions);
+    if (addon.launchActions.some((action) => typeof action.label !== 'function'
+        || typeof action.run !== 'function')) {
+      throw new Error('Launch actions need label and run callbacks');
+    }
+  }
   if (addon.documentTitle != null && (addon.apiVersion !== 2 || typeof addon.documentTitle !== 'function')) {
     throw new Error('Document title provider requires add-on API version 2 and a function');
   }
@@ -188,10 +198,15 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
       const usedTools = new Set([...(edition.tools?.shapeToolIds || []), ...(edition.boxTools || []).map((tool) => tool.id)]);
       for (const tool of boxTools) if (usedTools.has(tool.id)) throw new Error(`Duplicate tool id: ${tool.id}`);
       const homeActions = edition.home?.actions || [];
+      const launchActions = edition.launchActions || [];
       const previousTitle = edition.documentTitle;
       const usedHomeActions = new Set(homeActions.map((action) => action.id).filter(Boolean));
       for (const action of addon.homeActions || []) {
         if (usedHomeActions.has(action.id)) throw new Error(`Duplicate home action id: ${action.id}`);
+      }
+      const usedLaunchActions = new Set(launchActions.map((action) => action.id));
+      for (const action of addon.launchActions || []) {
+        if (usedLaunchActions.has(action.id)) throw new Error(`Duplicate launch action id: ${action.id}`);
       }
       edition = {
         ...edition,
@@ -208,6 +223,7 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
           description: edition.home?.description || (() => 'Open a plan set to place symbols, mark up details, and measure the work.'),
           actions: [...homeActions, ...addon.homeActions],
         } : edition.home,
+        launchActions: [...launchActions, ...(addon.launchActions || [])],
         documentTitle: addon.documentTitle ? async (path) => {
           for (const provider of [previousTitle, addon.documentTitle]) {
             if (!provider) continue;
