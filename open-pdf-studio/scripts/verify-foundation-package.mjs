@@ -128,8 +128,11 @@ export async function verifyFoundationPackage(root, { artifact } = {}) {
 
   const version = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8')).version;
   const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
+  const sourceTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'],
+    { cwd: repository, encoding: 'utf8' }).trim();
   return {
-    product: 'Oculith Draw Foundation', version, sourceCommit,
+    product: 'Oculith Draw Foundation', version, sourceCommit, sourceTree,
+    sourceArchiveUrl: `https://github.com/GhostTekz/oculith-foundation/archive/${sourceCommit}.tar.gz`,
     resources: resourcesRelative, noticeFilesChecked: notices,
     ...(artifact ? { artifactSha256: await sha256(path.resolve(artifact)) } : {}),
   };
