@@ -104,3 +104,58 @@ test('a stopped replacement restores the prior package before retrying', async (
     assert.deepEqual(await readdir(packages), ['recover.addon']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('a locked helper prevents removal before the enabled index changes', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'addon-manager-test-'));
+  try {
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: await fixture(root, 'locked.addon'), appDataDir });
+    await assert.rejects(removeAddon({ id: 'locked.addon', appDataDir,
+      renameFile: async () => { throw Object.assign(new Error('locked executable'), { code: 'EACCES' }); },
+    }), /locked executable/);
+    assert.deepEqual(await enabled(appDataDir), ['locked.addon']);
+    assert.deepEqual(await readdir(path.join(appDataDir, 'addons/packages')), ['locked.addon']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('failed index update restores the staged package', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'addon-manager-test-'));
+  try {
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: await fixture(root, 'rollback.addon'), appDataDir });
+    await assert.rejects(removeAddon({ id: 'rollback.addon', appDataDir,
+      writeIndexFile: async () => { throw new Error('index unavailable'); },
+    }), /index unavailable/);
+    assert.deepEqual(await enabled(appDataDir), ['rollback.addon']);
+    assert.deepEqual(await readdir(path.join(appDataDir, 'addons/packages')), ['rollback.addon']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('locked cleanup stays disabled and is retried after the editor exits', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'addon-manager-test-'));
+  try {
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: await fixture(root, 'pending.addon'), appDataDir });
+    assert.equal(await removeAddon({ id: 'pending.addon', appDataDir,
+      removeFile: async () => { throw Object.assign(new Error('locked executable'), { code: 'EBUSY' }); },
+    }), true);
+    assert.deepEqual(await enabled(appDataDir), []);
+    assert.deepEqual(await readdir(path.join(appDataDir, 'addons/packages')), ['.remove-pending.addon']);
+    await installAddon({ packageDir: await fixture(root, 'next.addon'), appDataDir });
+    assert.deepEqual(await readdir(path.join(appDataDir, 'addons/packages')), ['next.addon']);
+    assert.deepEqual(await enabled(appDataDir), ['next.addon']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('an interrupted removal restores an enabled package before the next operation', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'addon-manager-test-'));
+  try {
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: await fixture(root, 'interrupted.addon'), appDataDir });
+    const packages = path.join(appDataDir, 'addons/packages');
+    await rename(path.join(packages, 'interrupted.addon'), path.join(packages, '.remove-interrupted.addon'));
+    await setAddonEnabled({ id: 'interrupted.addon', appDataDir, enabled: true });
+    assert.deepEqual(await readdir(packages), ['interrupted.addon']);
+    assert.deepEqual(await enabled(appDataDir), ['interrupted.addon']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

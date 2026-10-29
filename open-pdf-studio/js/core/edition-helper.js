@@ -26,6 +26,57 @@ export function helperCall(method, params = null, { timeoutMs = 0 } = {}) {
   return Promise.race([call, late]).finally(() => clearTimeout(timer));
 }
 
+/** Whether an enabled, verified package has its own native helper. */
+export async function addonHelperAvailable(packageId) {
+  if (!isTauri()) return false;
+  try { return await invoke('addon_helper_available', { packageId }); } catch { return false; }
+}
+
+/** Route a call to one enabled package's helper. */
+export function addonHelperCall(packageId, method, params = null, { timeoutMs = 0 } = {}) {
+  if (!isTauri()) return Promise.reject(new Error('A native add-on helper needs the desktop app.'));
+  const call = invoke('addon_helper_call', { packageId, method, params });
+  if (!(timeoutMs > 0)) return call;
+  let timer = 0;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error(`The add-on helper did not answer ${method} within ${Math.round(timeoutMs / 1000)} s.`), { code: 'timeout' })), timeoutMs);
+  });
+  return Promise.race([call, late]).finally(() => clearTimeout(timer));
+}
+
+let addonListening = null;
+const addonHandlers = new Map();
+
+/** Receive events from one package helper, including helper-exit. */
+export async function onAddonHelperEvent(packageId, name, handler) {
+  const key = `${packageId}\0${name}`;
+  if (!addonHandlers.has(key)) addonHandlers.set(key, new Set());
+  const subscribers = addonHandlers.get(key);
+  subscribers.add(handler);
+  if (!addonListening) {
+    const events = globalThis.window?.__TAURI__?.event;
+    addonListening = Promise.resolve().then(() => {
+      if (!events) throw new Error('A native add-on helper needs the desktop app.');
+      return events.listen('addon-helper', ({ payload }) => {
+        for (const fn of addonHandlers.get(`${payload?.packageId}\0${payload?.event}`) || []) fn(payload.payload);
+      });
+    }).catch((error) => {
+      addonListening = null;
+      throw error;
+    });
+  }
+  try { await addonListening; }
+  catch (error) {
+    subscribers.delete(handler);
+    if (!subscribers.size) addonHandlers.delete(key);
+    throw error;
+  }
+  return () => {
+    subscribers.delete(handler);
+    if (!subscribers.size) addonHandlers.delete(key);
+  };
+}
+
 let listening = null;
 const handlers = new Map();
 

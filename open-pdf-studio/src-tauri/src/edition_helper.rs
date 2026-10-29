@@ -1,15 +1,18 @@
 //! The optional add-on helper bridge: a published, generic part of the editor.
 //!
-//! An add-on may declare a helper program in its manifest. The editor starts
-//! only that selected program on the first call and passes JSON lines:
+//! A full edition may declare one helper. Independent native packages may
+//! each declare a helper. The editor starts a verified helper on its first
+//! call and passes JSON lines:
 //!
 //! - `edition_helper_call(method, params)` sends `{"id", "method", "params"}`
 //!   and resolves with the helper's `result` or `error`;
 //! - a line `{"event", "payload"}` from the helper is emitted to the page as
 //!   the Tauri event `edition-helper` with that object.
+//! - `addon_helper_call(package_id, method, params)` selects an enabled
+//!   package; its events use `addon-helper` with that package ID.
 //!
-//! The editor knows nothing about the methods. An add-on without a helper
-//! receives a "no helper" error.
+//! The editor knows nothing about the methods. A package without a verified
+//! helper receives a "no helper" error.
 //!
 //! One writer task owns the helper's input and takes lines from a channel, so
 //! a large request never holds up other calls behind a lock. The reader looks
@@ -52,11 +55,12 @@ struct Running {
 
 #[derive(Default)]
 pub struct EditionHelper {
-    running: Mutex<Option<Running>>,
+    running: Mutex<HashMap<String, Running>>,
     next: AtomicU64,
 }
 
 const NO_HELPER: &str = "This edition has no helper.";
+const NO_PACKAGE_HELPER: &str = "This package has no enabled, verified helper.";
 
 /// The top-level keys of a helper line, borrowed from it unparsed. A key that
 /// is present (even as `null`) is `Some`.
@@ -66,6 +70,8 @@ struct Line<'a> {
     id: Option<&'a RawValue>,
     #[serde(borrow, default, deserialize_with = "present")]
     event: Option<&'a RawValue>,
+    #[serde(borrow, default, deserialize_with = "present")]
+    payload: Option<&'a RawValue>,
     #[serde(borrow, default, deserialize_with = "present")]
     result: Option<&'a RawValue>,
     #[serde(borrow, default, deserialize_with = "present")]
@@ -89,18 +95,29 @@ fn fail(pending: &Pending, id: u64) {
 }
 
 /// Pass one helper line on: an event to the page, a reply to its caller.
-fn dispatch(app: &tauri::AppHandle, pending: &Pending, line: String) {
+fn dispatch(app: &tauri::AppHandle, pending: &Pending, line: String, package_id: Option<&str>) {
     let Ok(message) = serde_json::from_str::<Line>(&line) else { return };
-    if message.event.is_some() {
+    if let Some(event) = message.event {
         // Checked as JSON above, so it can go to the page as written.
-        let _ = app.emit_str(EVENT, line);
+        if let Some(package_id) = package_id {
+            if serde_json::from_str::<String>(event.get()).is_ok() {
+                let wrapped = format!(r#"{{"packageId":{},"event":{},"payload":{}}}"#,
+                    serde_json::to_string(package_id).expect("package id is serializable"),
+                    event.get(), message.payload.map_or("null", RawValue::get));
+                let _ = app.emit_str("addon-helper", wrapped);
+            }
+        } else { let _ = app.emit_str(EVENT, line); }
         return;
     }
     let Some(id) = message.id.and_then(|id| serde_json::from_str::<u64>(id.get()).ok()) else {
         // An error the helper could not tie to a call (a line it could
         // not read): passed on, not dropped, so the page can show it.
         if message.error.is_some() {
-            let _ = app.emit_str(EVENT, format!(r#"{{"event":"helper-error","payload":{line}}}"#));
+            if let Some(package_id) = package_id {
+                let _ = app.emit_str("addon-helper", json!({"packageId": package_id, "event": "helper-error", "payload": line}).to_string());
+            } else {
+                let _ = app.emit_str(EVENT, format!(r#"{{"event":"helper-error","payload":{line}}}"#));
+            }
         }
         return;
     };
@@ -113,8 +130,7 @@ fn dispatch(app: &tauri::AppHandle, pending: &Pending, line: String) {
     }
 }
 
-async fn start(app: &tauri::AppHandle) -> Result<Running, String> {
-    let path = crate::selected_helper_path(app).ok_or(NO_HELPER)?;
+async fn start(app: &tauri::AppHandle, path: std::path::PathBuf, package_id: Option<String>) -> Result<Running, String> {
     let data_dir = crate::datamap::tauri_map(app, crate::datamap::TauriMap::Data).map_err(|e| e.to_string())?;
     let mut child = Command::new(path)
         .arg("--data-dir")
@@ -157,7 +173,7 @@ async fn start(app: &tauri::AppHandle) -> Result<Running, String> {
     tauri::async_runtime::spawn(async move {
         let mut lines = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            dispatch(&app, &reader_pending, line);
+            dispatch(&app, &reader_pending, line, package_id.as_deref());
         }
         // The helper ended: every call still waiting fails, and the page is
         // told, so work the helper had accepted (and would have answered
@@ -165,7 +181,11 @@ async fn start(app: &tauri::AppHandle) -> Result<Running, String> {
         for (_, tx) in reader_pending.lock().unwrap().drain() {
             let _ = tx.send(Err(STOPPED.into()));
         }
-        let _ = app.emit_str(EVENT, r#"{"event":"helper-exit"}"#.to_owned());
+        if let Some(package_id) = package_id {
+            let _ = app.emit_str("addon-helper", json!({"packageId": package_id, "event": "helper-exit", "payload": null}).to_string());
+        } else {
+            let _ = app.emit_str(EVENT, r#"{"event":"helper-exit"}"#.to_owned());
+        }
     });
     Ok(Running { queue, child, pending })
 }
@@ -182,7 +202,25 @@ pub async fn edition_helper_call(
     if method.starts_with("host.") {
         return Err(format!("Unknown helper method: {method}"));
     }
-    send(&app, &state, &method, params.unwrap_or(Value::Null)).await
+    send(&app, &state, None, &method, params.unwrap_or(Value::Null)).await
+}
+
+/// Call the verified helper belonging to one enabled add-on package.
+#[tauri::command]
+pub fn addon_helper_available(app: tauri::AppHandle, package_id: String) -> bool {
+    crate::package_helper_path(&app, &package_id).is_some()
+}
+
+#[tauri::command]
+pub async fn addon_helper_call(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, EditionHelper>,
+    package_id: String,
+    method: String,
+    params: Option<Value>,
+) -> Reply {
+    if method.starts_with("host.") { return Err(format!("Unknown helper method: {method}")); }
+    send(&app, &state, Some(&package_id), &method, params.unwrap_or(Value::Null)).await
 }
 
 /// Share a file the page may open (one in the editor's file scope) with the
@@ -197,11 +235,18 @@ pub async fn edition_helper_share_file(
     if !std::path::Path::new(&path).is_absolute() || !app.fs_scope().is_allowed(std::path::Path::new(&path)) {
         return Err("This file is not open in the editor.".into());
     }
-    send(&app, &state, "host.shareFile", json!({ "path": path })).await?;
+    send(&app, &state, None, "host.shareFile", json!({ "path": path })).await?;
     Ok(true)
 }
 
-async fn send(app: &tauri::AppHandle, state: &EditionHelper, method: &str, params: Value) -> Reply {
+async fn send(app: &tauri::AppHandle, state: &EditionHelper, package_id: Option<&str>, method: &str, params: Value) -> Reply {
+    if let Some(package_id) = package_id {
+        if !crate::package_helper_enabled(app, package_id) {
+            let mut running = state.running.lock().await;
+            if let Some(mut old) = running.remove(package_id) { let _ = old.child.start_kill(); }
+            return Err(NO_PACKAGE_HELPER.into());
+        }
+    }
     let id = state.next.fetch_add(1, Ordering::Relaxed) + 1;
     let mut line = serde_json::to_vec(&json!({ "id": id, "method": method, "params": params })).map_err(|e| e.to_string())?;
     line.push(b'\n');
@@ -210,14 +255,19 @@ async fn send(app: &tauri::AppHandle, state: &EditionHelper, method: &str, param
     // write itself happens in the writer task.
     let (queue, pending) = {
         let mut running = state.running.lock().await;
+        let key = package_id.unwrap_or("").to_owned();
         // Start (or restart, after it stopped) the helper.
         let alive = running
-            .as_mut()
+            .get_mut(&key)
             .is_some_and(|r| !r.queue.is_closed() && r.child.try_wait().ok().flatten().is_none());
         if !alive {
-            *running = Some(start(app).await?);
+            let path = match package_id {
+                Some(id) => crate::package_helper_path(app, id).ok_or(NO_PACKAGE_HELPER)?,
+                None => crate::selected_helper_path(app).ok_or(NO_HELPER)?,
+            };
+            running.insert(key.clone(), start(app, path, package_id.map(str::to_owned)).await?);
         }
-        let helper = running.as_ref().expect("started above");
+        let helper = running.get(&key).expect("started above");
         helper.pending.lock().unwrap().insert(id, tx);
         (helper.queue.clone(), helper.pending.clone())
     };

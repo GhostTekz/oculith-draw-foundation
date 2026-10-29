@@ -84,6 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts
+          node --test scripts/pack-addon.test.mjs scripts/addon-manager.test.mjs js/core/edition-helper.test.mjs
           npm run prepare:native-runtime
           npm run prepare:ocr-runtime
           cargo build --release -p pdfium-worker

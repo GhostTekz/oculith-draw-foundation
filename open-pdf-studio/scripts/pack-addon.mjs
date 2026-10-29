@@ -1,7 +1,7 @@
 // Build a portable, script-only add-on package from plugin.js and optional plugin.css.
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyAddonPackage } from './addon-manager.mjs';
@@ -15,7 +15,7 @@ async function hashFile(name) {
   return hash.digest('hex');
 }
 
-export async function packAddon({ pluginDir, output, id, version, expectedEditorVersion = editorVersion }) {
+export async function packAddon({ pluginDir, output, id, version, helper, expectedEditorVersion = editorVersion }) {
   if (typeof pluginDir !== 'string' || !pluginDir || typeof output !== 'string' || !output) {
     throw new Error('A source directory and output directory are required.');
   }
@@ -49,7 +49,20 @@ export async function packAddon({ pluginDir, output, id, version, expectedEditor
       await copyFile(input, path.join(stage, name));
       files[name] = await hashFile(path.join(stage, name));
     }
-    const manifest = { schemaVersion: 2, id, version, hostApiVersion: 1, editorVersion: expectedEditorVersion, files };
+    let helperName;
+    if (helper) {
+      const input = path.resolve(helper);
+      const info = await lstat(input);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('Helper must be a regular file.');
+      helperName = process.platform === 'win32' ? 'helper.exe' : 'helper';
+      const destination = path.join(stage, helperName);
+      await copyFile(input, destination);
+      if (process.platform !== 'win32') await chmod(destination, info.mode & 0o777);
+      files[helperName] = await hashFile(destination);
+    }
+    const os = { linux: 'linux', win32: 'windows', darwin: 'macos' }[process.platform];
+    const manifest = { schemaVersion: helper ? 3 : 2, id, version, hostApiVersion: 1, editorVersion: expectedEditorVersion,
+      ...(helper ? { target: { os, arch: process.arch }, helper: helperName } : {}), files };
     await writeFile(path.join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     await verifyAddonPackage(stage, expectedEditorVersion);
     await rename(stage, destination);
@@ -68,9 +81,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       else if (flag === '--output') options.output = args[i + 1];
       else if (flag === '--id') options.id = args[i + 1];
       else if (flag === '--version') options.version = args[i + 1];
+      else if (flag === '--helper') options.helper = args[i + 1];
       else throw new Error(`Unknown option: ${flag}`);
     }
-    if (Object.keys(options).length !== 4) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION');
+    if (!options.pluginDir || !options.output || !options.id || !options.version) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION [--helper FILE]');
     const manifest = await packAddon(options);
     console.log(`Built ${manifest.id} ${manifest.version} at ${options.output}.`);
   } catch (error) { console.error(error.message); process.exitCode = 1; }
