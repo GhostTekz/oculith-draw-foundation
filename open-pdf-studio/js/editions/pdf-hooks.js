@@ -1,15 +1,17 @@
 // PDF metadata contributions for independent add-ons. A v2 add-on receives
 // strings and document models, never a mutable pdf-lib document or dictionary.
 // Full-edition v1 hooks remain the base and run exactly as before.
-import { PDFHexString, PDFName, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
 const BASE = Symbol('base PDF hooks');
 const ADDONS = Symbol('PDF add-ons');
 const FIELDS = new Set(['catalogKeys', 'legacyCatalogKeys', 'annotationKeys', 'applyCatalog', 'catalogForSave',
-  'decorateAnnotation', 'annotationForSave']);
+  'decorateAnnotation', 'annotationForSave', 'extractAnnotationKeys', 'catalogForExtract']);
 const MAX_CATALOG_TEXT = 256 * 1024;
 const MAX_LEGACY_CATALOG_BYTES = 2 * 1024 * 1024;
 const MAX_ANNOTATION_TEXT = 16 * 1024;
+const MAX_EXTRACT_TAGS = 50_000;
+const MAX_EXTRACT_TAG_BYTES = 2 * 1024 * 1024;
 // These entries belong to the editor, even though they use a vendor-style
 // name. Independent packages may claim only other, exact legacy names.
 const EDITOR_CATALOG_KEYS = new Set(`OPS_AnnotLayers OPS_AssembliesV1 OPS_CaptionTemplateV1
@@ -19,6 +21,9 @@ const EDITOR_CATALOG_KEYS = new Set(`OPS_AnnotLayers OPS_AssembliesV1 OPS_Captio
   OPS_MarkupNumberColumn2V1 OPS_MarkupNumberColumnV1 OPS_MarkupStatusSetV1
   OPS_MarkupTextColumn OPS_MarkupTextColumn2V1 OPS_Preview OPS_Spaces
   OPS_ToolSequences`.split(/\s+/));
+const EDITOR_ANNOTATION_KEYS = new Set(`OPS_AssemblyIdV1 OPS_CaptureFileV1 OPS_CarriedFromV1
+  OPS_GroupPathV1 OPS_MarkupChoiceValue2V1 OPS_MarkupIdV1 OPS_MarkupNumberValue2V1
+  OPS_MarkupTextValue2V1`.split(/\s+/));
 const encoder = new TextEncoder();
 const LEGACY_CATALOG_NAME = /^[A-Z][A-Z0-9]{1,15}_[A-Za-z][A-Za-z0-9_]*V[1-9][0-9]*$/;
 
@@ -70,6 +75,14 @@ function legacyCatalogKeys(values) {
   return [...seen];
 }
 
+function extractionTagKeys(values) {
+  const keys = legacyCatalogKeys(values);
+  if (keys.some((key) => EDITOR_ANNOTATION_KEYS.has(key))) {
+    throw new Error('Cannot claim an editor-owned PDF annotation key');
+  }
+  return keys;
+}
+
 export function validatePdfContribution(id, pdf) {
   if (!pdf || typeof pdf !== 'object' || Array.isArray(pdf)) throw new Error('PDF contribution must be an object');
   for (const field of Object.keys(pdf)) if (!FIELDS.has(field)) throw new Error(`Unsupported PDF operation: ${field}`);
@@ -77,6 +90,8 @@ export function validatePdfContribution(id, pdf) {
   const legacyKeys = legacyCatalogKeys(pdf.legacyCatalogKeys);
   if (legacyKeys.some((key) => catalogKeys.includes(key))) throw new Error('Duplicate PDF catalog key');
   const annotationKeys = declaredKeys(id, 'annotationKeys', pdf.annotationKeys);
+  // Extraction-only claims do not grant annotation load or save access.
+  const extractAnnotationKeys = extractionTagKeys(pdf.extractAnnotationKeys);
   if (!catalogKeys.length && !legacyKeys.length && !annotationKeys.length) {
     throw new Error('PDF contribution must declare owned keys');
   }
@@ -90,9 +105,68 @@ export function validatePdfContribution(id, pdf) {
       throw new Error(`PDF ${name} requires declared annotation keys and a function`);
     }
   }
+  if (pdf.catalogForExtract != null && (!legacyKeys.length || typeof pdf.catalogForExtract !== 'function')) {
+    throw new Error('PDF catalogForExtract requires owned legacy catalog keys and a function');
+  }
+  if (extractAnnotationKeys.length && !pdf.catalogForExtract) {
+    throw new Error('PDF extractAnnotationKeys requires catalogForExtract');
+  }
   return { id, catalogKeys: [...catalogKeys, ...legacyKeys], legacyCatalogKeys: legacyKeys,
-    annotationKeys, ...Object.fromEntries(
+    annotationKeys, extractAnnotationKeys, ...Object.fromEntries(
     [...FIELDS].filter((name) => typeof pdf[name] === 'function').map((name) => [name, pdf[name]])) };
+}
+
+// Only exact, claimed annotation tags from the selected source pages are
+// exposed to an extraction callback. A malformed/oversized claimed tag fails
+// closed instead of letting the package silently discard an area or label.
+function extractTags(pdfDoc, pageNumbers, keys) {
+  let count = 0;
+  let bytes = 0;
+  const pages = pdfDoc.getPages();
+  return Object.freeze(pageNumbers.map((sourcePage, index) => {
+    const page = pages[sourcePage - 1];
+    if (!page || !Number.isSafeInteger(sourcePage)) throw new Error('Invalid source page for PDF extraction');
+    if (!keys.length) return Object.freeze({ sourcePage, targetPage: index + 1, fields: Object.freeze({}) });
+    const rawAnnots = page.node.get(PDFName.of('Annots'));
+    const annots = rawAnnots == null ? null : pdfDoc.context.lookup(rawAnnots);
+    if (rawAnnots != null && !(annots instanceof PDFArray)) throw new Error('Unreadable PDF annotation list');
+    const fields = Object.fromEntries(keys.map((key) => [key, []]));
+    for (const ref of annots?.asArray() || []) {
+      const dict = pdfDoc.context.lookup(ref);
+      if (!(dict instanceof PDFDict)) throw new Error('Unreadable PDF annotation');
+      for (const key of keys) {
+        const raw = dict.get(PDFName.of(key));
+        if (raw == null) continue;
+        const value = pdfDoc.context.lookup(raw);
+        if (!(value instanceof PDFString || value instanceof PDFHexString)
+            || value.value.length > (MAX_ANNOTATION_TEXT + 1) * 4) {
+          throw new Error(`Unreadable PDF extraction tag: ${key}`);
+        }
+        let text;
+        try { text = value.decodeText(); } catch { throw new Error(`Unreadable PDF extraction tag: ${key}`); }
+        bytes += encoder.encode(text).length;
+        if (bytes > MAX_EXTRACT_TAG_BYTES || ++count > MAX_EXTRACT_TAGS) {
+          throw new Error('PDF extraction tags exceed the transport limit');
+        }
+        fields[key].push(text);
+      }
+    }
+    return Object.freeze({ sourcePage, targetPage: index + 1,
+      fields: Object.freeze(Object.fromEntries(Object.entries(fields)
+        .map(([key, values]) => [key, Object.freeze(values)]))) });
+  }));
+}
+
+function matchingExtractTags(sourcePages, targetPages, keys) {
+  for (let i = 0; i < sourcePages.length; i += 1) {
+    for (const key of keys) {
+      const before = sourcePages[i].fields[key];
+      const after = targetPages[i].fields[key];
+      if (before.length !== after.length || before.some((value, index) => value !== after[index])) {
+        throw new Error(`Copied PDF page lost an owned extraction tag: ${key}`);
+      }
+    }
+  }
 }
 
 function textFields(values, keys, limit, id, legacyKeys = []) {
@@ -170,7 +244,7 @@ export function composePdfHooks(current, id, contribution) {
   const annotationKeys = [...(base?.annotationKeys || [])];
   const owned = new Set([...catalogKeys, ...annotationKeys]);
   for (const addon of addons) {
-    for (const key of [...addon.catalogKeys, ...addon.annotationKeys]) {
+    for (const key of [...addon.catalogKeys, ...addon.annotationKeys, ...addon.extractAnnotationKeys]) {
       if (owned.has(key)) throw new Error(`PDF key ownership collision: ${key}`);
       owned.add(key);
     }
@@ -245,12 +319,41 @@ export function composePdfHooks(current, id, contribution) {
       }
     },
     carryToExtract(source, target, pages) {
+      if (target.getPageCount() !== pages.length) {
+        throw new Error('Cannot extract pages: target count does not match source selection');
+      }
+      const writes = [];
       for (const addon of addons) {
-        if (addon.catalogKeys.some((key) => source.catalog.get(PDFName.of(key)) !== undefined)) {
+        const present = addon.catalogKeys.filter((key) => source.catalog.get(PDFName.of(key)) !== undefined);
+        if (!present.length) continue;
+        if (present.some((key) => !addon.legacyCatalogKeys.includes(key)) || !addon.catalogForExtract) {
           throw new Error(`Cannot extract pages with ${addon.id} PDF data; use the add-on that can remap its catalog.`);
         }
+        const fields = readCatalog(source, present, addon.legacyCatalogKeys);
+        if (present.some((key) => !Object.hasOwn(fields, key))) {
+          throw new Error(`Cannot extract unreadable PDF data owned by ${addon.id}`);
+        }
+        const sourcePages = extractTags(source, pages, addon.extractAnnotationKeys);
+        if (addon.extractAnnotationKeys.length) {
+          const targetPages = extractTags(target, pages.map((_, index) => index + 1), addon.extractAnnotationKeys);
+          matchingExtractTags(sourcePages, targetPages, addon.extractAnnotationKeys);
+        }
+        const sourceData = Object.freeze({ fields: Object.freeze(fields), presentKeys: Object.freeze(present),
+          pages: sourcePages });
+        const values = textFields(addon.catalogForExtract(sourceData), addon.legacyCatalogKeys,
+          MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys);
+        if (present.some((key) => !Object.hasOwn(values, key))) {
+          throw new Error(`PDF ${addon.id} did not remap every owned catalog field`);
+        }
+        writes.push(values);
       }
-      return base?.carryToExtract?.(source, target, pages);
+      const baseResult = base?.carryToExtract?.(source, target, pages);
+      for (const values of writes) {
+        for (const [key, value] of Object.entries(values)) {
+          target.catalog.set(PDFName.of(key), PDFHexString.fromText(value));
+        }
+      }
+      return baseResult;
     },
   };
 }

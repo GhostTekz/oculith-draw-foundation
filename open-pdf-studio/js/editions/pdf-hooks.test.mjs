@@ -253,3 +253,89 @@ test('legacy claims reject editor and structural keys; unknown versioned data bl
   await assert.rejects(extractPdfLibPages(source, [1]), /unclaimed legacy PDF data/);
   assert.equal(text(source.catalog, 'LAB_DrawingStateV1'), 'page-specific');
 });
+
+test('an extraction-only legacy tag claim gives a bounded source-page snapshot', async () => {
+  const id = 'sample.legacy', catalog = 'LAB_DrawingStateV1', tag = 'LAB_AreaTagV1';
+  const seen = [];
+  const pdf = { legacyCatalogKeys: [catalog], extractAnnotationKeys: [tag],
+    catalogForExtract(source) {
+      assert.equal(Object.isFrozen(source), true);
+      assert.equal(Object.isFrozen(source.pages), true);
+      assert.equal(Object.isFrozen(source.pages[0].fields[tag]), true);
+      seen.push(source.pages.map((page) => [page.sourcePage, page.targetPage, page.fields[tag]]));
+      return { [catalog]: `${source.fields[catalog]}:extracted` };
+    } };
+  const { edition, rejected } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf } }]);
+  assert.deepEqual(rejected, []);
+  assert.deepEqual(edition.pdf.annotationKeys, [], 'extraction claim does not grant annotation editing');
+  const source = await PDFDocument.create();
+  const first = source.addPage([200, 200]);
+  const second = source.addPage([200, 200]);
+  first.node.addAnnot(source.context.register(source.context.obj({
+    Type: 'Annot', Subtype: 'Text', Rect: [0, 0, 10, 10], [tag]: PDFHexString.fromText('first'),
+  })));
+  second.node.addAnnot(source.context.register(source.context.obj({
+    Type: 'Annot', Subtype: 'Text', Rect: [0, 0, 10, 10], [tag]: PDFHexString.fromText('second'),
+  })));
+  source.catalog.set(PDFName.of(catalog), PDFHexString.fromText('source'));
+  const target = await PDFDocument.create();
+  for (const page of await target.copyPages(source, [1, 0])) target.addPage(page);
+  edition.pdf.carryToExtract(source, target, [2, 1]);
+  const reopened = await PDFDocument.load(await target.save());
+  assert.equal(text(reopened.catalog, catalog), 'source:extracted');
+  assert.deepEqual(seen, [[[2, 1, ['second']], [1, 2, ['first']]]]);
+  assert.equal(text(source.catalog, catalog), 'source');
+  const collision = composeAddons({ ...foundation, pdf: { annotationKeys: [tag] } },
+    [{ id, addon: { apiVersion: 2, id, pdf } }]);
+  assert.equal(collision.accepted.length, 0);
+});
+
+test('legacy extraction rejects missing ownership, partial output, and malformed tags', async () => {
+  const id = 'sample.legacy', catalog = 'LAB_DrawingStateV1', tag = 'LAB_AreaTagV1';
+  const invalid = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [catalog], extractAnnotationKeys: [tag],
+  } } }]);
+  assert.equal(invalid.accepted.length, 0);
+  const editorKey = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [catalog], extractAnnotationKeys: ['OPS_MarkupIdV1'],
+    catalogForExtract: () => ({ [catalog]: 'out' }),
+  } } }]);
+  assert.equal(editorKey.accepted.length, 0);
+  const source = await PDFDocument.create();
+  const page = source.addPage([200, 200]);
+  source.catalog.set(PDFName.of(catalog), PDFHexString.fromText('source'));
+  const target = await PDFDocument.create();
+  target.addPage((await target.copyPages(source, [0]))[0]);
+  const partial = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [catalog], catalogForExtract: () => ({}),
+  } } }]).edition.pdf;
+  assert.throws(() => partial.carryToExtract(source, target, [1]), /did not remap every owned catalog field/);
+  assert.equal(target.catalog.get(PDFName.of(catalog)), undefined);
+  page.node.addAnnot(source.context.register(source.context.obj({
+    Type: 'Annot', Subtype: 'Text', Rect: [0, 0, 10, 10], [tag]: 42,
+  })));
+  const claimed = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [catalog], extractAnnotationKeys: [tag],
+    catalogForExtract: () => ({ [catalog]: 'out' }),
+  } } }]).edition.pdf;
+  assert.throws(() => claimed.carryToExtract(source, target, [1]), /Unreadable PDF extraction tag/);
+  assert.equal(target.catalog.get(PDFName.of(catalog)), undefined);
+});
+
+test('legacy extraction refuses a target page whose claimed tags differ from the selected source', async () => {
+  const id = 'sample.legacy', catalog = 'LAB_DrawingStateV1', tag = 'LAB_AreaTagV1';
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [catalog], extractAnnotationKeys: [tag],
+    catalogForExtract: () => ({ [catalog]: 'remapped' }),
+  } } }]);
+  const source = await PDFDocument.create();
+  const page = source.addPage([200, 200]);
+  page.node.addAnnot(source.context.register(source.context.obj({
+    Type: 'Annot', Subtype: 'Text', Rect: [0, 0, 10, 10], [tag]: PDFHexString.fromText('must-survive'),
+  })));
+  source.catalog.set(PDFName.of(catalog), PDFHexString.fromText('source'));
+  const wrongTarget = await PDFDocument.create();
+  wrongTarget.addPage([200, 200]);
+  assert.throws(() => edition.pdf.carryToExtract(source, wrongTarget, [1]), /lost an owned extraction tag/);
+  assert.equal(wrongTarget.catalog.get(PDFName.of(catalog)), undefined);
+});
