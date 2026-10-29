@@ -45,6 +45,8 @@ import { normalizeHyperlinkUrl } from '../saver/hyperlink-dict.js';
 import { metLijnstijlUitBestand } from '../saver/line-style-meta.js';
 import { isSafeRelativePdfPath } from '../remote-link.js';
 import { metExt } from './ext-load.js';
+import { refTagUitPdfjsId } from '../ext-interop.js';
+import { edition } from '../../editions/active.js';
 
 // Colour, outline and Batch Link marker of an app-made hyperlink. A link
 // with a border (Batch Link's outline) keeps its width and /C colour; one
@@ -112,8 +114,17 @@ export async function convertPdfAnnotation(annot, pageNum, viewport, stampImageM
   if (model && markupGroup) model._groupKeys = markupGroup;
   // Eigen lijnstijl en meegenomen .PAT-patroon (line-style-meta.js).
   // externe markeringen: herkomst, bronsleutels en bestandsschaal (ext-load.js).
-  return metExt(metLijnstijlUitBestand(model, extraVoorAnnotatie(annotColorMap, annot)),
+  const loaded = metExt(metLijnstijlUitBestand(model, extraVoorAnnotatie(annotColorMap, annot)),
     extraVoorAnnotatie(annotColorMap, annot)?.ext, annot, viewport);
+  const decorated = loaded && edition.pdf?.decorateLoadedAnnotation?.(loaded,
+    extraVoorAnnotatie(annotColorMap, annot));
+  const result = decorated || loaded;
+  // Keep a verified link to the original indirect annotation. The saver uses
+  // it to carry add-on dictionary keys that this editor does not understand.
+  // A copied model has a different id and therefore cannot claim this source.
+  const ref = refTagUitPdfjsId(annot.id);
+  if (result && ref) result.pdfSource = { ref, modelId: result.id, nm: result.nm || null };
+  return result;
 }
 
 // Convert PDF annotation to our format

@@ -12,6 +12,7 @@ export default defineConfig({
   plugins: [solidPlugin(), pdfjsAssets(), preloadMain()],
   resolve: {
     alias: [
+      // Add-ons load through the public plug-in host at startup.
       // PDF.js 6's modern build calls Map.prototype.getOrInsertComputed and
       // other recent APIs without fallbacks; the WebViews on older macOS and
       // Linux lack them. The legacy build ships the polyfills.

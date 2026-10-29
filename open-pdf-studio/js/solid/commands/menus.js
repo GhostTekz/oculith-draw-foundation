@@ -32,7 +32,7 @@ const STYLE_GALLERY = [
 const PANELS = [
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements', 'properties',
   'formFields', 'signatures', 'attachments', 'search', 'tags', 'quantities', 'markupsList',
-  'elementVisibility', 'annotationLayers', 'spaces',
+  'elementVisibility', 'annotationLayers', 'spaces', ...edition.panelIds,
 ];
 
 const BATCH_PENDING = [
@@ -84,6 +84,7 @@ export const MENUS = [
       'file.email', 'file.annotateScreenshot',
       SEP,
       'file.print',
+      ...edition.fileMenuItems,
     ],
   },
   {

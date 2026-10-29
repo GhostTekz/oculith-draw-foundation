@@ -154,7 +154,7 @@
     "windowsInstructions": "הגדרות Windows נפתחו.\n\nכדי להגדיר את Oculith Draw כברירת מחדל:\n1. גלול למטה אל \"בחר יישומי ברירת מחדל לפי סוג קובץ\"\n2. מצא .pdf\n3. לחץ ובחר Oculith Draw",
     "windowsFailed": "לא ניתן לפתוח את הגדרות Windows.\n\nאנא פתח ידנית הגדרות > יישומים > יישומי ברירת מחדל.",
     "macInstructions": "כדי להגדיר את Oculith Draw כמציג PDF ברירת מחדל ב-macOS:\n\n1. לחץ לחיצה ימנית על קובץ PDF כלשהו ב-Finder\n2. בחר \"קבל מידע\"\n3. תחת \"פתח עם\", בחר Oculith Draw\n4. לחץ על \"שנה הכל...\"",
-    "linuxInstructions": "כדי להגדיר את Oculith Draw כמציג PDF ברירת מחדל ב-Linux:\n\nהפעל בטרמינל:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "כדי להגדיר את Oculith Draw כמציג PDF ברירת מחדל ב-Linux:\n\nהפעל בטרמינל:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "בדוק Finder > קבל מידע",
     "notSet": "לא הוגדר"
   },

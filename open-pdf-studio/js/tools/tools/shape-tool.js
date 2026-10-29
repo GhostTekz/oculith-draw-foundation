@@ -6,6 +6,7 @@ import { isKlikSleep } from '../../annotations/minimummaat.js';
 import { weergaveVectorNaarPagina } from '../../pdf/weergave-ruimte.js';
 import { activeDrawingToolPreset } from '../tool-chest-presets.js';
 import { paintHoverSnap } from '../pointer-snap.js';
+import { edition } from '../../editions/active.js';
 
 export const shapeTool = {
   name: 'shape',
@@ -94,6 +95,7 @@ export const shapeTool = {
     } else if (isClick && tool === 'stavenreeks') {
       // Single click: place a default-length series (the creator falls back to
       // 120 px horizontally when start and end coincide).
+    } else if (isClick && edition.tools?.allowClick?.includes(tool)) {
     } else if (isClick && activeDrawingToolPreset(tool)) {
       // Drawing Mode uses the saved relative size at this click position.
     } else if (isClick) {

@@ -1098,11 +1098,11 @@
 }
 
 #text-annot-font-family {
-  width: 160px;
+  width: 196px;
 }
 
 #text-annot-font-size {
-  width: 52px;
+  width: 64px;
 }
 
 .text-annot-toolbar-btn {
@@ -2337,7 +2337,7 @@
 }
 
 .print-input {
-  width: 50px;
+  width: 64px;
   padding: 2px 4px;
   border: 1px solid var(--theme-border, #acacac);
   border-radius: 0;
@@ -3042,7 +3042,7 @@
 .set-scale-input { width: 82px; }
 .set-scale-input:disabled { opacity: 0.6; }
 .set-scale-range { width: 100px; }
-.set-scale-unit { width: 52px; }
+.set-scale-unit { width: 72px; }
 .set-scale-preset { width: 210px; }
 .set-scale-precision { width: 110px; }
 
@@ -4393,3 +4393,39 @@ select.ste-field { padding: 2px 4px; cursor: pointer; }
   border: 1px solid var(--theme-border, #d4d4d4);
   background: var(--theme-bg, #f5f5f5);
 }
+
+/* Fields in dialogs: readable and never cut off. Dialogs reuse the ribbon's
+   compact field (.ribbon-input is 50 px wide, 11 px text), and the toolkit
+   draws a native dropdown taller than a small box, so values and choices
+   were clipped. In a dialog every field is at least 28 px tall with 12 px
+   text, a ribbon field takes the width its row gives it, and dropdowns are
+   drawn flat at that height with their own arrow. */
+.modal-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='hidden']),
+.modal-dialog select,
+.modal-dialog textarea {
+  box-sizing: border-box;
+  min-height: 28px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.modal-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='hidden']),
+.modal-dialog textarea {
+  padding: 4px 8px;
+}
+.modal-dialog select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 4px 24px 4px 8px;
+  border: 1px solid var(--theme-border, #c8c8c8);
+  background-color: var(--theme-input-bg, var(--theme-surface, #ffffff));
+  color: var(--theme-text, #333);
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 50%, calc(100% - 8px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modal-dialog select:disabled { opacity: 0.6; }
+.modal-dialog .ribbon-input { width: 100%; min-width: 0; height: auto; }
+.modal-dialog input.ribbon-input[type='number'] { width: 9em; max-width: 100%; }

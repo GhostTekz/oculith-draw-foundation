@@ -154,7 +154,7 @@
     "windowsInstructions": "Windows-asetukset avattu.\n\nAseta Oculith Draw oletukseksi:\n1. Vieritä alas kohtaan \"Valitse oletussovellukset tiedostotyypin mukaan\"\n2. Etsi .pdf\n3. Napsauta ja valitse Oculith Draw",
     "windowsFailed": "Windows-asetusten avaaminen epäonnistui.\n\nAvaa manuaalisesti Asetukset > Sovellukset > Oletussovellukset.",
     "macInstructions": "Aseta Oculith Draw oletus-PDF-katseluohjelmaksi macOS:ssä:\n\n1. Napsauta mitä tahansa PDF-tiedostoa hiiren kakkospainikkeella Finderissa\n2. Valitse \"Hae tietoja\"\n3. Kohdasta \"Avaa sovelluksella\" valitse Oculith Draw\n4. Napsauta \"Vaihda kaikki...\"",
-    "linuxInstructions": "Aseta Oculith Draw oletus-PDF-katseluohjelmaksi Linuxissa:\n\nSuorita terminaalissa:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Aseta Oculith Draw oletus-PDF-katseluohjelmaksi Linuxissa:\n\nSuorita terminaalissa:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Tarkista Finder > Hae tietoja",
     "notSet": "Ei asetettu"
   },

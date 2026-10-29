@@ -154,7 +154,7 @@
     "windowsInstructions": "Windows подешавања су отворена.\n\nДа бисте поставили Oculith Draw као подразумевани:\n1. Скролујте до \"Изаберите подразумеване апликације по типу фајла\"\n2. Пронађите .pdf\n3. Кликните и изаберите Oculith Draw",
     "windowsFailed": "Не могу да отворим Windows подешавања.\n\nМолимо вас да ручно отворите Подешавања > Апликације > Подразумеване апликације.",
     "macInstructions": "Да бисте поставили Oculith Draw као подразумевани PDF прегледач на macOS:\n\n1. Десни клик на било који PDF фајл у Finder-у\n2. Изаберите \"Get Info\"\n3. Под \"Open with\", изаберите Oculith Draw\n4. Кликните \"Change All...\"",
-    "linuxInstructions": "Да бисте поставили Oculith Draw као подразумевани PDF прегледач на Linux-у:\n\nПокрените у терминалу:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Да бисте поставили Oculith Draw као подразумевани PDF прегледач на Linux-у:\n\nПокрените у терминалу:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Проверите Finder > Get Info",
     "notSet": "Није постављено"
   },

@@ -97,6 +97,7 @@ export async function convertAndPushAnnotations(annots, pageNum, viewport, stamp
   for (const ann of nieuw) if (!hasDurableMarkupId(ann.type)) usedIds.add(ann.id);
   for (const ann of nieuw) {
     if (hasDurableMarkupId(ann.type)) ann.id = uniqueDurableMarkupId(ann.id, usedIds);
+    if (ann.pdfSource) ann.pdfSource.modelId = ann.id;
   }
   for (const pl of pendingLeaders) {
     const parent = textboxByRect.get(pl.irtRectKey);

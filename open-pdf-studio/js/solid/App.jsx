@@ -37,7 +37,6 @@ import { useTranslation } from '../i18n/useTranslation.js';
 import { isTauri } from '../core/platform.js';
 import { state } from '../core/state.js';
 import { edition } from '../editions/active.js';
-import { openDialog } from './stores/dialogStore.js';
 import { meldLegeStart, WEB_SESSIE_SLEUTEL } from '../core/sessie-herstel.js';
 import { For, ErrorBoundary, Show } from 'solid-js';
 
@@ -107,13 +106,16 @@ function DesktopApp() {
             <div class="draw-empty-inner">
               <img class="draw-empty-mark" src={edition.logoPath} alt="" />
               <span class="draw-empty-eyebrow">OCULITH DRAW / DRAWING WORKSPACE</span>
-              <h2>Start a drawing review</h2>
-              <p>Open a plan set to place symbols, mark up details, and measure the work.</p>
+              <h2>{edition.home?.title?.() || 'Start a drawing review'}</h2>
+              <p>{edition.home?.description?.() || 'Open a plan set to place symbols, mark up details, and measure the work.'}</p>
               <div class="draw-empty-actions">
                 <button class="draw-open-button" type="button"
                   onClick={() => import('../pdf/loader.js').then(m => m.openPDFFile())}>
                   Open PDF drawing
                 </button>
+                <For each={edition.home?.actions || []}>{(action) =>
+                  <button class="draw-extension-button" type="button" onClick={() => action.run()}>{action.label()}</button>
+                }</For>
                 <span class="draw-empty-shortcut">Ctrl+O</span>
               </div>
               <span class="draw-empty-note">Tool Chest · Markup · Measurements · Layers</span>

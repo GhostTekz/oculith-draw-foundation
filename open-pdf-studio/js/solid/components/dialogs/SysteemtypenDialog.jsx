@@ -371,7 +371,7 @@ export default function SysteemtypenDialog() {
                         lijst[i()] = { ...pt, naam: e.target.value };
                         muteer({ paneelTypen: lijst });
                       }} />
-                    <select style="width:110px"
+                    <select style="width:160px"
                       value={pt.renderStijl}
                       onChange={(e) => {
                         const lijst = current().paneelTypen.slice();

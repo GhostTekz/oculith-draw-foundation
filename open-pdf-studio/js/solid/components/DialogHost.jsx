@@ -138,6 +138,7 @@ const DIALOG_MAP = {
   'assemblies': AssembliesDialog,
   'copy-to-pages': CopyToPagesDialog,
   'markup-name': MarkupNameDialog,
+  ...edition.dialogs,
 };
 
 export default function DialogHost() {

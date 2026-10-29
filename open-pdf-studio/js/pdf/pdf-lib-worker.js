@@ -50,7 +50,7 @@ async function open(bytes) {
   return { catalog, parseMs, catalogMs: performance.now() - t1 };
 }
 
-async function colors(page, withList) {
+async function colors(page, withList, annotationKeys) {
   if (!parsed) throw new Error('No document');
   const pdf = await parsed;
   let list = null;
@@ -65,7 +65,7 @@ async function colors(page, withList) {
   // is on the main thread. A copy each, so the file's buffer stays here.
   const snippets = [];
   const storeSnippet = (bytes) => { snippets.push(bytes.slice()); };
-  const map = await extractAnnotationColors(page, pdf, { storeSnippet, deferRichText: true });
+  const map = await extractAnnotationColors(page, pdf, { storeSnippet, deferRichText: true, annotationKeys });
   let imageSources = 0;
   try { imageSources = findImageAnnotationSources(page, pdf).length; } catch { /* no images */ }
   // The pictures too: otherwise the page parses the whole file a second
@@ -94,7 +94,7 @@ self.onmessage = async (e) => {
       const sheet = await buildStampSheet(await parsed, e.data.page, e.data.ids);
       self.postMessage({ id, result: sheet }, sheet ? [sheet.bytes.buffer] : []);
     } else if (op === 'colors') {
-      const result = await colors(e.data.page, !!e.data.withList);
+      const result = await colors(e.data.page, !!e.data.withList, e.data.annotationKeys || []);
       self.postMessage({ id, result }, result.snippets.map((b) => b.buffer));
     } else {
       throw new Error(`Unknown request ${op}`);

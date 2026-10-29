@@ -4,10 +4,12 @@
 #![recursion_limit = "256"]
 
 mod atomic_file;
+mod edition_helper;
 mod display_list_cache;
 pub mod cad_export;
 pub mod cad_import;
 pub mod datamap;
+mod identity_migration;
 mod email;
 pub mod linux_runtime;
 pub mod logboek;
@@ -462,10 +464,280 @@ fn get_username() -> String {
     whoami::username()
 }
 
+/// Optional editor add-on. The command shape is kept for existing clients.
+/// A release serves verified script bytes as an asset; development sends the
+/// script over IPC because its pages come from the development server.
+#[derive(serde::Serialize)]
+struct EditionPlugin {
+    url: Option<String>,
+    js: Option<String>,
+    css: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AddonManifest {
+    schema_version: u32,
+    id: String,
+    version: String,
+    host_api_version: u32,
+    editor_version: String,
+    files: HashMap<String, String>,
+    helper: Option<String>,
+}
+
+struct SelectedAddon {
+    script: Vec<u8>,
+    css: String,
+    helper: Option<(std::path::PathBuf, String)>,
+    bundled: bool,
+    files: Option<HashMap<String, String>>,
+}
+
+/// Selection is fixed for the process lifetime. An add-on update takes effect
+/// on restart, so the script and helper cannot silently come from two versions.
+static SELECTED_ADDON: std::sync::OnceLock<Option<SelectedAddon>> = std::sync::OnceLock::new();
+const EDITION_URL_PREFIX: &str = "/edition/";
+const HOST_API_VERSION: u32 = 1;
+
+fn addon_relative_path(name: &str) -> Option<std::path::PathBuf> {
+    use std::path::Component;
+    if name.is_empty() || name.contains('\\') || name.contains(':') || name.split('/').any(|part| part == "." || part == "..") { return None; }
+    let path = std::path::Path::new(name);
+    if path.components().any(|part| !matches!(part, Component::Normal(_))) { return None; }
+    Some(path.to_owned())
+}
+
+fn addon_file(root: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    if fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
+    let relative = addon_relative_path(name)?;
+    let mut path = root.to_owned();
+    for part in relative.components() {
+        path.push(part);
+        if fs::symlink_metadata(&path).ok()?.file_type().is_symlink() { return None; }
+    }
+    if !path.is_file() { return None; }
+    let real_root = dunce::canonicalize(root).ok()?;
+    let real_file = dunce::canonicalize(&path).ok()?;
+    real_file.starts_with(real_root).then_some(path)
+}
+
+fn sha256_file(path: &std::path::Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path).ok()?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).ok()?;
+        if count == 0 { break; }
+        digest.update(&buffer[..count]);
+    }
+    Some(format!("{:x}", digest.finalize()))
+}
+
+fn addon_hash_matches(path: &std::path::Path, expected: &str) -> bool {
+    expected.len() == 64
+        && expected.bytes().all(|b| b.is_ascii_hexdigit())
+        && sha256_file(path).is_some_and(|hash| hash.eq_ignore_ascii_case(expected))
+}
+
+fn sha256_bytes_match(bytes: &[u8], expected: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    expected.len() == 64
+        && expected.bytes().all(|b| b.is_ascii_hexdigit())
+        && format!("{:x}", Sha256::digest(bytes)).eq_ignore_ascii_case(expected)
+}
+
+fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
+    let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
+    let root = addons.join("active");
+    if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink()
+        || fs::symlink_metadata(&root).ok()?.file_type().is_symlink() { return None; }
+    let manifest_path = addon_file(&root, "manifest.json")?;
+    if manifest_path.metadata().ok()?.len() > 1024 * 1024 { return None; }
+    let manifest: AddonManifest = serde_json::from_slice(&fs::read(manifest_path).ok()?).ok()?;
+    if manifest.schema_version != 1 || manifest.host_api_version != HOST_API_VERSION
+        || manifest.editor_version != app.package_info().version.to_string()
+        || manifest.version.is_empty() || manifest.version.len() > 64
+        || !manifest.version.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+' | b'_'))
+        || manifest.id.is_empty()
+        || !manifest.id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
+        || !manifest.id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_')) {
+        return None;
+    }
+    if manifest.files.len() > 64 || !manifest.files.contains_key("plugin.js") { return None; }
+    if manifest.helper.as_ref().is_some_and(|name| !manifest.files.contains_key(name)) { return None; }
+    for (name, expected) in &manifest.files {
+        let path = addon_file(&root, name)?;
+        if !addon_hash_matches(&path, expected) { return None; }
+    }
+    let script_path = addon_file(&root, "plugin.js")?;
+    if script_path.metadata().ok()?.len() > 64 * 1024 * 1024 { return None; }
+    let script = fs::read(script_path).ok()?;
+    if script.is_empty() || !sha256_bytes_match(&script, manifest.files.get("plugin.js")?) { return None; }
+    let css = if manifest.files.contains_key("plugin.css") {
+        let css_path = addon_file(&root, "plugin.css")?;
+        if css_path.metadata().ok()?.len() > 16 * 1024 * 1024 { return None; }
+        let bytes = fs::read(css_path).ok()?;
+        if !sha256_bytes_match(&bytes, manifest.files.get("plugin.css")?) { return None; }
+        String::from_utf8(bytes).ok()?
+    } else { String::new() };
+    let helper = if let Some(name) = manifest.helper {
+        Some((addon_file(&root, &name)?, manifest.files.get(&name)?.clone()))
+    } else { None };
+    Some(SelectedAddon { script, css, helper, bundled: false, files: Some(manifest.files) })
+}
+
+fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
+    let root = if tauri::is_dev() {
+        std::env::var_os("OCUDRAW_EDITION_PLUGIN_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or(app.path().resource_dir().ok()?.join("edition"))
+    } else {
+        app.path().resource_dir().ok()?.join("edition")
+    };
+    let script = fs::read(root.join("plugin.js")).ok()?;
+    if script.is_empty() { return None; }
+    let css = fs::read_to_string(root.join("plugin.css")).unwrap_or_default();
+    Some(SelectedAddon { script, css, helper: None, bundled: true, files: None })
+}
+
+fn selected_addon(app: &tauri::AppHandle) -> Option<&'static SelectedAddon> {
+    SELECTED_ADDON.get_or_init(|| user_addon(app).or_else(|| bundled_addon(app))).as_ref()
+}
+
+pub(crate) fn selected_helper_available(app: &tauri::AppHandle) -> bool {
+    let Some(selected) = selected_addon(app) else { return false; };
+    if selected.helper.is_some() { return true; }
+    selected.bundled && selected_helper_path(app).is_some()
+}
+
+pub(crate) fn selected_helper_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let selected = selected_addon(app)?;
+    if let Some((path, expected)) = &selected.helper {
+        let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
+        if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink() { return None; }
+        let root = addons.join("active");
+        let name = path.strip_prefix(&root).ok()?.to_str()?;
+        let checked = addon_file(&root, name)?;
+        for (name, expected) in selected.files.as_ref()? {
+            if !addon_hash_matches(&addon_file(&root, name)?, expected) { return None; }
+        }
+        return addon_hash_matches(&checked, expected).then_some(checked);
+    }
+    if !selected.bundled { return None; }
+    // A bundled editor can supply a helper through its own trusted install.
+    None
+}
+
+#[tauri::command(async)]
+fn edition_plugin(app: tauri::AppHandle, inline: Option<bool>) -> Option<EditionPlugin> {
+    let addon = selected_addon(&app)?;
+    if tauri::is_dev() || inline.unwrap_or(false) {
+        let js = String::from_utf8(addon.script.clone()).ok()?;
+        return Some(EditionPlugin { url: None, js: Some(js), css: addon.css.clone() });
+    }
+    Some(EditionPlugin { url: Some(format!("{EDITION_URL_PREFIX}plugin.js")), js: None, css: addon.css.clone() })
+}
+
+/// The editor's files, plus the selected add-on script under `/edition/`.
+struct EditionAssets<R: tauri::Runtime>(Box<dyn tauri::Assets<R>>);
+
+impl<R: tauri::Runtime> tauri::Assets<R> for EditionAssets<R> {
+    fn setup(&self, app: &tauri::App<R>) {
+        self.0.setup(app)
+    }
+
+    fn get(&self, key: &tauri::utils::assets::AssetKey) -> Option<std::borrow::Cow<'_, [u8]>> {
+        if key.as_ref() == "/edition/plugin.js" {
+            if let Some(addon) = SELECTED_ADDON.get().and_then(Option::as_ref) {
+                return Some(std::borrow::Cow::Borrowed(&addon.script));
+            }
+        }
+        self.0.get(key)
+    }
+
+    fn iter(&self) -> Box<tauri::utils::assets::AssetsIter<'_>> {
+        self.0.iter()
+    }
+
+    fn csp_hashes(
+        &self,
+        html_path: &tauri::utils::assets::AssetKey,
+    ) -> Box<dyn Iterator<Item = tauri::utils::assets::CspHash<'_>> + '_> {
+        self.0.csp_hashes(html_path)
+    }
+}
+
+#[cfg(test)]
+mod addon_tests {
+    use super::*;
+
+    #[test]
+    fn manifest_contract_and_hashes() {
+        let manifest: AddonManifest = serde_json::from_str(r#"{
+          "schemaVersion":1,"id":"sample.addon","version":"2026.68.0","hostApiVersion":1,
+          "editorVersion":"2026.68.0","files":{"plugin.js":"abc"},
+          "helper":"bin/worker"
+        }"#).unwrap();
+        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.version, "2026.68.0");
+        assert_eq!(manifest.host_api_version, HOST_API_VERSION);
+        assert_eq!(manifest.helper.as_deref(), Some("bin/worker"));
+        assert!(sha256_bytes_match(b"hello", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"));
+        assert!(!sha256_bytes_match(b"hello!", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"));
+    }
+
+    #[test]
+    fn relative_paths_reject_escape() {
+        for name in ["../worker", "bin/../worker", "./worker", "/worker", "C:/worker", "bin\\worker", ""] {
+            assert!(addon_relative_path(name).is_none(), "accepted {name}");
+        }
+        assert_eq!(addon_relative_path("bin/worker").unwrap(), std::path::PathBuf::from("bin/worker"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn addon_file_rejects_symlinked_components() {
+        use std::os::unix::fs::symlink;
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("oculith-addon-test-{}-{unique}", std::process::id()));
+        fs::create_dir_all(root.join("bin")).unwrap();
+        fs::write(root.join("bin/worker"), b"worker").unwrap();
+        assert!(addon_file(&root, "bin/worker").is_some());
+        symlink(root.join("bin"), root.join("linked")).unwrap();
+        assert!(addon_file(&root, "linked/worker").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+/// A stand-in while the editor's files move into EditionAssets.
+struct NoAssets;
+
+impl<R: tauri::Runtime> tauri::Assets<R> for NoAssets {
+    fn get(&self, _key: &tauri::utils::assets::AssetKey) -> Option<std::borrow::Cow<'_, [u8]>> {
+        None
+    }
+
+    fn iter(&self) -> Box<tauri::utils::assets::AssetsIter<'_>> {
+        Box::new(std::iter::empty::<(std::borrow::Cow<'_, str>, std::borrow::Cow<'_, [u8]>)>())
+    }
+
+    fn csp_hashes(
+        &self,
+        _html_path: &tauri::utils::assets::AssetKey,
+    ) -> Box<dyn Iterator<Item = tauri::utils::assets::CspHash<'_>> + '_> {
+        Box::new(std::iter::empty())
+    }
+}
 
 /// The app's context: its configuration and the editor's files.
 fn editor_context() -> tauri::Context<tauri::Wry> {
-    tauri::generate_context!()
+    let mut context = tauri::generate_context!();
+    let editor = context.set_assets(Box::new(NoAssets));
+    context.set_assets(Box::new(EditionAssets(editor)));
+    context
 }
 
 // Fallback commands for when plugins aren't available via global API
@@ -3337,6 +3609,7 @@ pub fn run(opts: StartupOpts) {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build());
+    builder = builder.manage(edition_helper::EditionHelper::default());
 
     // Drag-out window detach is desktop-only (no mobile backend in the crate).
     #[cfg(not(target_os = "android"))]
@@ -3405,6 +3678,11 @@ pub fn run(opts: StartupOpts) {
 
     builder
         .setup(move |app| {
+            if let Some(base) = datamap::lokale_datamap() {
+                if let Err(error) = identity_migration::migrate_profile(&base) {
+                    eprintln!("[startup] settings migration failed: {error}");
+                }
+            }
             // Als eerste, zodat alles wat hierna met `log::` gemeld wordt ook
             // ergens aankomt. Zonder logger zijn die macro's lege hulzen.
             // Mislukt het opzetten, dan draait de app gewoon door.
@@ -3460,6 +3738,7 @@ pub fn run(opts: StartupOpts) {
             // Set the window icon (desktop only — not applicable on Android)
             #[cfg(not(target_os = "android"))]
             if let Some(window) = app.get_webview_window("main") {
+                // Keep the editor identity fixed across add-on installations.
                 let icon_bytes = include_bytes!("../community-icons/icon.png");
                 if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
                     let _ = window.set_icon(icon);
@@ -3584,6 +3863,11 @@ pub fn run(opts: StartupOpts) {
             load_session,
             get_username,
             read_file,
+            edition_plugin,
+            edition_helper::edition_helper_available,
+            edition_helper::edition_helper_call,
+            edition_helper::edition_helper_share_file,
+            edition_helper::edition_allow_drawing,
             write_file,
             write_file_atomic,
             append_file_atomic,

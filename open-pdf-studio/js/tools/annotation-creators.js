@@ -86,6 +86,16 @@ function buildBaseAnnotationProps(tool, startX, startY, endX, endY, e) {
   // ingezoomd ook een heel kleine sleep een echte sleep is.
   const isKlik = (dx, dy) => isKlikSleep(dx, dy, getEffectiveScale());
 
+  if (edition.tools?.shapeToolIds?.includes(tool)) {
+    return edition.tools.createAnnotation(tool, {
+      startX, startY, endX, endY, page: getActiveDocument()?.currentPage || 1,
+      box: bbox(startX, startY, endX, endY),
+      click: isKlik(Math.abs(endX - startX), Math.abs(endY - startY)),
+      preview: !!state._isPreview, author: state.defaultAuthor || 'User',
+      document: getActiveDocument(),
+    });
+  }
+
   switch (tool) {
     case 'draw':
       if (state.currentPath.length > 1) {

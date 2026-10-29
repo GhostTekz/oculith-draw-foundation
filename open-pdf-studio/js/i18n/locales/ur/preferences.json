@@ -154,7 +154,7 @@
     "windowsInstructions": "ونڈوز سیٹنگز کھل گئیں۔\n\nOculith Draw کو ڈیفالٹ بنانے کے لیے:\n1. \"فائل ٹائپ کے مطابق ڈیفالٹ ایپس منتخب کریں\" تک سکرول کریں\n2. .pdf تلاش کریں\n3. کلک کریں اور Oculith Draw منتخب کریں",
     "windowsFailed": "ونڈوز سیٹنگز نہیں کھل سکیں۔\n\nبراہ کرم دستی طور پر سیٹنگز > ایپس > ڈیفالٹ ایپس کھولیں۔",
     "macInstructions": "macOS پر Oculith Draw کو پہلے سے طے شدہ PDF ویور بنانے کے لیے:\n\n1. فائنڈر میں کسی بھی PDF فائل پر دائیں کلک کریں\n2. \"معلومات حاصل کریں\" منتخب کریں\n3. \"اس سے کھولیں\" کے تحت Oculith Draw منتخب کریں\n4. \"سب تبدیل کریں...\" پر کلک کریں",
-    "linuxInstructions": "لینکس پر Oculith Draw کو پہلے سے طے شدہ PDF ویور بنانے کے لیے:\n\nٹرمینل میں چلائیں:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "لینکس پر Oculith Draw کو پہلے سے طے شدہ PDF ویور بنانے کے لیے:\n\nٹرمینل میں چلائیں:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "فائنڈر > معلومات حاصل کریں چیک کریں",
     "notSet": "مقرر نہیں"
   },

@@ -2304,6 +2304,7 @@ export default function AnnotationsPanel() {
                     on:contextmenu={(event) => onMarkupContextMenu(item, event)}
                   >
                     <div class="annotation-cell annotation-cell-gutter">
+                      <Show when={item.accentColor}><i class="annotation-area-stripe" style={{ background: item.accentColor }} title="Group colour" /></Show>
                       {rowEye(item)}
                     </div>
                     <For each={displayColumns()}>{(column) => columnCell(item, column)}</For>

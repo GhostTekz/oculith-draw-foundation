@@ -154,7 +154,7 @@
     "windowsInstructions": "Налаштування Windows відкрито.\n\nЩоб встановити Oculith Draw за замовчуванням:\n1. Прокрутіть вниз до \"Вибрати програми за замовчуванням за типом файлу\"\n2. Знайдіть .pdf\n3. Натисніть і виберіть Oculith Draw",
     "windowsFailed": "Не вдалося відкрити налаштування Windows.\n\nБудь ласка, відкрийте вручну: Налаштування > Програми > Програми за замовчуванням.",
     "macInstructions": "Щоб встановити Oculith Draw переглядачем PDF за замовчуванням на macOS:\n\n1. Клацніть правою кнопкою миші на будь-якому файлі PDF у Finder\n2. Виберіть \"Властивості\"\n3. У розділі \"Відкрити за допомогою\" виберіть Oculith Draw\n4. Натисніть \"Змінити все...\"",
-    "linuxInstructions": "Щоб встановити Oculith Draw переглядачем PDF за замовчуванням на Linux:\n\nВиконайте в терміналі:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Щоб встановити Oculith Draw переглядачем PDF за замовчуванням на Linux:\n\nВиконайте в терміналі:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Перевірте Finder > Властивості",
     "notSet": "Не встановлено"
   },

@@ -154,7 +154,7 @@
     "windowsInstructions": "Nastavení systému Windows otevřeno.\n\nPro nastavení Oculith Draw jako výchozí:\n1. Přejděte dolů na \"Zvolit výchozí aplikace podle typu souboru\"\n2. Najděte .pdf\n3. Klikněte a vyberte Oculith Draw",
     "windowsFailed": "Nepodařilo se otevřít Nastavení systému Windows.\n\nOtevřete prosím ručně Nastavení > Aplikace > Výchozí aplikace.",
     "macInstructions": "Pro nastavení Oculith Draw jako výchozího prohlížeče PDF v macOS:\n\n1. Klikněte pravým tlačítkem na libovolný soubor PDF ve Finderu\n2. Vyberte \"Získat informace\"\n3. V části \"Otevřít v\" vyberte Oculith Draw\n4. Klikněte na \"Změnit vše...\"",
-    "linuxInstructions": "Pro nastavení Oculith Draw jako výchozího prohlížeče PDF v Linuxu:\n\nSpusťte v terminálu:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Pro nastavení Oculith Draw jako výchozího prohlížeče PDF v Linuxu:\n\nSpusťte v terminálu:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Zkontrolujte Finder > Získat informace",
     "notSet": "Nenastaveno"
   },

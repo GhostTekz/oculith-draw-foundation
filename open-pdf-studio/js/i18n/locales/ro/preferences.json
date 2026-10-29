@@ -154,7 +154,7 @@
     "windowsInstructions": "Setarile Windows au fost deschise.\n\nPentru a seta Oculith Draw ca implicit:\n1. Derulati in jos la \"Alegeti aplicatiile implicite dupa tipul de fisier\"\n2. Gasiti .pdf\n3. Faceti clic si selectati Oculith Draw",
     "windowsFailed": "Nu s-au putut deschide Setarile Windows.\n\nDeschideti manual Setari > Aplicatii > Aplicatii implicite.",
     "macInstructions": "Pentru a seta Oculith Draw ca vizualizator PDF implicit pe macOS:\n\n1. Faceti clic dreapta pe orice fisier PDF in Finder\n2. Selectati \"Informatii\"\n3. La \"Deschide cu\", selectati Oculith Draw\n4. Faceti clic pe \"Schimba tot...\"",
-    "linuxInstructions": "Pentru a seta Oculith Draw ca vizualizator PDF implicit pe Linux:\n\nRulati in terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Pentru a seta Oculith Draw ca vizualizator PDF implicit pe Linux:\n\nRulati in terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Verificati Finder > Informatii",
     "notSet": "Nesetat"
   },

@@ -98,8 +98,8 @@ export default function StyleTypeEditorDialog(props) {
   const gridCols = annType === 'filledArea'
     ? '68px 1fr 44px 52px 56px 28px'   // preview | naam | kleur | bg | schaal | acties
     : annType === 'measureDistance'
-      ? '68px 1fr 44px 64px 60px 28px' // preview | naam | kleur | tekst | unit | acties
-      : '68px 1fr 44px 64px 92px 28px'; // preview | naam | kleur | dikte | stijl | acties
+      ? '68px 1fr 44px 64px 76px 28px' // preview | naam | kleur | tekst | unit | acties
+      : '68px 1fr 44px 88px 124px 28px'; // preview | naam | kleur | dikte | stijl | acties
 
   const kindTitle = () => (KIND_TITLE_KEYS[annType] ? t(KIND_TITLE_KEYS[annType]) : t('styleType.genericTypes'));
 

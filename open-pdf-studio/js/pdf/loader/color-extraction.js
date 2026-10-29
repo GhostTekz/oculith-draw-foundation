@@ -231,7 +231,9 @@ export function applyDeferredRichText(colorMap) {
 // storeSnippet receives the vector snippet source pages instead of the
 // snippet store, and deferRichText leaves the /RC parse to
 // applyDeferredRichText.
-export async function extractAnnotationColors(pageNum, pdfDoc, { storeSnippet = bewaarKnipsel, deferRichText = false } = {}) {
+export async function extractAnnotationColors(pageNum, pdfDoc, {
+  storeSnippet = bewaarKnipsel, deferRichText = false, annotationKeys = [],
+} = {}) {
   const colorMap = new Map();
   try {
     const page = pdfDoc.getPages()[pageNum - 1];
@@ -241,21 +243,14 @@ export async function extractAnnotationColors(pageNum, pdfDoc, { storeSnippet = 
     if (!annotsRaw) return colorMap;
     const annots = context.lookup(annotsRaw);
     if (!annots) return colorMap;
+    const refMetadataKeys = ['OPS_MarkupTextValue', 'OPS_MarkupTextValue2V1',
+      'OPS_MarkupChoiceValue', 'OPS_MarkupChoiceValue2V1', 'OPS_MarkupNumberValue',
+      'OPS_MarkupNumberValue2V1', 'OPS_MarkupCheckmarkValue', 'OPS_MarkupIdV1',
+      'OPS_Capture', 'OPS_CarriedFromV1', 'OPS_AssemblyIdV1',
+      'OPS_GroupPathV1', 'OPS_Subtype', ...annotationKeys].map((name) => PDFName.of(name));
     const hasRefMetadata = annots.asArray().some(ref => {
       const dict = context.lookup(ref);
-      return !!(dict?.get?.(PDFName.of('OPS_MarkupTextValue'))
-        || dict?.get?.(PDFName.of('OPS_MarkupTextValue2V1'))
-        || dict?.get?.(PDFName.of('OPS_MarkupChoiceValue'))
-        || dict?.get?.(PDFName.of('OPS_MarkupChoiceValue2V1'))
-        || dict?.get?.(PDFName.of('OPS_MarkupNumberValue'))
-        || dict?.get?.(PDFName.of('OPS_MarkupNumberValue2V1'))
-        || dict?.get?.(PDFName.of('OPS_MarkupCheckmarkValue'))
-        || dict?.get?.(PDFName.of('OPS_MarkupIdV1'))
-        || dict?.get?.(PDFName.of('OPS_Capture'))
-        || dict?.get?.(PDFName.of('OPS_CarriedFromV1'))
-        || dict?.get?.(PDFName.of('OPS_AssemblyIdV1'))
-        || dict?.get?.(PDFName.of('OPS_GroupPathV1'))
-        || dict?.get?.(PDFName.of('OPS_Subtype')));
+      return !!(dict && refMetadataKeys.some((key) => dict.get?.(key)));
     });
     // the external editor markups (docs/MARKUP-INTEROP.md): identified per dictionary and
     // always mapped by reference, so the saver can keep or rewrite exactly
@@ -355,6 +350,19 @@ export async function extractAnnotationColors(pageNum, pdfDoc, { storeSnippet = 
         && assemblyRaw.value.length <= (ASSEMBLY_ID_MAX + 1) * 4
         ? assemblyIdText(leesPdfTekst(context, assemblyRaw)) : '';
       if (assemblyId) colors.assemblyId = assemblyId;
+      // Transport declared add-on fields as bounded strings from either the
+      // worker or the main-thread parser. The add-on interprets them later.
+      if (annotationKeys.length) {
+        const fields = {};
+        for (const name of annotationKeys) {
+          const key = annotDict.get(PDFName.of(name));
+          const raw = key ? context.lookup(key) : null;
+          if (!(raw instanceof PDFHexString || raw instanceof PDFString)) continue;
+          const value = leesPdfTekst(context, raw);
+          if (value && value.length <= 16384) fields[name] = value;
+        }
+        if (Object.keys(fields).length) colors.extensionFields = fields;
+      }
       const pluginAnnotation = readPluginPdfAnnotation(annotDict, context);
       if (pluginAnnotation) {
         // Rectangles are not unique: overlapping plugin objects may have

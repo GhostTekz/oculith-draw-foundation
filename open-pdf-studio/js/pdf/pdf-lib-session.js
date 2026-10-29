@@ -176,14 +176,14 @@ export class PdfLibSession {
    * One page's markup data: { colors: Map, snippets, imageSources, ms }, with
    * `withList` also { list, listMs } (pdf-lib-worker.js).
    */
-  async colors(page, { withList = false } = {}) {
+  async colors(page, { withList = false, annotationKeys = [] } = {}) {
     if (this.closed) throw new Error('pdf-lib session closed');
     clearTimeout(this.idleTimer);
     this.start();
     // A file still on its way in chunks goes first.
     await this.sent;
     // The worker waits for its own parse (a failed one fails this too).
-    return this.request('colors', withList ? { page, withList } : { page });
+    return this.request('colors', { page, withList, annotationKeys });
   }
 
   /** The stamp sheet of `ids` on `page` (loader/stamp-sheet.js): { bytes, stamps } or null. */

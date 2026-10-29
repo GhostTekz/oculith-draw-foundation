@@ -728,6 +728,19 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .draw-empty-state .draw-empty-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .draw-open-button { background: var(--theme-accent); border-color: var(--theme-accent); min-width: 160px; }
 .draw-open-button:hover { background: var(--theme-accent-hover); }
+.draw-extension-button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--ox-accent);
+  border-radius: var(--ox-r-sm);
+  background: var(--ox-accent-soft);
+  color: var(--ox-accent-ink);
+  font: inherit;
+  font-weight: var(--ox-fw-medium);
+  cursor: default;
+}
+.draw-extension-button:hover { background: var(--ox-surface-3); }
+.draw-extension-button:focus-visible { outline: 2px solid var(--ox-accent); outline-offset: 2px; }
 .draw-empty-state .draw-empty-shortcut { margin-top: 0; }
 .draw-empty-state .draw-empty-note {
   display: block;

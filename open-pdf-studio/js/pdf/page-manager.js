@@ -659,10 +659,14 @@ export async function extractPages(pageNumbers, deleteFromOriginal) {
   const savePath = await saveFileDialog(defaultPath, [{ name: 'PDF Files', extensions: ['pdf'] }]);
   if (!savePath) return;
 
+  // The drawing as it is now: the markups, their layers and the edition's
+  // data as a save writes them, not the bytes of the last save.
+  const nowBytes = await import('./saver.js').then(m => m.savedPdfBytes(activeDoc)) || currentBytes;
+
   showLoading('Extracting pages...');
   try {
     // Create new document with extracted pages
-    const srcDoc = await PDFDocument.load(currentBytes, { ignoreEncryption: true });
+    const srcDoc = await PDFDocument.load(nowBytes, { ignoreEncryption: true });
     const { extractPdfLibPages } = await import('./extract-pages-core.js');
     const extractDoc = await extractPdfLibPages(srcDoc, pageNumbers);
 

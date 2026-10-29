@@ -27,6 +27,7 @@ import { applyHatchFill, applyHatchFillPolygon } from './rendering/hatch-pattern
 import { tekenLijnstijl } from './rendering/line-style-draw.js';
 import { arcPolylinePoints } from './line-styles.js';
 import { drawWall } from './rendering/walls.js';
+import { edition } from '../editions/active.js';
 import { buildStavenreeks } from './stavenreeks.js';
 import { stavenreeksPxPerMm } from './stavenreeks-scale.js';
 import { buildBetonbalk } from './betonbalk.js';
@@ -693,6 +694,12 @@ function withFillAlpha(color, fillOpacity, baseOpacity) {
   return `rgba(${r}, ${g}, ${b}, ${ratio})`;
 }
 
+// Add-ons may paint a background annotation before ordinary markups.
+function eachUnderlayFirst(list, page, draw) {
+  for (const annotation of list) {
+    if (annotation && annotation.page === page && edition.rendering?.isUnderlay?.(annotation)) draw(annotation);
+  }
+}
 export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
   // ── Weergavefilters ────────────────────────────────────────────────────
   // Eén centraal predicaat (annotations/view-filters.js) bundelt de
@@ -1051,6 +1058,7 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         ctx.stroke();
       }
       ctx.setLineDash([]);
+      edition.rendering?.drawCaption?.(ctx, annotation);
       ctx.restore();
       break;
 
@@ -1100,7 +1108,7 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         ctx.translate(-boxCenterX, -boxCenterY);
       }
 
-      const boxShape = null;
+      const boxShape = edition.rendering?.boxShape?.(annotation) || null;
       const boxPath = () => {
         ctx.beginPath();
         if (!boxShape) { ctx.rect(annotation.x, annotation.y, annotation.width, annotation.height); return; }
@@ -1137,6 +1145,7 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         ctx.stroke();
       }
       ctx.setLineDash([]);
+      edition.rendering?.drawCaption?.(ctx, annotation);
       ctx.restore();
       break;
 
@@ -1161,6 +1170,7 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         }
       };
 
+      if (edition.rendering?.drawPolygon?.(ctx, annotation, buildPolyPath)) { ctx.restore(); break; }
       // Fill if fillColor is set
       if (annotation.fillColor && annotation.fillColor !== 'none' && annotation.fillColor !== null) {
         buildPolyPath();
@@ -3396,8 +3406,10 @@ function redrawAnnotationsNow(lightweight = false) {
       laagCtx.setTransform(...vermenigvuldigMatrix([1, 0, 0, 1, pad, pad], _vpMatrix));
     }
     const live = [];
+    metWeergaveDoorloop(() => metSchaalBronnen(() => eachUnderlayFirst(drawAnnotations, curPage, (a) => { if (!apAlGetekend.has(a.id) && !_buitenBeeld(a, vpX - padPagina, vpY - padPagina, vpW + 2 * padPagina, vpH + 2 * padPagina)) tekenOp(laagCtx || annotationCtx, a); })));
     metWeergaveDoorloop(() => metSchaalBronnen(() => drawAnnotations.forEach(annotation => {
       if (annotation.page !== curPage) return;
+      if (edition.rendering?.isUnderlay?.(annotation)) return;
       if (apAlGetekend.has(annotation.id)) return;
       if (_buitenBeeld(annotation, vpX - padPagina, vpY - padPagina, vpW + 2 * padPagina, vpH + 2 * padPagina)) return;
       const vermenigvuldig = annotation.blendMode === 'multiply' && !!textHighlightCtx && !overlaptEerdere(annotation);
@@ -3681,8 +3693,10 @@ function tekenPaginaLagen(ctx, pageNum, width, height, overrideDpr, renderOffset
   const dezePagina = pageAnnotations && annotations === pageAnnotations
     ? annotations
     : pageSlots(annotations, pageNum).map(slot => annotations[slot]);
+  metWeergaveDoorloop(() => metSchaalBronnen(() => eachUnderlayFirst(dezePagina, pageNum, (a) => { if (!apAlGetekend?.has(a.id) && !_buitenBeeld(a, cvX, cvY, cvW, cvH)) { ctx.save(); drawAnnotation(ctx, a, snippetBitmaps); ctx.restore(); } })));
   metWeergaveDoorloop(() => metSchaalBronnen(() => dezePagina.forEach(annotation => {
     if (!annotation || annotation.page !== pageNum) return;
+    if (edition.rendering?.isUnderlay?.(annotation)) return;
     if (apAlGetekend?.has(annotation.id)) return;
     if (_buitenBeeld(annotation, cvX, cvY, cvW, cvH)) return;
     // Mengmodus en clip lekken niet naar de volgende markering.

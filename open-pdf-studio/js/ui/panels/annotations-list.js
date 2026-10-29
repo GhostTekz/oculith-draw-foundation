@@ -92,6 +92,19 @@ export function setGroupLabels({ none, group } = {}) {
   if (group) defaultGroupLabel = group;
 }
 let noSpaceLabel = '(No Space)';
+// A loaded add-on may add a group level and handle selection of its group rows.
+let extensionGrouping = null;
+export function setExtensionListGrouping(hooks) { extensionGrouping = hooks || null; }
+const extensionRowsSeen = new Set();
+function openNewExtensionRows(paths) {
+  if (!paths?.size) return;
+  const fresh = [];
+  for (const level of new Set(paths.values())) {
+    if (!level?.id || extensionRowsSeen.has(level.id)) continue;
+    extensionRowsSeen.add(level.id); fresh.push(level.id);
+  }
+  if (fresh.length) setTimeout(() => setExpandedMarkupGroups((prev) => new Set([...prev, ...fresh])), 0);
+}
 /** The translated "(No Space)" group header (set by the Markups List). */
 export function setNoSpaceLabel(label) { if (label) noSpaceLabel = label; }
 
@@ -597,8 +610,11 @@ function buildAnnotationsList(filterValue) {
 
   const groupCg = correctionGroupIds(annotations);
   const pathMemo = new Map();
+  let extensionPaths = null; try { extensionPaths = extensionGrouping?.paths(doc, annotations) || null; } catch { extensionPaths = null; }
+  openNewExtensionRows(extensionPaths);
   const pathOf = (ann) => {
     let path = pathMemo.get(ann);
+    if (path === undefined && extensionPaths?.has(ann)) { path = [extensionPaths.get(ann), ...groupPathOf(ann, groupCg)]; pathMemo.set(ann, path); }
     if (path === undefined) { path = groupPathOf(ann, groupCg); pathMemo.set(ann, path); }
     return path;
   };
@@ -869,6 +885,7 @@ function buildAnnotationsList(filterValue) {
         type: ann.type,
         typeLabel: displayName(ann),
         color: ann.color || ann.strokeColor || '#000',
+        accentColor: extensionPaths?.get(ann)?.color || '',
         text: preview ? preview.substring(0, 50) + (preview.length > 50 ? '...' : '') : null,
         meta: `[${ann.author || 'User'}] - ${formatDate(ann.modifiedAt)}`,
         author: ann.author || 'User',
@@ -975,7 +992,7 @@ function buildAnnotationsList(filterValue) {
       page: dom.page,
       pageLabel: markupPageLabel(doc, dom.page),
       name: level.name || defaultGroupLabel,
-      count: leden.length,
+      count: leden.length - (level.hideDominant && leden.some(a => a.id === level.dominant) ? 1 : 0),
       color: dom.color || dom.strokeColor || '#000',
       author: dom.author || 'User',
       date: formatDate(dom.modifiedAt || dom.createdAt),
@@ -997,6 +1014,7 @@ function buildAnnotationsList(filterValue) {
     }
     const gedaan = new Set();
     for (const ann of leden) {
+      if (level.hideDominant && ann.id === level.dominant) continue;
       const sub = pathOf(ann)[depth + 1];
       if (!sub) { pushMarkup(ann, key, depth + 1, ancestors); continue; }
       if (gedaan.has(sub.id)) continue;
@@ -1427,6 +1445,7 @@ export async function selectMarkupRange(anchorKey, clickedKey, page) {
  * dominant one as the main selection. Ctrl adds or removes the group.
  */
 export async function selectMarkupGroupItem(groupId, ctrlKey = false) {
+  if (extensionGrouping?.ownsGroup?.(groupId)) return extensionGrouping.select?.(groupId, ctrlKey);
   const doc = getActiveDocument();
   if (!doc) return;
   const leden = membersOfGroup(doc.annotations, groupId);
@@ -1484,6 +1503,7 @@ export async function dropMarkupsOnCategory(ids, target) {
   const set = new Set(ids || []);
   const markups = (doc?.annotations || []).filter(a => set.has(a.id));
   if (!doc || !markups.length || !target) return 0;
+  if (extensionGrouping?.ownsGroup?.(target.groupId)) return 0;
   if (target.groupId) {
     const r = addToGroup(doc.annotations, markups, target.groupId, { clone: cloneAnnotation });
     if (!r) return 0;

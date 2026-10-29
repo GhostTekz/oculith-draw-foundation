@@ -137,7 +137,7 @@
     "windowsInstructions": "تم فتح إعدادات Windows.\n\nلتعيين Oculith Draw كافتراضي:\n1. قم بالتمرير لأسفل إلى \"اختيار التطبيقات الافتراضية حسب نوع الملف\"\n2. ابحث عن .pdf\n3. انقر واختر Oculith Draw",
     "windowsFailed": "تعذر فتح إعدادات Windows.\n\nيرجى فتح الإعدادات > التطبيقات > التطبيقات الافتراضية يدويًا.",
     "macInstructions": "لتعيين Oculith Draw كعارض PDF الافتراضي على macOS:\n\n1. انقر بزر الماوس الأيمن على أي ملف PDF في Finder\n2. اختر \"الحصول على معلومات\"\n3. ضمن \"فتح باستخدام\"، اختر Oculith Draw\n4. انقر على \"تغيير الكل...\"",
-    "linuxInstructions": "لتعيين Oculith Draw كعارض PDF الافتراضي على Linux:\n\nقم بتشغيل في الطرفية:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "لتعيين Oculith Draw كعارض PDF الافتراضي على Linux:\n\nقم بتشغيل في الطرفية:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "تحقق من Finder > الحصول على معلومات",
     "notSet": "غير معيّن"
   },

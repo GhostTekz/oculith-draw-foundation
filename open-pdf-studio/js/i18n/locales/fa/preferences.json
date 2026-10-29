@@ -137,7 +137,7 @@
     "windowsInstructions": "تنظیمات Windows باز شد.\n\nبرای تنظیم Oculith Draw به عنوان پیش‌فرض:\n1. به پایین بروید تا \"انتخاب برنامه‌های پیش‌فرض بر اساس نوع فایل\"\n2. .pdf را پیدا کنید\n3. کلیک کرده و Oculith Draw را انتخاب کنید",
     "windowsFailed": "باز کردن تنظیمات Windows امکان‌پذیر نشد.\n\nلطفاً به صورت دستی تنظیمات > برنامه‌ها > برنامه‌های پیش‌فرض را باز کنید.",
     "macInstructions": "برای تنظیم Oculith Draw به عنوان نمایشگر PDF پیش‌فرض در macOS:\n\n1. روی هر فایل PDF در Finder راست‌کلیک کنید\n2. \"دریافت اطلاعات\" را انتخاب کنید\n3. در بخش \"باز کردن با\"، Oculith Draw را انتخاب کنید\n4. روی \"تغییر همه...\" کلیک کنید",
-    "linuxInstructions": "برای تنظیم Oculith Draw به عنوان نمایشگر PDF پیش‌فرض در Linux:\n\nدر ترمینال اجرا کنید:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "برای تنظیم Oculith Draw به عنوان نمایشگر PDF پیش‌فرض در Linux:\n\nدر ترمینال اجرا کنید:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "بررسی Finder > دریافت اطلاعات",
     "notSet": "تنظیم نشده"
   },

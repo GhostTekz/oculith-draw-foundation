@@ -137,7 +137,7 @@
     "windowsInstructions": "Ustawienia systemu Windows zostały otwarte.\n\nAby ustawić Oculith Draw jako domyślny:\n1. Przewiń w dół do \"Wybierz domyślne aplikacje według typu pliku\"\n2. Znajdź .pdf\n3. Kliknij i wybierz Oculith Draw",
     "windowsFailed": "Nie udało się otworzyć Ustawień systemu Windows.\n\nProsimy ręcznie otworzyć Ustawienia > Aplikacje > Aplikacje domyślne.",
     "macInstructions": "Aby ustawić Oculith Draw jako domyślną przeglądarkę PDF na macOS:\n\n1. Kliknij prawym przyciskiem myszy dowolny plik PDF w Finderze\n2. Wybierz \"Informacje\"\n3. W sekcji \"Otwórz za pomocą\" wybierz Oculith Draw\n4. Kliknij \"Zmień wszystko...\"",
-    "linuxInstructions": "Aby ustawić Oculith Draw jako domyślną przeglądarkę PDF na Linux:\n\nUruchom w terminalu:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Aby ustawić Oculith Draw jako domyślną przeglądarkę PDF na Linux:\n\nUruchom w terminalu:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Sprawdź Finder > Informacje",
     "notSet": "Nie ustawiono"
   },

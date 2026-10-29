@@ -64,7 +64,7 @@ pub fn lees_tekst(
 mod tests {
     use super::is_onze_pdf_app;
 
-    const EXE: &str = r"C:\Program Files\Oculith Draw\open-pdf-studio.exe";
+    const EXE: &str = r"C:\Program Files\Oculith Draw Foundation\ocudraw-community.exe";
 
     #[test]
     fn progid_van_de_app() {
@@ -74,8 +74,8 @@ mod tests {
 
     #[test]
     fn open_opdracht_met_het_eigen_pad() {
-        let opdracht = r#""C:\Program Files\Oculith Draw\open-pdf-studio.exe" "%1""#;
-        assert!(is_onze_pdf_app("Applications\\open-pdf-studio.exe", Some(opdracht), EXE));
+        let opdracht = r#""C:\Program Files\Oculith Draw Foundation\ocudraw-community.exe" "%1""#;
+        assert!(is_onze_pdf_app("Applications\\ocudraw-community.exe", Some(opdracht), EXE));
     }
 
     #[test]

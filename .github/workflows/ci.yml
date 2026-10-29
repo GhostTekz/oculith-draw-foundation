@@ -1,0 +1,86 @@
+name: Foundation CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  source-and-editor:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake nasm libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libtesseract-dev libleptonica-dev pkg-config
+      - name: Source boundary
+        run: node open-pdf-studio/scripts/community-export-verify.mjs --published
+      - name: Editor checks
+        working-directory: open-pdf-studio
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm run test:quality
+          node --test scripts/pdf-extension-preservation.test.mjs js/editions/contract.test.mjs js/core/undo-manager.test.mjs
+          npx vite build --logLevel error
+          node scripts/community-export-verify.mjs --published --bundle
+      - name: Offline PDF round trip
+        working-directory: open-pdf-studio
+        run: |
+          npx playwright install --with-deps chromium
+          CHROMIUM_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')" npm run smoke:community-offline
+      - name: Native compile
+        run: |
+          cargo build -p pdfium-worker --locked
+          cargo check -p open-pdf-studio --no-default-features --locked
+
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            bundle: deb
+          - runner: windows-latest
+            bundle: nsis
+          - runner: macos-26
+            bundle: app
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake nasm libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libtesseract-dev libleptonica-dev pkg-config
+      - name: Native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake nasm
+      - name: Prepare runtime and build sidecar
+        working-directory: open-pdf-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run prepare:native-runtime
+          npm run prepare:ocr-runtime
+          cargo build --release -p pdfium-worker
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          worker="../target/release/pdfium-worker"
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          mkdir -p src-tauri/binaries
+          cp "${worker}${suffix}" "src-tauri/binaries/ocudraw-community-pdfium-worker-${triple}${suffix}"
+      - name: Build installer
+        working-directory: open-pdf-studio
+        run: npm run tauri:community -- --bundles ${{ matrix.bundle }}

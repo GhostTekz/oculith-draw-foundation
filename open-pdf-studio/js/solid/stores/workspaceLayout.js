@@ -35,7 +35,7 @@ export const PANEL_IDS = Object.freeze([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links',
   'measurements', 'properties', 'formFields', 'signatures', 'attachments',
   'search', 'tags', 'quantities', 'markupsList', 'elementVisibility',
-  'annotationLayers', 'spaces',
+  'annotationLayers', 'spaces', ...edition.panelIds,
 ]);
 export const TOOLBAR_IDS = Object.freeze(['standard', 'markup', 'measure', 'properties', 'navigation', 'status', 'menu']);
 export const TOOLBAR_DOCKS = Object.freeze(['top', 'left', 'right', 'bottom']);
@@ -51,7 +51,7 @@ export const LEGACY_PROFILE_MAP = Object.freeze({
 const LEFT_ORDER = [
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links',
   'measurements', 'properties', 'formFields', 'signatures', 'attachments',
-  'search', 'tags', 'spaces',
+  'search', 'tags', 'spaces', ...edition.panelIds,
 ];
 const BOTTOM_TABS = ['markupsList', 'quantities'];
 
@@ -273,7 +273,7 @@ export function normalizeLayout(raw) {
   // before the list was kept gets the edition's panels it does not show.
   const known = Array.isArray(raw.knownPanels) ? new Set(raw.knownPanels) : null;
   for (const id of PANEL_IDS) {
-    if (seen.has(id) || (known ? known.has(id) : true)) continue;
+    if (seen.has(id) || (known ? known.has(id) : !edition.panelIds.includes(id))) continue;
     const h = HOSTS.find((name) => defaults[name].tabs.includes(id));
     if (!h) continue;
     base.hosts[h].tabs.push(id);

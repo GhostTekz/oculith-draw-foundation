@@ -18,6 +18,7 @@ import { createMemo, createEffect } from 'solid-js';
 import { state, getActiveDocument } from '../core/state.js';
 import { interactionState } from '../core/stores/interaction-store.js';
 import { getAnnotationHoverCursor } from './cursors/annotation-cursors.js';
+import { edition } from '../editions/active.js';
 import { getCursorForHandle } from '../annotations/handles.js';
 import { getAnnotationType } from '../plugins/annotation-type-registry.js';
 import { DYNAMIC_FILL_CURSOR } from '../tools/dynamic-fill/cursor.js';
@@ -83,6 +84,8 @@ const cursor = createMemo(() => {
   // 5. Snap calibration / pick mode → crosshair
   if (interactionState.snapPick) return 'crosshair';
 
+  const addOnCursor = edition.pointer?.cursor?.();
+  if (addOnCursor && state.currentTool === 'select') return addOnCursor;
   // 6. Hovering a resize handle on the (single) selected annotation
   if (interactionState.hoverHandle) {
     const sel = getActiveDocument()?.selectedAnnotations || [];

@@ -1,7 +1,7 @@
 // The launch screen (index.html #launch-screen, styles/launch-screen.css):
 // the Oculith monolith whose eye follows the pointer and wanders when it is
 // still, smoke rising behind it, the edition's name and what is loading.
-// Start-up (boot.js) drives it.
+// Start-up (boot.js) drives it. An add-on may use the side slot.
 
 const root = () => document.getElementById('launch-screen');
 const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -9,7 +9,7 @@ const MIN_SHOWN_MS = 1800; // long enough to be seen, even when start-up is quic
 const shownAt = performance.now();
 let stopped = false;
 
-/** The edition's word under the monolith ("Foundation"). */
+/** The composition's word under the monolith. */
 export function setEdition(word) {
   const el = document.getElementById('lsWord');
   if (!el || el.textContent === word) return;
@@ -23,6 +23,48 @@ export function setEdition(word) {
 export function setStatus(text) {
   const el = document.getElementById('lsStatus');
   if (el) el.textContent = text;
+}
+
+// The monolith and the side card as one group, centred in the window: the
+// card's middle level with the monolith's middle, a gap between them.
+function placeSide() {
+  const el = root();
+  const stage = document.getElementById('lsStage');
+  const card = document.getElementById('lsSide');
+  if (!el || !stage || !card) return;
+  const s = stage.getBoundingClientRect();
+  const narrow = window.innerWidth <= 760;
+  if (narrow) { el.style.removeProperty('--ls-shift'); card.style.removeProperty('left'); card.style.removeProperty('top'); return; }
+  const cardW = card.offsetWidth || Math.min(380, window.innerWidth * 0.34);
+  const gap = Math.max(48, window.innerWidth * 0.05);
+  const total = s.width + gap + cardW;
+  const left = (window.innerWidth - total) / 2;
+  const monoCentre = left + s.width / 2;
+  // The stage's centre without the shift (it is centred in the window).
+  el.style.setProperty('--ls-shift', `${(monoCentre - window.innerWidth / 2).toFixed(1)}px`);
+  card.style.left = `${(left + s.width + gap).toFixed(1)}px`;
+  // Level with the monolith's middle, but never past the window's edges.
+  const half = (card.offsetHeight || 420) / 2 + 16;
+  const middle = Math.min(Math.max(s.top + s.height / 2, half), window.innerHeight - half);
+  card.style.top = `${middle.toFixed(1)}px`;
+}
+
+/** The side slot (an element) and its open / close, for an edition plug-in. */
+export function side() {
+  const el = document.getElementById('lsSide');
+  const onResize = () => placeSide();
+  return {
+    element: el,
+    open: () => {
+      placeSide();
+      window.addEventListener('resize', onResize);
+      root()?.classList.add('ls-side-open');
+    },
+    close: () => {
+      window.removeEventListener('resize', onResize);
+      root()?.classList.remove('ls-side-open');
+    },
+  };
 }
 
 /** Fade the launch screen out (after its minimum time) and remove it. */

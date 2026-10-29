@@ -248,6 +248,10 @@ export const SHORTCUTS = [
   { id: 'panelFormFields', keys: 'Alt+Q', category: 'view', builtin: true, run: 'window.panel.formFields' },
   { id: 'panelSignatures', keys: 'Alt+4', category: 'view', builtin: true, run: 'window.panel.signatures' },
   { id: 'panelSpaces', keys: 'Alt+S', category: 'view', builtin: true, run: 'window.panel.spaces', label: 'common:spaces.shortcut' },
+  ...edition.panels.filter((panel) => panel.shortcut).map((panel) => ({
+    id: `panel:${panel.id}`, keys: panel.shortcut, category: 'view', builtin: true,
+    run: `window.panel.${panel.id}`, label: panel.commandLabel || panel.title,
+  })),
   { id: 'menuMnemonics', keys: ['Alt+O', 'Alt+F', 'Alt+E', 'Alt+V', 'Alt+D', 'Alt+W', 'Alt+H'], display: 'Alt+O/F/E/V/D/W/H', category: 'view', builtin: true },
 
   // CAD command chords (CAD_CHORDS in keyboard-handlers.js), typed in turn.

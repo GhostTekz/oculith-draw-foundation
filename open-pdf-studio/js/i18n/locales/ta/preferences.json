@@ -154,7 +154,7 @@
     "windowsInstructions": "விண்டோஸ் அமைப்புகள் திறக்கப்பட்டன.\n\nOculith Draw ஐ இயல்புநிலையாக அமைக்க:\n1. \"கோப்பு வகையால் இயல்புநிலை பயன்பாடுகளைத் தேர்ந்தெடுங்கள்\" என்பதற்குக் கீழே உருட்டவும்\n2. .pdf ஐ கண்டுபிடிக்கவும்\n3. கிளிக் செய்து Oculith Draw ஐ தேர்ந்தெடுக்கவும்",
     "windowsFailed": "விண்டோஸ் அமைப்புகளைத் திறக்க இயலவில்லை.\n\nதயவுசெய்து அமைப்புகள் > பயன்பாடுகள் > இயல்புநிலை பயன்பாடுகள் என்பதை கைமுறையாகத் திறக்கவும்.",
     "macInstructions": "macOS இல் Oculith Draw ஐ இயல்புநிலை PDF காட்சியாக அமைக்க:\n\n1. Finder இல் எந்த PDF கோப்பையும் வலது கிளிக் செய்யவும்\n2. \"தகவல் பெறு\" என்பதைத் தேர்ந்தெடுக்கவும்\n3. \"இதனுடன் திற\" என்பதில் Oculith Draw ஐ தேர்ந்தெடுக்கவும்\n4. \"அனைத்தையும் மாற்று...\" என்பதைக் கிளிக் செய்யவும்",
-    "linuxInstructions": "Linux இல் Oculith Draw ஐ இயல்புநிலை PDF காட்சியாக அமைக்க:\n\nமுனையத்தில் இயக்கவும்:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Linux இல் Oculith Draw ஐ இயல்புநிலை PDF காட்சியாக அமைக்க:\n\nமுனையத்தில் இயக்கவும்:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Finder > தகவல் பெறு என சரிபார்க்கவும்",
     "notSet": "அமைக்கப்படவில்லை"
   },

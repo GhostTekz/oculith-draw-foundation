@@ -28,6 +28,7 @@ import './pdf/pdf-lib-tempo.js';
 import { startPerf } from './core/perf.js';
 import { state } from './core/state.js';
 import { edition } from './editions/active.js';
+import { assertEditionContract } from './editions/contract.js';
 import { registerTemplate } from './symbols/registry.js';
 import { loadPreferences, savePreferences } from './core/preferences.js';
 import { initDomElements } from './ui/dom-elements.js';
@@ -95,6 +96,8 @@ import { addRecentFile } from './mobile/recent-files.js';
 import { isTauri, isMobile, isDevMode, getOpenedFiles, loadSession, saveSession, fileExists, isDefaultPdfApp, openDefaultAppsSettings, extractFileName } from './core/platform.js';
 import { sessieHerstelBeleid } from './core/sessie-herstel.js';
 
+assertEditionContract(edition);
+for (const template of edition.symbolTemplates) registerTemplate(template);
 
 // Open PDF files: tabs created instantly, loads serialized through ONE global
 // queue - also across separate openFiles() calls (the Windows single-instance

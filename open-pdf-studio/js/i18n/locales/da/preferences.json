@@ -154,7 +154,7 @@
     "windowsInstructions": "Windows-indstillinger åbnet.\n\nFor at angive Oculith Draw som standard:\n1. Rul ned til \"Vælg standardapps efter filtype\"\n2. Find .pdf\n3. Klik og vælg Oculith Draw",
     "windowsFailed": "Kunne ikke åbne Windows-indstillinger.\n\nÅbn venligst Indstillinger > Apps > Standardapps manuelt.",
     "macInstructions": "For at angive Oculith Draw som standard PDF-fremviser på macOS:\n\n1. Højreklik på en vilkårlig PDF-fil i Finder\n2. Vælg \"Vis info\"\n3. Under \"Åbn med\" vælg Oculith Draw\n4. Klik \"Skift alle...\"",
-    "linuxInstructions": "For at angive Oculith Draw som standard PDF-fremviser på Linux:\n\nKør i terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "For at angive Oculith Draw som standard PDF-fremviser på Linux:\n\nKør i terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Tjek Finder > Vis info",
     "notSet": "Ikke angivet"
   },

@@ -154,7 +154,7 @@
     "windowsInstructions": "A Windows Beállítások megnyitva.\n\nA Oculith Draw alapértelmezett beállításához:\n1. Görgessen le az \"Alapértelmezett alkalmazások kiválasztása fájltípus szerint\" részhez\n2. Keresse meg a .pdf bejegyzést\n3. Kattintson rá, és válassza a Oculith Draw alkalmazást",
     "windowsFailed": "Nem sikerült megnyitni a Windows Beállításokat.\n\nKérem, nyissa meg manuálisan: Beállítások > Alkalmazások > Alapértelmezett alkalmazások.",
     "macInstructions": "A Oculith Draw beállítása alapértelmezett PDF megjelenítőként macOS rendszeren:\n\n1. Kattintson jobb gombbal bármely PDF fájlra a Finderben\n2. Válassza az \"Információ\" menüpontot\n3. A \"Megnyitás ezzel\" alatt válassza a Oculith Draw alkalmazást\n4. Kattintson a \"Mindent megváltoztat...\" gombra",
-    "linuxInstructions": "A Oculith Draw beállítása alapértelmezett PDF megjelenítőként Linux rendszeren:\n\nFuttassa a terminálban:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "A Oculith Draw beállítása alapértelmezett PDF megjelenítőként Linux rendszeren:\n\nFuttassa a terminálban:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Ellenőrizze a Finder > Információ részben",
     "notSet": "Nincs beállítva"
   },
