@@ -560,6 +560,47 @@ struct VerifiedPackage {
     id: String,
     script: Vec<u8>,
     css: String,
+    helper: Option<(std::path::PathBuf, String)>,
+}
+
+fn addon_helper_name() -> &'static str { if cfg!(windows) { "helper.exe" } else { "helper" } }
+
+fn addon_helper_header(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = fs::File::open(path) else { return false; };
+    let mut bytes = [0u8; 4096];
+    let Ok(size) = file.read(&mut bytes) else { return false; };
+    let bytes = &bytes[..size];
+    match std::env::consts::OS {
+        "linux" => {
+            let machine = match std::env::consts::ARCH { "x86_64" => 62, "aarch64" => 183, _ => return false };
+            bytes.len() >= 20 && bytes.starts_with(b"\x7fELF") && bytes[4] == 2 && bytes[5] == 1
+                && u16::from_le_bytes([bytes[18], bytes[19]]) == machine
+        }
+        "windows" => {
+            if bytes.len() < 64 || !bytes.starts_with(b"MZ") { return false; }
+            let offset = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let machine = match std::env::consts::ARCH { "x86_64" => 0x8664, "aarch64" => 0xaa64, _ => return false };
+            offset <= bytes.len().saturating_sub(6) && &bytes[offset..offset + 4] == b"PE\0\0"
+                && u16::from_le_bytes([bytes[offset + 4], bytes[offset + 5]]) == machine
+        }
+        "macos" => {
+            let machine = match std::env::consts::ARCH { "x86_64" => 0x01000007, "aarch64" => 0x0100000c, _ => return false };
+            bytes.len() >= 8 && u32::from_le_bytes(bytes[0..4].try_into().unwrap()) == 0xfeedfacf
+                && u32::from_le_bytes(bytes[4..8].try_into().unwrap()) == machine
+        }
+        _ => false,
+    }
+}
+
+fn verified_helper_file(path: &std::path::Path, expected: &str) -> bool {
+    let Ok(meta) = fs::symlink_metadata(path) else { return false; };
+    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() == 0 || meta.len() > 128 * 1024 * 1024 { return false; }
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        if meta.permissions().mode() & 0o111 == 0 { return false; }
+    }
+    addon_hash_matches(path, expected) && addon_helper_header(path)
 }
 
 fn valid_addon_id(id: &str) -> bool {
@@ -698,18 +739,29 @@ fn enabled_addon_ids(addons: &std::path::Path) -> Vec<String> {
     index.ids.into_iter().filter(|id| valid_addon_id(id) && seen.insert(id.clone())).collect()
 }
 
+pub(crate) fn package_helper_enabled(app: &tauri::AppHandle, id: &str) -> bool {
+    if !valid_addon_id(id) { return false; }
+    let Ok(data) = datamap::tauri_map(app, datamap::TauriMap::Data) else { return false; };
+    enabled_addon_ids(&data.join("addons")).iter().any(|enabled| enabled == id)
+}
+
 fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> Option<VerifiedPackage> {
     if !valid_addon_id(id) || fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
     let manifest_path = addon_file(root, "manifest.json")?;
     let manifest: AddonManifest = serde_json::from_slice(&read_bounded_addon_file(&manifest_path, 1024 * 1024)?).ok()?;
-    if manifest.schema_version != 2 || manifest.host_api_version != HOST_API_VERSION
+    if !matches!(manifest.schema_version, 2 | 3) || manifest.host_api_version != HOST_API_VERSION
         || manifest.id != id || manifest.editor_version != editor_version
         || !valid_addon_version(&manifest.version)
         || !addon_manifest_target_compatible(&manifest)
-        || manifest.helper.is_some()
-        || manifest.files.is_empty() || manifest.files.len() > 2
+        || (manifest.schema_version == 2 && manifest.helper.is_some())
+        || (manifest.schema_version == 3 &&
+            (manifest.helper.as_deref() != Some(addon_helper_name()) || manifest.target.is_none()
+                || manifest.target.as_ref().is_some_and(|target| target.arch == "universal")))
+        || manifest.files.is_empty() || manifest.files.len() > if manifest.schema_version == 3 { 3 } else { 2 }
         || !manifest.files.contains_key("plugin.js")
-        || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css") {
+        || (manifest.schema_version == 3 && !manifest.files.contains_key(addon_helper_name()))
+        || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css"
+            && !(manifest.schema_version == 3 && name == addon_helper_name())) {
         return None;
     }
     let mut listed = 0;
@@ -736,7 +788,13 @@ fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> O
         if !sha256_bytes_match(&bytes, expected) { return None; }
         String::from_utf8(bytes).ok()?
     } else { String::new() };
-    Some(VerifiedPackage { id: id.into(), script, css })
+    let helper = if manifest.schema_version == 3 {
+        let path = addon_file(root, addon_helper_name())?;
+        let hash = manifest.files.get(addon_helper_name())?;
+        if !verified_helper_file(&path, hash) { return None; }
+        Some((path, hash.clone()))
+    } else { None };
+    Some(VerifiedPackage { id: id.into(), script, css, helper })
 }
 
 fn verified_packages(app: &tauri::AppHandle) -> &'static [VerifiedPackage] {
@@ -774,6 +832,17 @@ pub(crate) fn selected_helper_path(app: &tauri::AppHandle) -> Option<std::path::
     if !selected.bundled { return None; }
     // A bundled editor can supply a helper through its own trusted install.
     None
+}
+
+pub(crate) fn package_helper_path(app: &tauri::AppHandle, id: &str) -> Option<std::path::PathBuf> {
+    if !package_helper_enabled(app, id) { return None; }
+    let package = verified_packages(app).iter().find(|package| package.id == id)?;
+    let (path, expected) = package.helper.as_ref()?;
+    let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
+    let root = addons.join("packages").join(id);
+    let checked = addon_file(&root, addon_helper_name())?;
+    if &checked != path || !verified_helper_file(&checked, expected) { return None; }
+    Some(checked)
 }
 
 #[tauri::command(async)]
@@ -898,6 +967,56 @@ mod addon_tests {
         manifest["helper"] = "plugin.js".into();
         fs::write(second.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(verified_package(&second, "second.addon", "2026.68.0").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v3_package_accepts_only_its_verified_native_helper() {
+        let root = addon_test_dir();
+        let packages = root.join("packages");
+        let id = "native.addon";
+        write_test_package(&packages, id, b"export const createAddon = () => ({});");
+        let package = packages.join(id);
+        let mut header = vec![0u8; 256];
+        match std::env::consts::OS {
+            "linux" => {
+                header[..6].copy_from_slice(b"\x7fELF\x02\x01");
+                header[18..20].copy_from_slice(&(if cfg!(target_arch = "aarch64") { 183u16 } else { 62u16 }).to_le_bytes());
+            }
+            "windows" => {
+                header[..2].copy_from_slice(b"MZ");
+                header[60..64].copy_from_slice(&64u32.to_le_bytes());
+                header[64..68].copy_from_slice(b"PE\0\0");
+                header[68..70].copy_from_slice(&(if cfg!(target_arch = "aarch64") { 0xaa64u16 } else { 0x8664u16 }).to_le_bytes());
+            }
+            "macos" => {
+                header[..4].copy_from_slice(&0xfeedfacfu32.to_le_bytes());
+                header[4..8].copy_from_slice(&(if cfg!(target_arch = "aarch64") { 0x0100000cu32 } else { 0x01000007u32 }).to_le_bytes());
+            }
+            _ => { fs::remove_dir_all(root).unwrap(); return; }
+        }
+        let helper = package.join(addon_helper_name());
+        fs::write(&helper, &header).unwrap();
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("manifest.json")).unwrap()).unwrap();
+        manifest["schemaVersion"] = 3.into();
+        manifest["helper"] = addon_helper_name().into();
+        manifest["target"] = serde_json::json!({
+            "os": std::env::consts::OS,
+            "arch": if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" },
+        });
+        manifest["files"][addon_helper_name()] = sha256_file(&helper).unwrap().into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").unwrap().helper.is_some());
+        fs::write(&helper, b"tampered").unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::write(&helper, &header).unwrap();
+        manifest["target"]["arch"] = "wrong".into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -4361,6 +4480,8 @@ pub fn run(opts: StartupOpts) {
             edition_plugins,
             edition_helper::edition_helper_available,
             edition_helper::edition_helper_call,
+            edition_helper::addon_helper_available,
+            edition_helper::addon_helper_call,
             edition_helper::edition_helper_share_file,
             edition_helper::edition_allow_drawing,
             write_file,

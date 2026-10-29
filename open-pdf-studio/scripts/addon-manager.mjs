@@ -1,8 +1,8 @@
-// Manage independent, script-only add-ons in the editor's per-user data directory.
+// Manage independent add-ons in the editor's per-user data directory.
 // Packages are inert until their ID is added to addons/enabled.json.
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +13,28 @@ const HASH = /^[0-9a-fA-F]{64}$/;
 const MAX_INDEX = 64 * 1024;
 const MAX_MANIFEST = 1024 * 1024;
 const MAX_ADDONS = 64;
+const REMOVAL_PREFIX = '.remove-';
+const MAX_HELPER = 128 * 1024 * 1024;
+const HELPER_NAME = process.platform === 'win32' ? 'helper.exe' : 'helper';
+
+function nativeHeaderMatches(bytes) {
+  if (process.platform === 'linux') {
+    const machine = process.arch === 'x64' ? 62 : process.arch === 'arm64' ? 183 : -1;
+    return bytes.length >= 20 && bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) &&
+      bytes[4] === 2 && bytes[5] === 1 && bytes.readUInt16LE(18) === machine;
+  }
+  if (process.platform === 'win32') {
+    if (bytes.length < 64 || bytes.toString('ascii', 0, 2) !== 'MZ') return false;
+    const pe = bytes.readUInt32LE(60);
+    const machine = process.arch === 'x64' ? 0x8664 : process.arch === 'arm64' ? 0xaa64 : -1;
+    return pe <= bytes.length - 6 && bytes.toString('ascii', pe, pe + 4) === 'PE\0\0' && bytes.readUInt16LE(pe + 4) === machine;
+  }
+  if (process.platform === 'darwin') {
+    const machine = process.arch === 'x64' ? 0x01000007 : process.arch === 'arm64' ? 0x0100000c : -1;
+    return bytes.length >= 8 && bytes.readUInt32LE(0) === 0xfeedfacf && bytes.readUInt32LE(4) === machine;
+  }
+  return false;
+}
 
 async function entry(name) {
   try { return await lstat(name); }
@@ -40,25 +62,29 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
   }
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) ||
-      manifest.schemaVersion !== 2 || manifest.hostApiVersion !== 1 ||
+      ![2, 3].includes(manifest.schemaVersion) || manifest.hostApiVersion !== 1 ||
       typeof manifest.id !== 'string' || !ID.test(manifest.id) ||
       typeof manifest.version !== 'string' || !/^[A-Za-z0-9._+-]{1,64}$/.test(manifest.version) ||
       manifest.editorVersion !== expectedEditorVersion ||
       !manifest.files || typeof manifest.files !== 'object' || Array.isArray(manifest.files) ||
-      manifest.helper !== undefined) {
+      (manifest.schemaVersion === 2 && manifest.helper !== undefined) ||
+      (manifest.schemaVersion === 3 && manifest.helper !== HELPER_NAME)) {
     throw new Error(`Add-on manifest is incompatible with editor ${expectedEditorVersion}.`);
   }
   const names = Object.keys(manifest.files);
-  if (!names.includes('plugin.js') || names.length > 2 ||
-      names.some((name) => name !== 'plugin.js' && name !== 'plugin.css')) {
-    throw new Error('Add-on files must be plugin.js and optional plugin.css.');
+  if (!names.includes('plugin.js') || names.length > (manifest.schemaVersion === 3 ? 3 : 2) ||
+      names.some((name) => name !== 'plugin.js' && name !== 'plugin.css' && name !== manifest.helper) ||
+      (manifest.schemaVersion === 3 && !names.includes(manifest.helper))) {
+    throw new Error('Add-on files do not match the package schema.');
   }
+  if (manifest.schemaVersion === 3 && manifest.target === undefined) throw new Error('Native add-on needs a target.');
   if (manifest.target !== undefined) {
     const hostOs = { linux: 'linux', darwin: 'macos', win32: 'windows' }[process.platform];
     const target = manifest.target;
     if (!target || typeof target !== 'object' || Array.isArray(target) ||
         Object.keys(target).sort().join(',') !== 'arch,os' || target.os !== hostOs ||
-        (target.arch !== process.arch && !(hostOs === 'macos' && target.arch === 'universal'))) {
+        (target.arch !== process.arch && !(hostOs === 'macos' && target.arch === 'universal')) ||
+        (manifest.schemaVersion === 3 && target.arch === 'universal')) {
       throw new Error('Add-on target is incompatible with this host.');
     }
   }
@@ -71,11 +97,19 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
     const file = path.join(root, name);
     const stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || !stat.size ||
-        stat.size > (name === 'plugin.js' ? 64 : 16) * 1024 * 1024) {
+        stat.size > (name === 'plugin.js' ? 64 * 1024 * 1024 : name === manifest.helper ? MAX_HELPER : 16 * 1024 * 1024)) {
       throw new Error(`Invalid add-on file: ${name}.`);
     }
     if (await sha256(file) !== manifest.files[name].toLowerCase()) throw new Error(`Add-on hash mismatch: ${name}.`);
-    new TextDecoder('utf-8', { fatal: true }).decode(await readFile(file));
+    if (name === manifest.helper) {
+      if (process.platform !== 'win32' && !(stat.mode & 0o111)) throw new Error('Add-on helper is not executable.');
+      const handle = await open(file, 'r');
+      try {
+        const bytes = Buffer.alloc(4096);
+        const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+        if (!nativeHeaderMatches(bytes.subarray(0, bytesRead))) throw new Error('Add-on helper target does not match this host.');
+      } finally { await handle.close(); }
+    } else new TextDecoder('utf-8', { fatal: true }).decode(await readFile(file));
   }
   return manifest;
 }
@@ -103,6 +137,28 @@ async function writeIndex(addons, ids) {
   } finally { await rm(stage, { force: true }); }
 }
 
+async function recoverRemoved(addons, packages) {
+  const ids = await readIndex(addons);
+  for (const item of await readdir(packages, { withFileTypes: true })) {
+    if (!item.name.startsWith(REMOVAL_PREFIX)) continue;
+    const id = item.name.slice(REMOVAL_PREFIX.length);
+    if (!ID.test(id) || !item.isDirectory() || item.isSymbolicLink()) {
+      throw new Error(`Invalid staged add-on removal: ${item.name}`);
+    }
+    const staged = path.join(packages, item.name);
+    const destination = path.join(packages, id);
+    if (ids.includes(id) && !(await entry(destination))) {
+      // Interrupted before the index changed: the enabled package is restored.
+      await rename(staged, destination);
+    } else {
+      // Interrupted after the index changed, or a newer package was installed.
+      // Windows may keep an executable open until the editor exits.
+      try { await rm(staged, { recursive: true }); }
+      catch (error) { if (!['EACCES', 'EPERM', 'EBUSY'].includes(error.code)) throw error; }
+    }
+  }
+}
+
 async function withLock(appDataDir, callback) {
   if (typeof appDataDir !== 'string' || !appDataDir) throw new Error('--app-data-dir is required.');
   const appData = path.resolve(appDataDir);
@@ -124,6 +180,7 @@ async function withLock(appDataDir, callback) {
   }
   try {
     await lock.writeFile(`${process.pid}\n`);
+    await recoverRemoved(addons, packages);
     return await callback({ addons, packages });
   } finally {
     await lock.close();
@@ -156,6 +213,9 @@ export async function installAddon({ packageDir, appDataDir, expectedEditorVersi
     try {
       for (const name of ['manifest.json', ...Object.keys(manifest.files)]) {
         await copyFile(path.join(source, name), path.join(stage, name));
+        if (name === manifest.helper && process.platform !== 'win32') {
+          await chmod(path.join(stage, name), (await lstat(path.join(source, name))).mode & 0o777);
+        }
       }
       await verifyAddonPackage(stage, expectedEditorVersion);
       if (await entry(destination)) { await directory(destination); await rename(destination, backup); movedOld = true; }
@@ -193,15 +253,33 @@ export async function setAddonEnabled({ id, appDataDir, enabled }) {
   });
 }
 
-export async function removeAddon({ id, appDataDir }) {
+export async function removeAddon({ id, appDataDir, renameFile = rename, removeFile = rm, writeIndexFile = writeIndex }) {
   if (typeof id !== 'string' || !ID.test(id)) throw new Error('Invalid add-on ID.');
   return withLock(appDataDir, async ({ addons, packages }) => {
     const destination = path.join(packages, id);
+    const staged = path.join(packages, `${REMOVAL_PREFIX}${id}`);
+    if (await entry(staged)) throw new Error('A previous add-on removal is waiting for the editor to close.');
     const info = await entry(destination);
     if (info) await directory(destination);
     const ids = await readIndex(addons);
-    if (ids.includes(id)) await writeIndex(addons, ids.filter((item) => item !== id));
-    if (info) await rm(destination, { recursive: true });
+    if (info) await renameFile(destination, staged);
+    try {
+      if (ids.includes(id)) await writeIndexFile(addons, ids.filter((item) => item !== id));
+    } catch (error) {
+      if (info) {
+        try { await renameFile(staged, destination); }
+        catch (rollback) { throw new AggregateError([error, rollback], 'Add-on removal failed and rollback needs recovery.'); }
+      }
+      throw error;
+    }
+    if (info) {
+      try { await removeFile(staged, { recursive: true }); }
+      catch (error) {
+        if (!['EACCES', 'EPERM', 'EBUSY'].includes(error.code)) throw error;
+        // The index no longer names this package. Its files are retried on
+        // the next add-on operation, after the editor releases the helper.
+      }
+    }
     return !!info;
   });
 }
@@ -219,7 +297,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       else throw new Error(`Unknown option: ${key}`);
     }
     if (command === 'install') console.log(`Installed ${(await installAddon(options)).id}; restart the editor to load it.`);
-    else if (command === 'remove') console.log((await removeAddon(options)) ? 'Removed add-on; restart the editor.' : 'No add-on with that ID.');
+    else if (command === 'remove') {
+      const removed = await removeAddon(options);
+      const pending = removed && await entry(path.join(path.resolve(options.appDataDir), 'addons/packages', `${REMOVAL_PREFIX}${options.id}`));
+      console.log(!removed ? 'No add-on with that ID.' : pending
+        ? 'Add-on disabled; close the editor to release its helper. Locked files are cleaned on the next add-on operation.'
+        : 'Removed add-on; restart the editor.');
+    }
     else if (command === 'enable' || command === 'disable') {
       await setAddonEnabled({ ...options, enabled: command === 'enable' });
       console.log(`${command === 'enable' ? 'Enabled' : 'Disabled'} ${options.id}; restart the editor.`);
