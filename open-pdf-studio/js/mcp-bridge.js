@@ -2231,25 +2231,6 @@ async function handleFacadeElement(params) {
   return uit;
 }
 
-/** Ask the assistant's AI (Claude/Anthropic direct) — lets an MCP client test
- *  the assistant end-to-end without the chat UI. Uses the personal key set via
- *  the 🔑 button. */
-async function handleAiComplete(params) {
-  const prompt = params?.prompt;
-  if (typeof prompt !== 'string' || !prompt) return { ok: false, error: 'missing params.prompt' };
-  let key = '';
-  try { key = localStorage.getItem('opds-anthropic-key') || ''; } catch { /* no localStorage */ }
-  // Claude (Anthropic) direct — uses the personal key set via the 🔑 button.
-  if (!key) return { ok: false, error: 'geen Claude-key gezet (🔑)' };
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 512, system: params?.system || undefined, messages: [{ role: 'user', content: prompt }] }),
-  });
-  if (!r.ok) { const tx = await r.text().catch(() => ''); return { ok: false, error: `Claude API ${r.status}: ${tx.slice(0, 200)}` }; }
-  const data = await r.json();
-  return { ok: true, via: 'claude-direct', text: data?.content?.[0]?.text || '' };
-}
 
 /** Assistant relay — submit a user message programmatically (app_assistant_ask). */
 async function handleAssistantAsk(params) {
@@ -3411,8 +3392,6 @@ const HANDLERS = {
   'mcp:list-layers':        handleListLayers,
   'mcp:create-layer':       handleCreateLayer,
   'mcp:set-layer':          handleSetLayer,
-  // Assistant — test the AI end-to-end
-  'mcp:ai-complete':        handleAiComplete,
   // Assistant relay — external MCP client as the AI brain
   'mcp:assistant-ask':      handleAssistantAsk,
   'mcp:assistant-pending':  handleAssistantPending,

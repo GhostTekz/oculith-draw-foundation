@@ -464,7 +464,7 @@
       "readOnlyHint": false,
       "title": "Ask assistant"
     },
-    "description": "Submit a message into the app's assistant window as if the user typed it (opens the panel). Returns { ok }. The answer comes from a personal Claude key or the MCP relay (app_assistant_pending + app_assistant_answer).",
+    "description": "Submit a message into the app's assistant window as if the user typed it (opens the panel). Returns { ok }. The answer comes through the MCP relay (app_assistant_pending + app_assistant_answer).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

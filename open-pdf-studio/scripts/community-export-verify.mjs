@@ -12,7 +12,7 @@ const rootFiles = new Set(['Cargo.toml', 'Cargo.lock', 'LICENSE.md', '.gitignore
   'README.md', 'CONTRIBUTING.md', 'CLAUDE.md', 'SOURCE-STATE.json', 'SBOM.cdx.json']);
 const generatedFiles = new Set(['README.md', 'CONTRIBUTING.md', 'CLAUDE.md', 'SOURCE-STATE.json', 'SBOM.cdx.json']);
 const unapprovedPath = /(?:^|\/)(?:enterprise|apex|ocudraw|branding|recognition-notices|nsis)(?:\/|\.|$)|vplan/i;
-const productTrace = /enterprise|(?<![a-z])apex|oculith-engines|vplan|(?<![a-z])oauth|(?<![a-z])oidc|openid|(?<![a-z])sign[- ]?in\b|(?<![a-z])signed in\b|(?<![a-z])log ?in\b|impertio|crewtracker|oculith account|load study|panel schedule|takeoff engine|recognition engine|ghostlab/i;
+const productTrace = /enterprise|(?<![a-z])apex|oculith-engines|vplan|(?<![a-z])oauth|(?<![a-z])oidc|openid|(?<![a-z])sign[- ]?in\b|(?<![a-z])signed in\b|(?<![a-z])log ?in\b|impertio|crewtracker|oculith account|load study|panel schedule|takeoff engine|recognition engine|ghostlab|app_ai_complete|mcp:ai-complete|api\.anthropic\.com|opds-anthropic-key/i;
 const traceExempt = /(?:^|\/)(?:LICENSE[^/]*|LGPL[^/]*|[^/]*notices?[^/]*\.txt)$/i;
 const forbidden = [
   'open-pdf-studio/js/enterprise',
