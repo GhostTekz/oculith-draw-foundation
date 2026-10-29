@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PDFDocument, PDFName, PDFString, PDFRef } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFString, PDFHexString, PDFRef } from 'pdf-lib';
 import { carryUnmodeledAnnotationKeys, hasUnmodeledAnnotationKeys } from '../js/pdf/saver/unmodeled-annotation-keys.js';
 import { extractAnnotationColors } from '../js/pdf/loader/color-extraction.js';
 
@@ -11,12 +11,14 @@ test('Foundation rewrite preserves unknown catalog and annotation fields through
   const page = original.addPage([240, 300]);
   const payload = original.context.obj({ Stage: PDFString.of('reviewed'), Number: 7 });
   const payloadRef = original.context.register(payload);
+  const unreadableTag = original.context.register(original.context.obj({ Raw: PDFString.of('opaque') }));
   const catalogWorkspace = original.context.obj({ Version: 1, Data: payloadRef });
   original.catalog.set(N('OPS_ExtensionWorkspaceV1'), original.context.register(catalogWorkspace));
   const source = original.context.obj({
     Type: N('Annot'), Subtype: N('Square'), Rect: [10, 20, 80, 90],
     NM: PDFString.of('markup-1'), OPS_UnknownAddonState: payloadRef,
     X_PrivateState: PDFString.of('retained'),
+    OPS_LegacyTextV1: PDFString.of('area-1'), OPS_LegacyOpaqueV1: unreadableTag,
   });
   const sourceRef = original.context.register(source);
   page.node.set(N('Annots'), original.context.obj([sourceRef]));
@@ -30,7 +32,7 @@ test('Foundation rewrite preserves unknown catalog and annotation fields through
   });
   assert.deepEqual(carryUnmodeledAnnotationKeys(opened.context, refs,
     { id: 'model-1', pdfSource: { ref: refs[0].toString(), modelId: 'model-1', nm: 'markup-1' } }, replacement),
-  ['OPS_UnknownAddonState', 'X_PrivateState']);
+  ['OPS_UnknownAddonState', 'X_PrivateState', 'OPS_LegacyTextV1', 'OPS_LegacyOpaqueV1']);
   const replacementRef = opened.context.register(replacement);
   openedPage.node.set(N('Annots'), opened.context.obj([replacementRef]));
 
@@ -38,6 +40,8 @@ test('Foundation rewrite preserves unknown catalog and annotation fields through
   const saved = reopened.context.lookup(reopened.context.lookup(reopened.getPage(0).node.get(N('Annots'))).get(0));
   assert.equal(saved.get(N('Contents')).decodeText(), 'edited in Foundation');
   assert.equal(saved.get(N('X_PrivateState')).decodeText(), 'retained');
+  assert.equal(saved.get(N('OPS_LegacyTextV1')).decodeText(), 'area-1');
+  assert.equal(reopened.context.lookup(saved.get(N('OPS_LegacyOpaqueV1'))).get(N('Raw')).decodeText(), 'opaque');
   const addonPayload = reopened.context.lookup(saved.get(N('OPS_UnknownAddonState')));
   assert.equal(addonPayload.get(N('Stage')).decodeText(), 'reviewed');
   const workspace = reopened.context.lookup(reopened.catalog.get(N('OPS_ExtensionWorkspaceV1')));
@@ -53,6 +57,8 @@ test('Foundation rewrite preserves unknown catalog and annotation fields through
   const third = await PDFDocument.load(await reopened.save());
   const thirdAnnot = third.context.lookup(third.context.lookup(third.getPage(0).node.get(N('Annots'))).get(0));
   assert.equal(third.context.lookup(thirdAnnot.get(N('OPS_UnknownAddonState'))).get(N('Stage')).decodeText(), 'reviewed');
+  assert.equal(thirdAnnot.get(N('OPS_LegacyTextV1')).decodeText(), 'area-1');
+  assert.equal(third.context.lookup(thirdAnnot.get(N('OPS_LegacyOpaqueV1'))).get(N('Raw')).decodeText(), 'opaque');
   assert.ok(third.catalog.get(N('OPS_ExtensionWorkspaceV1')));
 });
 
@@ -117,4 +123,8 @@ test('oversized declared annotation field is skipped before decoding', async () 
   loaded.get(key).decodeText = () => { throw new Error('decoded oversized annotation value'); };
   const colors = await extractAnnotationColors(1, opened, { annotationKeys: ['ODX_sample_State'] });
   assert.equal(colors.get(`@ref:${ref.objectNumber}R`)?.extensionFields, undefined);
+  loaded.set(key, PDFHexString.fromText('😀'.repeat(5000)));
+  const utf8Oversized = await extractAnnotationColors(1, opened, { annotationKeys: ['ODX_sample_State'] });
+  assert.equal(utf8Oversized.get(`@ref:${ref.objectNumber}R`)?.extensionFields, undefined,
+    'decoded UTF-8 bytes, not just JavaScript length, set the limit');
 });
