@@ -76,6 +76,18 @@ export const EARLY = Object.freeze(['solid-js', 'solid-js/web', 'solid-js/store'
 
 const loaded = new Map();
 const loaders = { ...PACKAGES, ...MODULES };
+const capabilities = new Map();
+
+/** Named, versioned functions that installed plug-ins intentionally share. */
+export function publishCapability(id, provider) {
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9.-]*\/[1-9][0-9]*$/.test(id) ||
+      typeof provider !== 'function' || capabilities.has(id)) {
+    throw new Error(`Invalid or duplicate plug-in capability: ${String(id)}`);
+  }
+  capabilities.set(id, provider);
+}
+
+export function capability(id) { return capabilities.get(id) || null; }
 
 /** Whether `id` is part of the interface. */
 export function provides(id) { return Object.hasOwn(loaders, id); }
@@ -127,5 +139,7 @@ export function hostModule(id) {
 
 /** The interface object a plug-in finds at globalThis.__ocudrawHost. */
 export function installHost() {
-  globalThis.__ocudrawHost = Object.freeze({ apiVersion: HOST_API_VERSION, module: hostModule, provides });
+  globalThis.__ocudrawHost = Object.freeze({
+    apiVersion: HOST_API_VERSION, module: hostModule, provides, publishCapability, capability,
+  });
 }
