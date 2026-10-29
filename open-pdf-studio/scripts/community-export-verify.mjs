@@ -180,7 +180,8 @@ export async function verifyCommunityExport({ bundle = false, published = false 
   if (state.edition !== 'community' || state.commit !== manifest.commit
     || state.version !== pkg.version || manifest.version !== pkg.version
     || state.files !== manifest.files.filter((item) =>
-      !item.path.startsWith('docs/') && item.path !== '.github/workflows/ci.yml'
+      !item.path.startsWith('docs/') && !['.github/workflows/ci.yml',
+        '.github/workflows/installers.yml'].includes(item.path)
       && !generatedFiles.has(item.path)).length) {
     throw new Error('Invalid Community source identity.');
   }
