@@ -469,3 +469,8 @@ js/ui/panels/markup-list-window.test.mjs
 js/editions/contract.test.mjs
 js/pdf/unknown-parametric-save.test.mjs
 js/annotations/markup-fields.test.mjs
+js/core/edition-helper.test.mjs
+js/editions/compose-addons.test.mjs
+js/editions/pdf-hooks.test.mjs
+js/annotations/extension-overlay.test.mjs
+js/annotations/extension-pointer.test.mjs
