@@ -29,6 +29,7 @@ This repository, [GhostTekz/oculith-foundation](https://github.com/GhostTekz/ocu
 |---|---|
 | [User guide](docs/GUIDE.md) | Every part of the app, tool by tool: documents and sheets, markups, the Tool Chest, the Markups List, measuring, compare, raceways, spaces, layers, OCR, CAD, print and preferences |
 | [Architecture](docs/ARCHITECTURE.md) | How the app is built: the Tauri shell, the interface, the PDF renderers, the native crates, and the save/reopen contract |
+| [Add-ons](docs/ADDONS.md) | The versioned local add-on interface, including independent packages and their build and install tools |
 | [File format](docs/FILE-FORMAT.md) | What Oculith Draw stores in a PDF and how other readers see it |
 | [Building](docs/BUILDING.md) | Building from source on Linux, Windows and macOS |
 | [Credits](docs/CREDITS.md) | The open-source projects it is built on |

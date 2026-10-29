@@ -474,6 +474,15 @@ struct EditionPlugin {
     css: String,
 }
 
+#[derive(serde::Serialize)]
+struct EditionPluginEntry {
+    id: String,
+    kind: &'static str,
+    url: Option<String>,
+    js: Option<String>,
+    css: String,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddonManifest {
@@ -524,6 +533,7 @@ fn addon_manifest_target_compatible(manifest: &AddonManifest) -> bool {
 }
 
 struct SelectedAddon {
+    id: String,
     script: Vec<u8>,
     css: String,
     helper: Option<(std::path::PathBuf, String)>,
@@ -534,8 +544,34 @@ struct SelectedAddon {
 /// Selection is fixed for the process lifetime. An add-on update takes effect
 /// on restart, so the script and helper cannot silently come from two versions.
 static SELECTED_ADDON: std::sync::OnceLock<Option<SelectedAddon>> = std::sync::OnceLock::new();
+static VERIFIED_PACKAGES: std::sync::OnceLock<Vec<VerifiedPackage>> = std::sync::OnceLock::new();
 const EDITION_URL_PREFIX: &str = "/edition/";
 const HOST_API_VERSION: u32 = 1;
+const MAX_ENABLED_PACKAGES: usize = 64;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnabledAddons {
+    schema_version: u32,
+    ids: Vec<String>,
+}
+
+struct VerifiedPackage {
+    id: String,
+    script: Vec<u8>,
+    css: String,
+}
+
+fn valid_addon_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 128
+        && id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
+        && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+fn valid_addon_version(version: &str) -> bool {
+    !version.is_empty() && version.len() <= 64
+        && version.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+' | b'_'))
+}
 
 fn addon_relative_path(name: &str) -> Option<std::path::PathBuf> {
     use std::path::Component;
@@ -586,6 +622,15 @@ fn sha256_bytes_match(bytes: &[u8], expected: &str) -> bool {
         && format!("{:x}", Sha256::digest(bytes)).eq_ignore_ascii_case(expected)
 }
 
+fn read_bounded_addon_file(path: &std::path::Path, limit: u64) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let file = fs::File::open(path).ok()?;
+    if file.metadata().ok()?.len() > limit { return None; }
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= limit).then_some(bytes)
+}
+
 fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
     let root = addons.join("active");
@@ -597,8 +642,7 @@ fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     if manifest.schema_version != 1 || manifest.host_api_version != HOST_API_VERSION
         || !addon_manifest_target_compatible(&manifest)
         || manifest.editor_version != app.package_info().version.to_string()
-        || manifest.version.is_empty() || manifest.version.len() > 64
-        || !manifest.version.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+' | b'_'))
+        || !valid_addon_version(&manifest.version)
         || manifest.id.is_empty()
         || !manifest.id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
         || !manifest.id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_')) {
@@ -624,7 +668,7 @@ fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     let helper = if let Some(name) = manifest.helper {
         Some((addon_file(&root, &name)?, manifest.files.get(&name)?.clone()))
     } else { None };
-    Some(SelectedAddon { script, css, helper, bundled: false, files: Some(manifest.files) })
+    Some(SelectedAddon { id: manifest.id, script, css, helper, bundled: false, files: Some(manifest.files) })
 }
 
 fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
@@ -638,11 +682,74 @@ fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     let script = fs::read(root.join("plugin.js")).ok()?;
     if script.is_empty() { return None; }
     let css = fs::read_to_string(root.join("plugin.css")).unwrap_or_default();
-    Some(SelectedAddon { script, css, helper: None, bundled: true, files: None })
+    Some(SelectedAddon { id: "bundled.edition".into(), script, css, helper: None, bundled: true, files: None })
 }
 
 fn selected_addon(app: &tauri::AppHandle) -> Option<&'static SelectedAddon> {
     SELECTED_ADDON.get_or_init(|| user_addon(app).or_else(|| bundled_addon(app))).as_ref()
+}
+
+fn enabled_addon_ids(addons: &std::path::Path) -> Vec<String> {
+    let Some(index_path) = addon_file(addons, "enabled.json") else { return Vec::new(); };
+    let Some(bytes) = read_bounded_addon_file(&index_path, 64 * 1024) else { return Vec::new(); };
+    let Ok(index) = serde_json::from_slice::<EnabledAddons>(&bytes) else { return Vec::new(); };
+    if index.schema_version != 1 || index.ids.len() > MAX_ENABLED_PACKAGES { return Vec::new(); }
+    let mut seen = std::collections::HashSet::new();
+    index.ids.into_iter().filter(|id| valid_addon_id(id) && seen.insert(id.clone())).collect()
+}
+
+fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> Option<VerifiedPackage> {
+    if !valid_addon_id(id) || fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
+    let manifest_path = addon_file(root, "manifest.json")?;
+    let manifest: AddonManifest = serde_json::from_slice(&read_bounded_addon_file(&manifest_path, 1024 * 1024)?).ok()?;
+    if manifest.schema_version != 2 || manifest.host_api_version != HOST_API_VERSION
+        || manifest.id != id || manifest.editor_version != editor_version
+        || !valid_addon_version(&manifest.version)
+        || !addon_manifest_target_compatible(&manifest)
+        || manifest.helper.is_some()
+        || manifest.files.is_empty() || manifest.files.len() > 2
+        || !manifest.files.contains_key("plugin.js")
+        || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css") {
+        return None;
+    }
+    let mut listed = 0;
+    for entry in fs::read_dir(root).ok()? {
+        let entry = entry.ok()?;
+        let name = entry.file_name();
+        let name = name.to_str()?;
+        let allowed = name == "manifest.json" || manifest.files.contains_key(name);
+        let kind = entry.file_type().ok()?;
+        if !allowed || !kind.is_file() || kind.is_symlink() { return None; }
+        listed += 1;
+        if listed > manifest.files.len() + 1 { return None; }
+    }
+    if listed != manifest.files.len() + 1 { return None; }
+    let script_path = addon_file(root, "plugin.js")?;
+    let script = read_bounded_addon_file(&script_path, 64 * 1024 * 1024)?;
+    if script.is_empty() { return None; }
+    if !sha256_bytes_match(&script, manifest.files.get("plugin.js")?) { return None; }
+    std::str::from_utf8(&script).ok()?;
+    let css = if let Some(expected) = manifest.files.get("plugin.css") {
+        let css_path = addon_file(root, "plugin.css")?;
+        let bytes = read_bounded_addon_file(&css_path, 16 * 1024 * 1024)?;
+        if bytes.is_empty() { return None; }
+        if !sha256_bytes_match(&bytes, expected) { return None; }
+        String::from_utf8(bytes).ok()?
+    } else { String::new() };
+    Some(VerifiedPackage { id: id.into(), script, css })
+}
+
+fn verified_packages(app: &tauri::AppHandle) -> &'static [VerifiedPackage] {
+    VERIFIED_PACKAGES.get_or_init(|| {
+        let Some(addons) = datamap::tauri_map(app, datamap::TauriMap::Data).ok().map(|path| path.join("addons")) else { return Vec::new(); };
+        if fs::symlink_metadata(&addons).ok().is_none_or(|meta| meta.file_type().is_symlink()) { return Vec::new(); }
+        let packages = addons.join("packages");
+        if fs::symlink_metadata(&packages).ok().is_none_or(|meta| meta.file_type().is_symlink()) { return Vec::new(); }
+        let editor_version = app.package_info().version.to_string();
+        enabled_addon_ids(&addons).into_iter()
+            .filter_map(|id| verified_package(&packages.join(&id), &id, &editor_version))
+            .collect()
+    })
 }
 
 pub(crate) fn selected_helper_available(app: &tauri::AppHandle) -> bool {
@@ -679,7 +786,39 @@ fn edition_plugin(app: tauri::AppHandle, inline: Option<bool>) -> Option<Edition
     Some(EditionPlugin { url: Some(format!("{EDITION_URL_PREFIX}plugin.js")), js: None, css: addon.css.clone() })
 }
 
-/// The editor's files, plus the selected add-on script under `/edition/`.
+#[tauri::command(async)]
+fn edition_plugins(app: tauri::AppHandle, inline: Option<bool>) -> Vec<EditionPluginEntry> {
+    let use_inline = tauri::is_dev() || inline.unwrap_or(false);
+    let mut entries = Vec::new();
+    if let Some(selected) = selected_addon(&app) {
+        if use_inline {
+            if let Ok(js) = String::from_utf8(selected.script.clone()) {
+                entries.push(EditionPluginEntry {
+                    id: selected.id.clone(), kind: "edition",
+                    url: None, js: Some(js), css: selected.css.clone(),
+                });
+            }
+        } else {
+            entries.push(EditionPluginEntry {
+                id: selected.id.clone(), kind: "edition",
+                url: Some(format!("{EDITION_URL_PREFIX}plugin.js")), js: None, css: selected.css.clone(),
+            });
+        }
+    }
+    for package in verified_packages(&app) {
+        if entries.iter().any(|entry| entry.id == package.id) { continue; }
+        let js = if use_inline { String::from_utf8(package.script.clone()).ok() } else { None };
+        if use_inline && js.is_none() { continue; }
+        entries.push(EditionPluginEntry {
+            id: package.id.clone(), kind: "contribution",
+            url: (!use_inline).then(|| format!("{EDITION_URL_PREFIX}packages/{}/plugin.js", package.id)),
+            js, css: package.css.clone(),
+        });
+    }
+    entries
+}
+
+/// The editor's files and verified add-on scripts under `/edition/`.
 struct EditionAssets<R: tauri::Runtime>(Box<dyn tauri::Assets<R>>);
 
 impl<R: tauri::Runtime> tauri::Assets<R> for EditionAssets<R> {
@@ -691,6 +830,11 @@ impl<R: tauri::Runtime> tauri::Assets<R> for EditionAssets<R> {
         if key.as_ref() == "/edition/plugin.js" {
             if let Some(addon) = SELECTED_ADDON.get().and_then(Option::as_ref) {
                 return Some(std::borrow::Cow::Borrowed(&addon.script));
+            }
+        }
+        if let Some(id) = key.as_ref().strip_prefix("/edition/packages/").and_then(|path| path.strip_suffix("/plugin.js")) {
+            if let Some(package) = VERIFIED_PACKAGES.get().and_then(|packages| packages.iter().find(|package| package.id == id)) {
+                return Some(std::borrow::Cow::Borrowed(&package.script));
             }
         }
         self.0.get(key)
@@ -711,6 +855,63 @@ impl<R: tauri::Runtime> tauri::Assets<R> for EditionAssets<R> {
 #[cfg(test)]
 mod addon_tests {
     use super::*;
+
+    fn addon_test_dir() -> std::path::PathBuf {
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("oculith-multi-addon-test-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn write_test_package(packages: &std::path::Path, id: &str, script: &[u8]) {
+        let root = packages.join(id);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("plugin.js"), script).unwrap();
+        fs::write(root.join("manifest.json"), serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2, "id": id, "version": "1.0.0", "hostApiVersion": HOST_API_VERSION,
+            "editorVersion": "2026.68.0", "files": { "plugin.js": sha256_file(&root.join("plugin.js")).unwrap() }
+        })).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn enabled_index_filters_invalid_and_duplicate_ids() {
+        let root = addon_test_dir();
+        fs::write(root.join("enabled.json"), r#"{"schemaVersion":1,"ids":["first.addon","../escape","first.addon","second.addon",".hidden"]}"#).unwrap();
+        assert_eq!(enabled_addon_ids(&root), ["first.addon", "second.addon"]);
+        fs::write(root.join("enabled.json"), r#"{"schemaVersion":2,"ids":["first.addon"]}"#).unwrap();
+        assert!(enabled_addon_ids(&root).is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v2_packages_verify_independently_and_reject_native_payloads() {
+        let root = addon_test_dir();
+        let packages = root.join("packages");
+        write_test_package(&packages, "first.addon", b"export default 1;");
+        write_test_package(&packages, "second.addon", b"export default 2;");
+        assert_eq!(verified_package(&packages.join("first.addon"), "first.addon", "2026.68.0").unwrap().script, b"export default 1;");
+        fs::write(packages.join("first.addon/plugin.js"), b"tampered").unwrap();
+        assert!(verified_package(&packages.join("first.addon"), "first.addon", "2026.68.0").is_none());
+        assert!(verified_package(&packages.join("second.addon"), "second.addon", "2026.68.0").is_some());
+        let second = packages.join("second.addon");
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(second.join("manifest.json")).unwrap()).unwrap();
+        manifest["helper"] = "plugin.js".into();
+        fs::write(second.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&second, "second.addon", "2026.68.0").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn v2_package_rejects_symlinked_root() {
+        use std::os::unix::fs::symlink;
+        let root = addon_test_dir();
+        let packages = root.join("packages");
+        write_test_package(&packages, "actual.addon", b"export default 1;");
+        symlink(packages.join("actual.addon"), packages.join("linked.addon")).unwrap();
+        assert!(verified_package(&packages.join("linked.addon"), "linked.addon", "2026.68.0").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn manifest_contract_and_hashes() {
@@ -4157,6 +4358,7 @@ pub fn run(opts: StartupOpts) {
             get_username,
             read_file,
             edition_plugin,
+            edition_plugins,
             edition_helper::edition_helper_available,
             edition_helper::edition_helper_call,
             edition_helper::edition_helper_share_file,

@@ -34,6 +34,9 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
+  // Vite can go network-idle while boot.js is still composing the editor.
+  // Wait for init() to set the product title before checking the edition.
+  await page.waitForFunction(() => document.title === 'Oculith Draw Foundation', null, { timeout: 60_000 });
   assert.equal(await page.title(), 'Oculith Draw Foundation');
   assert.deepEqual(await page.evaluate(async () => {
     const { edition } = await import('/js/editions/active.js');
