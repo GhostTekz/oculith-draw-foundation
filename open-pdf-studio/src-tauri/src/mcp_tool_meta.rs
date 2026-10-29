@@ -119,7 +119,6 @@ pub const TOOLS: &[ToolMeta] = &[
     ontwikkel("screenshot_page", "Render test page", true),
     ontwikkel("screenshot_all", "Render all test pages", true),
     ontwikkel("get_pdf_metadata", "Read test PDF metadata", true),
-    ontwikkel("app_ai_complete", "Ask Claude with a personal key", false),
 ];
 
 pub fn meta(naam: &str) -> Option<&'static ToolMeta> {

@@ -756,21 +756,8 @@ fn handle_tools_list() -> Value {
                 }
             },
             {
-                "name": "app_ai_complete",
-                "description": "Ask Claude through the LIVE app using the personal API key configured in the assistant. Returns { ok, via, text } without driving the chat UI.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "prompt": { "type": "string", "description": "The question/prompt for the assistant." },
-                        "system": { "type": "string", "description": "Optional system prompt." }
-                    },
-                    "required": ["prompt"],
-                    "additionalProperties": false
-                }
-            },
-            {
                 "name": "app_assistant_ask",
-                "description": "Submit a message into the app's assistant window as if the user typed it (opens the panel). Returns { ok }. The answer comes from a personal Claude key or the MCP relay (app_assistant_pending + app_assistant_answer).",
+                "description": "Submit a message into the app's assistant window as if the user typed it (opens the panel). Returns { ok }. The answer comes through the MCP relay (app_assistant_pending + app_assistant_answer).",
                 "inputSchema": {
                     "type": "object",
                     "properties": { "text": { "type": "string", "description": "The user message to submit." } },
@@ -1323,7 +1310,6 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, (i
         "app_set_window_size"    => tool_set_window_size(state, &arguments).await,
         "app_get_current_tool"   => tool_app_request(state, "mcp:get-current-tool",   &arguments, Duration::from_secs(5)).await,
         "app_merge_pdf"          => tool_app_request(state, "mcp:merge-pdf",           &arguments, Duration::from_secs(60)).await,
-        "app_ai_complete"        => tool_app_request(state, "mcp:ai-complete",         &arguments, Duration::from_secs(60)).await,
         "app_assistant_ask"      => tool_app_request(state, "mcp:assistant-ask",       &arguments, Duration::from_secs(10)).await,
         "app_assistant_pending"  => tool_app_request(state, "mcp:assistant-pending",   &arguments, Duration::from_secs(10)).await,
         "app_assistant_answer"   => tool_app_request(state, "mcp:assistant-answer",    &arguments, Duration::from_secs(10)).await,
