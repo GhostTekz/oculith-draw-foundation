@@ -152,6 +152,11 @@ jobs:
             dpkg-deb --extract "$package" "$extracted"
             node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$extracted" --artifact "$package" \
               --output target/community/release/bundle/foundation-package-audit-deb.json
+            appdir="$(find target/community/release/bundle/appimage -maxdepth 1 -type d -name '*.AppDir' -print -quit)"
+            appimage="$(find target/community/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
+            test -n "$appdir" && test -n "$appimage"
+            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$appdir" --artifact "$appimage" \
+              --output target/community/release/bundle/foundation-package-audit-appimage.json
           else
             app="$(find target/community/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
             node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$app" \
