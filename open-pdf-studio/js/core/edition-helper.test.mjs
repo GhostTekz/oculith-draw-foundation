@@ -26,10 +26,10 @@ test('file sharing targets only the requested package helper command', async () 
   const calls = [];
   globalThis.window = { __TAURI__: { core: { invoke: async (command, args) => {
     calls.push({ command, args });
-    return true;
+    return '/canonical/drawing.pdf';
   } } } };
   try {
-    assert.equal(await shareAddonFile('sample.tools', '/drawings/sample.pdf'), true);
+    assert.equal(await shareAddonFile('sample.tools', '/drawings/sample.pdf'), '/canonical/drawing.pdf');
     assert.deepEqual(calls, [{ command: 'addon_helper_share_file', args: {
       packageId: 'sample.tools', path: '/drawings/sample.pdf',
     } }]);

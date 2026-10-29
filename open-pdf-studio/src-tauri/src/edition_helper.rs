@@ -248,7 +248,7 @@ pub async fn addon_helper_share_file(
     state: tauri::State<'_, EditionHelper>,
     package_id: String,
     path: String,
-) -> Result<bool, String> {
+) -> Result<String, String> {
     use tauri_plugin_fs::FsExt;
     if package_id.is_empty() || !crate::package_helper_enabled(&app, &package_id) {
         return Err(NO_PACKAGE_HELPER.into());
@@ -259,8 +259,8 @@ pub async fn addon_helper_share_file(
     {
         return Err("This file is not open in the editor.".into());
     }
-    send(&app, &state, Some(&package_id), "host.shareFile", json!({ "path": pdf })).await?;
-    Ok(true)
+    send(&app, &state, Some(&package_id), "host.shareFile", json!({ "path": &pdf })).await?;
+    Ok(pdf.to_string_lossy().into_owned())
 }
 
 fn check_shareable_pdf(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
@@ -386,6 +386,7 @@ mod share_file_tests {
         let large = root.join("large.pdf");
         let file = std::fs::File::create(&large).unwrap();
         file.set_len(FILE_CAP + 1).unwrap();
+        drop(file);
         assert!(check_shareable_pdf(&large).is_err());
         #[cfg(unix)] {
             let link = root.join("linked.pdf");
