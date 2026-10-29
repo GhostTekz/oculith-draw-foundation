@@ -1,0 +1,171 @@
+name: Foundation installers
+
+# Run the expensive package matrix only for a reviewed candidate, on demand,
+# or weekly against main. Label events do not repeat on each PR push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 8 * * 1'
+  pull_request:
+    types: [labeled, ready_for_review]
+
+concurrency:
+  group: foundation-installers-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  installers:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'ci:installers') ||
+      (github.event.action == 'ready_for_review' && contains(github.event.pull_request.labels.*.name, 'ci:installers'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            bundle: deb
+          - runner: windows-latest
+            bundle: nsis
+          - runner: macos-26
+            bundle: app
+    runs-on: ${{ matrix.runner }}
+    env:
+      # tesseract-rs hardcodes /MD. MSVC appends _CL_ after those flags, so
+      # Windows C/C++ objects match the workspace's static Rust CRT.
+      _CL_: ${{ matrix.bundle == 'nsis' && '/MT' || '' }}
+      # Keep the host display stack outside the Linux AppImage.
+      LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libwayland-client.so*;libwayland-cursor.so*;libwayland-egl.so*;libwayland-server.so*;libxkbcommon.so*;libxcb-randr.so*;libxcb-render.so*;libxcb-shm.so*;libXau.so*;libXdmcp.so*'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake nasm libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libtesseract-dev libleptonica-dev pkg-config
+      - name: Native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake nasm
+      - name: Prepare runtime and build sidecar
+        working-directory: open-pdf-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          node --test scripts/pack-addon.test.mjs scripts/addon-manager.test.mjs js/core/edition-helper.test.mjs
+          npm run prepare:native-runtime
+          npm run prepare:ocr-runtime
+          cargo build --release -p pdfium-worker
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          worker="../target/release/pdfium-worker"
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          mkdir -p src-tauri/binaries
+          cp "${worker}${suffix}" "src-tauri/binaries/ocudraw-community-pdfium-worker-${triple}${suffix}"
+      - name: Build installer
+        working-directory: open-pdf-studio
+        run: npm run tauri:community -- --bundles ${{ matrix.bundle }}
+      - name: Provide pinned linuxdeploy (Linux)
+        if: matrix.bundle == 'deb'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+          mkdir -p "$tools"
+          curl -fsSL --retry 3 -o "$tools/linuxdeploy-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  $tools/linuxdeploy-x86_64.AppImage" | sha256sum -c -
+          chmod +x "$tools/linuxdeploy-x86_64.AppImage"
+      - name: Build AppImage (Linux)
+        if: matrix.bundle == 'deb'
+        working-directory: open-pdf-studio
+        run: npm run tauri:community -- --bundles appimage
+      - name: Start AppImage on Debian 13 (Linux)
+        if: matrix.bundle == 'deb'
+        working-directory: open-pdf-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="$(find ../target/community/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          appimage="$(realpath "$appimage")"
+          docker run --rm \
+            -v "$appimage:/input/oculith-draw.AppImage:ro" \
+            -v "$PWD/scripts/linux-appimage-smoke.sh:/input/linux-appimage-smoke.sh:ro" \
+            -v "$PWD/scripts/check-appimage-elf.py:/input/check-appimage-elf.py:ro" \
+            debian:13-slim \
+            bash -lc 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends dbus-x11 gvfs libegl1 libgles2 libgtk-3-0t64 python3 xauth xvfb && cp /input/oculith-draw.AppImage /tmp/oculith-draw.AppImage && bash /input/linux-appimage-smoke.sh /tmp/oculith-draw.AppImage 10'
+      - name: Start AppImage on Fedora 44 (Linux)
+        if: matrix.bundle == 'deb'
+        working-directory: open-pdf-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="$(find ../target/community/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          appimage="$(realpath "$appimage")"
+          docker run --rm \
+            -v "$appimage:/input/oculith-draw.AppImage:ro" \
+            -v "$PWD/scripts/linux-appimage-smoke.sh:/input/linux-appimage-smoke.sh:ro" \
+            -v "$PWD/scripts/check-appimage-elf.py:/input/check-appimage-elf.py:ro" \
+            fedora:44 \
+            bash -lc 'dnf install -y --setopt=install_weak_deps=False dbus-daemon dbus-tools findutils gtk3 gvfs libwayland-client libwayland-cursor libwayland-egl libwayland-server libxcb libXau libXdmcp libxkbcommon mesa-libEGL libglvnd-gles python3 xorg-x11-server-Xvfb xorg-x11-xauth && cp /input/oculith-draw.AppImage /tmp/oculith-draw.AppImage && bash /input/linux-appimage-smoke.sh /tmp/oculith-draw.AppImage 10'
+      - name: Check installer output
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="target/community/release/bundle"
+          case "${{ matrix.bundle }}" in
+            deb)
+              test -n "$(find "$bundle/deb" -maxdepth 1 -name '*.deb' -print -quit)"
+              test -n "$(find "$bundle/appimage" -maxdepth 1 -name '*.AppImage' -print -quit)"
+              ;;
+            nsis) test -n "$(find "$bundle/nsis" -maxdepth 1 -name '*-setup.exe' -print -quit)" ;;
+            app) test -n "$(find "$bundle/macos" -maxdepth 1 -name '*.app' -print -quit)" ;;
+          esac
+      - name: Install and remove Foundation (Windows)
+        if: matrix.bundle == 'nsis'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "$env:GITHUB_WORKSPACE/target/community/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw 'Foundation installer is missing' }
+          $install = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Silent install failed: $($install.ExitCode)" }
+          $locations = @(
+            "$env:ProgramFiles/Oculith Draw Foundation",
+            "$env:LOCALAPPDATA/Oculith Draw Foundation"
+          )
+          $installed = $locations | Where-Object { Test-Path (Join-Path $_ 'ocudraw-community.exe') } | Select-Object -First 1
+          if (-not $installed) {
+            foreach ($key in @(
+              'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Oculith Draw Foundation (User)',
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Oculith Draw Foundation',
+              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Oculith Draw Foundation'
+            )) {
+              $location = (Get-ItemProperty $key -ErrorAction SilentlyContinue).InstallLocation
+              if ($location -and (Test-Path (Join-Path $location.Trim('"') 'ocudraw-community.exe'))) {
+                $installed = $location.Trim('"')
+                break
+              }
+            }
+          }
+          if (-not $installed) { throw 'Installed Foundation executable is missing' }
+          if (-not (Test-Path (Join-Path $installed 'ocudraw-community-pdfium-worker.exe'))) {
+            throw 'Installed PDFium worker is missing'
+          }
+          $uninstaller = Join-Path $installed 'uninstall.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Foundation uninstaller is missing' }
+          $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
+          if ($remove.ExitCode -ne 0) { throw "Silent uninstall failed: $($remove.ExitCode)" }
+          if (Test-Path (Join-Path $installed 'ocudraw-community.exe')) { throw 'Foundation executable remained after uninstall' }
+      - name: Upload installer for review
+        uses: actions/upload-artifact@v7
+        with:
+          name: foundation-${{ matrix.runner }}-${{ matrix.bundle }}
+          path: target/community/release/bundle/
+          if-no-files-found: error
+          retention-days: 7

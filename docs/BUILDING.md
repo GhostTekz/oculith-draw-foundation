@@ -80,7 +80,11 @@ npx vite build --logLevel error   # production frontend build
 
 The unit tests run on real PDF bytes from the real saver and loader where it matters, so a change to saving or loading is checked end to end.
 
-The public CI also checks the source boundary, runs an offline browser save/reopen test, and builds Linux, Windows and macOS installers. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
+The `Foundation CI` workflow runs on every pull request update. It checks the source boundary, editor and native compilation, and offline browser save/reopen without building installers. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
+
+The separate `Foundation installers` workflow builds Linux DEB and AppImage, Windows NSIS, and macOS app packages. It also starts the AppImage on Debian and Fedora and installs and removes the Windows package. It runs weekly on `main`, on manual dispatch, or once when a maintainer adds the `ci:installers` label to a pull request. If the label is already present, marking a draft ready for review runs it again. New commits do **not** rerun the installer matrix. After a candidate changes, remove and reapply the label to test the new head; check that all three installer jobs succeeded for the final candidate before merging or shipping. Manual dispatch becomes available after the workflow exists on the default branch; select the candidate branch and verify its commit in the run. A release also runs its release build workflow as required by the release process.
+
+If branch protection is configured, require the always-running `Foundation CI / source-and-editor` check. The installer matrix is a review and release gate, so do not make its conditional jobs required on every pull request. A skipped installer workflow is not evidence that a package passed.
 
 The Rust crates have their own tests:
 
