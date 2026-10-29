@@ -35,6 +35,13 @@ export function unclaimedLegacyCatalogKeys(pdfDoc, claimed = []) {
     .filter((key) => LEGACY_CATALOG_NAME.test(key) && !known.has(key));
 }
 
+/** Add-on catalog fields need an owner before extracting selected pages. */
+export function unclaimedAddonCatalogKeys(pdfDoc, claimed = []) {
+  const known = new Set(claimed);
+  return pdfDoc.catalog.keys().map((key) => key.decodeText())
+    .filter((key) => key.startsWith('ODX_') && !known.has(key));
+}
+
 /** Reversible ASCII encoding prevents packages with punctuation in their IDs sharing a prefix. */
 export function pdfKeyPrefix(id) {
   if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) {
@@ -108,8 +115,8 @@ export function validatePdfContribution(id, pdf) {
       throw new Error(`PDF ${name} requires declared annotation keys and a function`);
     }
   }
-  if (pdf.catalogForExtract != null && (!legacyKeys.length || typeof pdf.catalogForExtract !== 'function')) {
-    throw new Error('PDF catalogForExtract requires owned legacy catalog keys and a function');
+  if (pdf.catalogForExtract != null && (!catalogKeys.length && !legacyKeys.length || typeof pdf.catalogForExtract !== 'function')) {
+    throw new Error('PDF catalogForExtract requires owned catalog keys and a function');
   }
   if (extractAnnotationKeys.length && !pdf.catalogForExtract) {
     throw new Error('PDF extractAnnotationKeys requires catalogForExtract');
@@ -206,19 +213,16 @@ function readCatalog(pdfDoc, keys, legacyKeys = []) {
         && value.value.length <= (max + 1) * 4) {
       let decoded;
       try {
-        if (legacy.has(key)) {
-          const bytes = value.asBytes();
-          // pdf-lib's UTF-16 decoder spreads all code points into one call and
-          // overflows for large workspaces. Keep its behavior for small strings;
-          // reject malformed large UTF-16 rather than normalize source bytes.
-          if (bytes.length <= 64 * 1024) {
-            decoded = value.decodeText();
-          } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
-            decoded = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
-          } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
-            decoded = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
-          }
-        } else decoded = value.decodeText();
+        const bytes = value.asBytes();
+        // pdf-lib's UTF-16 decoder spreads all code points into one call and
+        // overflows for large fields. Keep its behavior for small strings;
+        // reject malformed large UTF-16 rather than normalize source bytes.
+        if (bytes.length <= 64 * 1024) decoded = value.decodeText();
+        else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+          decoded = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
+        } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+          decoded = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
+        }
       } catch { continue; /* Unreadable source stays in the PDF. */ }
       if (decoded !== undefined
           && (legacy.has(key) ? encoder.encode(decoded).length <= max : decoded.length <= max)) {
@@ -376,7 +380,7 @@ export function composePdfHooks(current, id, contribution) {
       for (const addon of addons) {
         const present = addon.catalogKeys.filter((key) => source.catalog.get(PDFName.of(key)) !== undefined);
         if (!present.length) continue;
-        if (present.some((key) => !addon.legacyCatalogKeys.includes(key)) || !addon.catalogForExtract) {
+        if (!addon.catalogForExtract) {
           throw new Error(`Cannot extract pages with ${addon.id} PDF data; use the add-on that can remap its catalog.`);
         }
         const fields = readCatalog(source, present, addon.legacyCatalogKeys);
@@ -390,7 +394,7 @@ export function composePdfHooks(current, id, contribution) {
         }
         const sourceData = Object.freeze({ fields: Object.freeze(fields), presentKeys: Object.freeze(present),
           pages: sourcePages });
-        const values = textFields(addon.catalogForExtract(sourceData), addon.legacyCatalogKeys,
+        const values = textFields(addon.catalogForExtract(sourceData), addon.catalogKeys,
           MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys);
         if (present.some((key) => !Object.hasOwn(values, key))) {
           throw new Error(`PDF ${addon.id} did not remap every owned catalog field`);
