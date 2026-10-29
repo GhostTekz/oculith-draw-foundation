@@ -34,5 +34,6 @@
 # Shellscripts altijd met LF, ook bij core.autocrlf=true: bash weigert CRLF.
 *.sh       text eol=lf
 
-# Lockfiles with LF everywhere: the notice bundle records the Cargo.lock hash.
+# Lockfiles with LF everywhere: the source bill of materials records their hashes.
 Cargo.lock text eol=lf
+open-pdf-studio/package-lock.json text eol=lf
