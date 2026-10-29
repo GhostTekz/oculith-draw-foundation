@@ -52,6 +52,10 @@ jobs:
           - runner: macos-26
             bundle: app
     runs-on: ${{ matrix.runner }}
+    env:
+      # tesseract-rs hardcodes /MD. MSVC appends _CL_ after those flags, so
+      # Windows C/C++ objects match the workspace's static Rust CRT.
+      _CL_: ${{ matrix.bundle == 'nsis' && '/MT' || '' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
