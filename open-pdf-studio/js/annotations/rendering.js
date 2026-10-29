@@ -46,7 +46,7 @@ import { drawImageCropOverlay, activeCropAnnotation } from './image-crop-overlay
 import { fracties as cropFracties, volledigVak as cropVolledigVak } from './crop-geometrie.js';
 import { drawEmbeddedImageOverlay } from '../tools/tools/remove-image-tool.js';
 import { drawVisualSearchOverlay } from '../tools/visual-search/overlay.js';
-import { drawExtensionOverlays } from './extension-overlay.js';
+import { drawExtensionOverlays, drawExtensionUnderlays } from './extension-overlay.js';
 import { drawDynamicFillOverlay } from '../tools/dynamic-fill/overlay.js';
 import { updateQuickAccessButtons, updateContextualTabs, drawGrid, snapToGrid } from './rendering/ui-state.js';
 import { drawCommentIcon } from './rendering/comment-icons.js';
@@ -3372,6 +3372,7 @@ function redrawAnnotationsNow(lightweight = false) {
   const geselecteerd = new Set((doc?.selectedAnnotations || []).map(a => a?.id).filter(Boolean));
   const laagGeldig = laagMag && lightweight && !_laagVers && _laag.doc === doc && _laag.page === curPage
     && _laag.count === annotations.length && _laag.selectie === selectieSleutel(geselecteerd) && !!_laag.canvas;
+  drawExtensionUnderlays(annotationCtx, curPage, doc);
   const tekenOp = (targetCtx, annotation) => {
     // Wrap each annotation in save/restore to prevent clip leaks between annotations
     targetCtx.save();
@@ -3693,6 +3694,7 @@ function tekenPaginaLagen(ctx, pageNum, width, height, overrideDpr, renderOffset
   const dezePagina = pageAnnotations && annotations === pageAnnotations
     ? annotations
     : pageSlots(annotations, pageNum).map(slot => annotations[slot]);
+  if (lagen.bewerkhulp) drawExtensionUnderlays(ctx, pageNum, doc);
   metWeergaveDoorloop(() => metSchaalBronnen(() => eachUnderlayFirst(dezePagina, pageNum, (a) => { if (!apAlGetekend?.has(a.id) && !_buitenBeeld(a, cvX, cvY, cvW, cvH)) { ctx.save(); drawAnnotation(ctx, a, snippetBitmaps); ctx.restore(); } })));
   metWeergaveDoorloop(() => metSchaalBronnen(() => dezePagina.forEach(annotation => {
     if (!annotation || annotation.page !== pageNum) return;

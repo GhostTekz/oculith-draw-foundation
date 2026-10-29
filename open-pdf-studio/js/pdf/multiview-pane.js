@@ -9,6 +9,7 @@ import { annotationToScreen } from './multiview-sync.js';
 import { nativeOcgPdfJsConfig } from './native-ocg-selection.js';
 import { weergaveRotatie } from './weergave-ruimte.js';
 import { drawAnnotation, metWeergaveZoom } from '../annotations/rendering.js';
+import { drawExtensionUnderlays } from '../annotations/extension-overlay.js';
 import { metSchaalBronnen } from '../annotations/schaal-bronnen.js';
 import { apRenderParams, apOverslaan } from './ap-render-state.js';
 import { edition } from '../editions/active.js';
@@ -66,6 +67,7 @@ export function createPassivePane(host, { onShow = null } = {}) {
     const { overslaan, klopt } = apOverslaan(doc, page, current.apIds);
     if (!klopt) planApHertekening();
     metWeergaveZoom(current.scale, () => metSchaalBronnen(() => {
+      drawExtensionUnderlays(ctx, page, doc);
       for (const a of annotations) if (edition.rendering?.isUnderlay?.(a) && a.page === page && !overslaan.has(a.id)) { ctx.save(); try { drawAnnotation(ctx, a); } catch (e) { console.warn('[multiview] drawAnnotation', e); } ctx.restore(); }
       for (const annotation of annotations) {
         if (annotation.page !== page) continue;
