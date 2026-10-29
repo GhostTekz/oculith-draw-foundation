@@ -37,6 +37,9 @@ jobs:
       # Keep the host display stack outside the Linux AppImage.
       LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libwayland-client.so*;libwayland-cursor.so*;libwayland-egl.so*;libwayland-server.so*;libxkbcommon.so*;libxcb-randr.so*;libxcb-render.so*;libxcb-shm.so*;libXau.so*;libXdmcp.so*'
     steps:
+      - name: Preserve generated source bytes (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v6
         with:
           # Audit receipts must name the commit that built the installer, not
