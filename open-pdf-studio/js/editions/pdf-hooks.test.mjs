@@ -4,7 +4,7 @@ import { PDFArray, PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib
 import { edition as foundation } from './community.js';
 import { composeAddons } from './compose-addons.js';
 import { assertEditionContract } from './contract.js';
-import { pdfKeyPrefix } from './pdf-hooks.js';
+import { pdfKeyPrefix, unclaimedAddonCatalogKeys } from './pdf-hooks.js';
 import { extractPdfLibPages } from '../pdf/extract-pages-core.js';
 import { carryUnmodeledAnnotationKeys } from '../pdf/saver/unmodeled-annotation-keys.js';
 
@@ -132,6 +132,39 @@ test('v2 PDF key ownership and operation limits reject a package without changin
   pdf.catalog.set(PDFName.of(owned), PDFHexString.fromText('cannot remap page-specific data'));
   const extracted = await PDFDocument.create();
   assert.throws(() => composed.edition.pdf.carryToExtract(pdf, extracted, [1]), /Cannot extract pages/);
+});
+
+test('a namespaced PDF owner remaps its catalog during page extraction', async () => {
+  const id = 'sample.study', owned = key(id, 'PagesV1');
+  const source = await PDFDocument.create();
+  source.addPage([200, 200]); source.addPage([200, 200]);
+  source.catalog.set(PDFName.of(owned), PDFHexString.fromText('page 2'));
+  source.catalog.set(PDFName.of(key('other.package', 'UnknownV1')), PDFHexString.fromText('other'));
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    catalogKeys: [owned],
+    catalogForExtract({ fields, pages }) {
+      assert.equal(fields[owned], 'page 2');
+      assert.deepEqual(pages.map((page) => [page.sourcePage, page.targetPage]), [[2, 1]]);
+      return { [owned]: 'page 1' };
+    },
+  } } }]);
+  assert.deepEqual(unclaimedAddonCatalogKeys(source, edition.pdf.catalogKeys), [key('other.package', 'UnknownV1')]);
+  const target = await PDFDocument.create();
+  target.addPage((await target.copyPages(source, [1]))[0]);
+  edition.pdf.carryToExtract(source, target, [2]);
+  assert.equal(text(target.catalog, owned), 'page 1');
+  assert.equal(text(source.catalog, owned), 'page 2');
+});
+
+test('a namespaced PDF owner reads a large UTF-16 text field within its limit', async () => {
+  const id = 'sample.large', owned = key(id, 'StudyV1');
+  const source = await PDFDocument.create();
+  source.addPage();
+  const value = 'schedule '.repeat(10_000);
+  source.catalog.set(PDFName.of(owned), PDFHexString.fromText(value));
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id,
+    pdf: { catalogKeys: [owned] } } }]);
+  assert.equal(edition.pdf.readWorkspace(source).addons[id][owned], value);
 });
 
 test('v2 PDF callbacks reject asynchronous or unowned save data before writing package fields', async () => {
