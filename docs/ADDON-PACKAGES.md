@@ -6,7 +6,7 @@ The contribution interface supports dialogs, panels, file commands and menu item
 
 ## Package format
 
-Each package has a `manifest.json`, `plugin.js`, and optionally `plugin.css` or a native helper:
+Each package has a `manifest.json`, `plugin.js`, and optionally `plugin.css` and `NOTICES.txt`. Schema version 3 also requires a native helper:
 
 ```json
 {
@@ -23,7 +23,7 @@ Each package has a `manifest.json`, `plugin.js`, and optionally `plugin.css` or 
 
 `editorVersion` must exactly match the editor being used. The package builder fills it from the current source tree. `files` contains the digest of every package file. The package may also declare a `target` with `os` and `arch` when it is intended for only one platform. Schema version 2 rejects native executables. Unlisted files are always rejected. The digests detect changed files; they do not establish the publisher's identity. Add-on code runs with the editor's privileges, so install only packages from a source you trust.
 
-To include a native helper, pass `--helper /path/to/built-helper` to the package builder. It creates schema version 3 with a required `target` matching the build host, a `helper` field (`helper.exe` on Windows, `helper` elsewhere), and a SHA-256 entry for that executable in `files`. The installer and loader check the target, file type, size, executable permission on Unix, executable header, and digest. Build separately on each supported operating system and architecture; this package builder does not cross compile. The editor starts the helper only when called and passes JSON lines over standard input and output. The helper is selected by the enabled package ID, and its events include that ID. The existing full-edition helper route is unchanged. A native package takes effect after an editor restart, including disable, update, and removal.
+To include a native helper, pass `--helper /path/to/built-helper` to the package builder. It creates schema version 3 with a required `target` matching the build host, a `helper` field (`helper.exe` on Windows, `helper` elsewhere), and a SHA-256 entry for that executable in `files`. Pass `--notices /path/to/NOTICES.txt` to include a UTF-8 notices file of at most 4 MiB in either package version. The installer and loader check the target, file type, size, executable permission on Unix, executable header, and digest; they also check the notices file's size, UTF-8 encoding and digest. Build separately on each supported operating system and architecture; this package builder does not cross compile. The editor starts the helper only when called and passes JSON lines over standard input and output. The helper is selected by the enabled package ID, and its events include that ID. The existing full-edition helper route is unchanged. A native package takes effect after an editor restart, including disable, update, and removal.
 
 The published `js/core/edition-helper.js` module exposes `addonHelperAvailable(packageId)`, `addonHelperCall(packageId, method, params)`, and `onAddonHelperEvent(packageId, event, handler)`. Helper methods are defined by the package, not the editor. The editor reserves methods beginning with `host.`. Packages in the same web view can call the published interface; package IDs route calls and events but are not an isolation boundary. Each helper receives the editor data directory path and runs with the user's operating-system privileges. The editor does not route its `host.shareFile` method to an independent helper.
 
@@ -44,6 +44,10 @@ export function createAddon() {
 ```
 
 Use the edition contract and the sample add-on in the source tree for the exact shapes of contributed entries. Keep IDs stable across releases. The script's ID must match the manifest ID. Packages that request unsupported fields are skipped.
+
+`createAddon()` builds its descriptor before the editor loads the modules named in the script's `requires` export. It may use only the early host modules at that point: `solid-js`, `solid-js/web`, `solid-js/store`, `pdf-lib`, and `js/solid/data/lucideIcons.js`. Required modules load after accepted contributions are composed and before editor startup; use them in panel components, callbacks, or later actions.
+
+The host passes `createAddon(context)` a frozen object with `pdfKeys`, a frozen array of PDF key names already claimed by the selected edition and earlier accepted add-ons. A package may omit its optional `pdf` contribution when a key is occupied and still provide its panel. The host checks ownership again during composition, so two packages cannot claim the same key even if they ignore this context.
 
 ## Namespaced PDF fields
 

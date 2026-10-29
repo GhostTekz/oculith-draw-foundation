@@ -1,6 +1,6 @@
 // Start-up. An optional add-on is loaded through js/plugin/host.js before
 // the editor starts; without one, the editor runs as Foundation.
-import { EARLY, HOST_API_VERSION, installHost, loadHostModules } from './plugin/host.js';
+import { EARLY, HOST_API_VERSION, installHost, loadHostModules, provides } from './plugin/host.js';
 import { finish, setEdition, setStatus, side, startLaunchScreen } from './launch-screen.js';
 import { edition as foundation } from './editions/community.js';
 import { composeAddons, resolvePluginEntries } from './editions/compose-addons.js';
@@ -75,6 +75,11 @@ async function installEdition(found) {
     preload?.remove();
     throw new Error(`The edition plug-in needs plug-in interface ${plugin.hostApiVersion}; this editor provides ${HOST_API_VERSION}.`);
   }
+  const required = plugin.requires || [];
+  if (!Array.isArray(required) || required.some((id) => typeof id !== 'string' || !provides(id))) {
+    preload?.remove();
+    throw new Error('The edition plug-in requests an unsupported editor module.');
+  }
   let style;
   try {
     const edition = plugin.createEdition();
@@ -82,8 +87,6 @@ async function installEdition(found) {
     setEdition(editionWord(edition));
     setStatus(`Loading ${editionWord(edition)}`);
     style = addStyle(found);
-    await loadHostModules(plugin.requires || []);
-    await plugin.start?.();
     return { plugin, edition };
   } catch (error) {
     style?.remove();
@@ -134,6 +137,7 @@ async function installEdition(found) {
   }
   let composed = base;
   const acceptedIds = new Set();
+  const addonModules = [];
   for (const entry of contributions) {
     let preload;
     let style;
@@ -142,13 +146,24 @@ async function installEdition(found) {
       const imported = await importEntry(entry);
       preload = imported.preload;
       if (typeof imported.plugin.createAddon !== 'function') throw new Error('Add-on must export createAddon()');
-      const addon = await imported.plugin.createAddon();
+      const required = imported.plugin.requires || [];
+      if (!Array.isArray(required) || required.some((id) => typeof id !== 'string' || !provides(id))) {
+        throw new Error('Add-on requests an unsupported editor module');
+      }
+      // Give descriptor construction only the already claimed PDF names, not
+      // the mutable edition. A package may omit an optional PDF contribution
+      // while keeping its panel; composeAddons still rejects any collision.
+      const pdfKeys = Object.freeze([...new Set([
+        ...(composed.pdf?.catalogKeys || []), ...(composed.pdf?.annotationKeys || []),
+      ])]);
+      const addon = await imported.plugin.createAddon(Object.freeze({ pdfKeys }));
       if (acceptedIds.has(entry.id)) throw new Error(`Duplicate add-on id: ${entry.id}`);
       const result = composeAddons(composed, [{ id: entry.id, addon }], { reservedTemplateIds });
       if (result.rejected.length) throw result.rejected[0].error;
       style = addStyle(entry);
       composed = result.edition;
       acceptedIds.add(entry.id);
+      addonModules.push(...required);
     } catch (error) {
       style?.remove();
       preload?.remove();
@@ -158,6 +173,20 @@ async function installEdition(found) {
   if (acceptedIds.size) globalThis.__ocudrawEdition = composed;
   if (!plugin) setEdition(editionWord(foundation));
   setStatus('Starting');
+  // The active edition must be composed before a host import evaluates
+  // editions/active.js. Full editions and independent add-ons share this order.
+  try {
+    await loadHostModules([...new Set([...(plugin?.requires || []), ...addonModules])]);
+  } catch (error) {
+    // Some host modules import active.js, which selects the edition once.
+    // After a failed import, switching editions could leave those modules
+    // using a different edition from main.js.
+    console.error('[edition] add-on host module failed; editor startup stopped.', error);
+    setStatus('The add-on could not start. Restart after disabling it.');
+    return;
+  }
+  try { await plugin?.start?.(); }
+  catch (error) { console.error('[edition] edition start failed; continuing editor startup.', error); }
   await import('./main.js');
   if (secondaryWindow) return;
   await ready;

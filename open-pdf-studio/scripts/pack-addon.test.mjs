@@ -56,6 +56,25 @@ test('invalid source and incompatible version leave no output', async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('script-only v2 package can install notices and rejects invalid UTF-8 input', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'pack-addon-v2-notices-test-'));
+  try {
+    const pluginDir = path.join(root, 'source');
+    await mkdir(pluginDir);
+    await writeFile(path.join(pluginDir, 'plugin.js'), 'export const createAddon = () => ({ apiVersion: 1 });');
+    const notices = path.join(root, 'notices-source');
+    await writeFile(notices, 'Private add-on terms\n');
+    const output = path.join(root, 'package');
+    const manifest = await packAddon({ pluginDir, output, id: 'script.notice', version: '1.0.0', notices });
+    assert.equal(manifest.schemaVersion, 2);
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: output, appDataDir });
+    assert.equal(await readFile(path.join(appDataDir, 'addons/packages/script.notice/NOTICES.txt'), 'utf8'), 'Private add-on terms\n');
+    await writeFile(notices, Buffer.from([0xff]));
+    await assert.rejects(packAddon({ pluginDir, output: path.join(root, 'bad-package'), id: 'script.bad', version: '1.0.0', notices }), /encoded data was not valid|invalid/i);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('native v3 package requires a matching executable and survives install', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pack-addon-native-test-'));
   try {
@@ -85,6 +104,39 @@ test('native v3 package requires a matching executable and survives install', as
     assert.deepEqual(await verifyAddonPackage(installed), manifest);
     assert.equal(await removeAddon({ id: 'native.test', appDataDir: path.join(root, 'data') }), true);
     assert.deepEqual(JSON.parse(await readFile(path.join(root, 'data/addons/enabled.json'))).ids, []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('native notices stay in the installed package and reject tampering, oversize and unlisted files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'pack-addon-notices-test-'));
+  try {
+    const pluginDir = path.join(root, 'source');
+    await mkdir(pluginDir);
+    await writeFile(path.join(pluginDir, 'plugin.js'), 'export const createAddon = () => ({ apiVersion: 1 });');
+    const helper = path.join(root, 'helper-source');
+    await writeFile(helper, syntheticNativeHeader());
+    if (process.platform !== 'win32') await chmod(helper, 0o755);
+    const notices = path.join(root, 'notice-source');
+    await writeFile(notices, 'Licensed components\n');
+    const output = path.join(root, 'package');
+    const manifest = await packAddon({ pluginDir, output, id: 'native.notice', version: '1.0.0', helper, notices });
+    assert.equal(manifest.schemaVersion, 3);
+    assert.ok(manifest.files['NOTICES.txt']);
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: output, appDataDir });
+    const installed = path.join(appDataDir, 'addons/packages/native.notice');
+    assert.equal(await readFile(path.join(installed, 'NOTICES.txt'), 'utf8'), 'Licensed components\n');
+    assert.deepEqual(await verifyAddonPackage(installed), manifest);
+    await writeFile(path.join(output, 'NOTICES.txt'), 'tampered\n');
+    await assert.rejects(verifyAddonPackage(output), /hash mismatch/);
+    await writeFile(path.join(output, 'NOTICES.txt'), Buffer.alloc(4 * 1024 * 1024 + 1, 65));
+    await assert.rejects(verifyAddonPackage(output), /Invalid add-on file/);
+    await writeFile(path.join(output, 'NOTICES.txt'), 'Licensed components\n');
+    await writeFile(path.join(output, 'unlisted.txt'), 'extra');
+    await assert.rejects(verifyAddonPackage(output), /unlisted files/);
+    await rm(path.join(output, 'unlisted.txt'));
+    assert.equal(await removeAddon({ id: 'native.notice', appDataDir }), true);
+    await assert.rejects(readFile(path.join(installed, 'NOTICES.txt')), /ENOENT/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
