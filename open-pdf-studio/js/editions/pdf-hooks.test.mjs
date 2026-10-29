@@ -216,6 +216,67 @@ test('an independent package claims an exact legacy text key without replacing u
   assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(legacy))), invalid);
 });
 
+test('an explicit v2 catalog deletion removes only the claimed readable key after save and reopen', async () => {
+  const first = 'sample.delete', second = 'sample.keep';
+  const removed = 'LAB_DrawingStateV1', kept = key(second, 'State');
+  const unclaimed = 'LAB_UnknownStateV1';
+  const seen = [];
+  const { edition, rejected } = composeAddons(foundation, [
+    { id: first, addon: { apiVersion: 2, id: first, pdf: {
+      legacyCatalogKeys: [removed],
+      catalogForSave(doc, source) {
+        seen.push(source);
+        return doc.remove ? { [removed]: null } : {};
+      },
+    } } },
+    { id: second, addon: { apiVersion: 2, id: second, pdf: {
+      catalogKeys: [kept], catalogForSave: () => ({}),
+    } } },
+  ]);
+  assert.deepEqual(rejected, []);
+
+  const source = await PDFDocument.create();
+  source.addPage();
+  source.catalog.set(PDFName.of(removed), PDFHexString.fromText('undo this'));
+  source.catalog.set(PDFName.of(kept), PDFHexString.fromText('keep this'));
+  source.catalog.set(PDFName.of(unclaimed), PDFHexString.fromText('unknown source'));
+  let pdf = await PDFDocument.load(await source.save());
+  edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({}, pdf));
+  pdf = await PDFDocument.load(await pdf.save());
+  assert.equal(text(pdf.catalog, removed), 'undo this', 'omission preserves source bytes');
+  assert.equal(text(pdf.catalog, kept), 'keep this');
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+  assert.deepEqual(seen.at(-1).presentKeys, [removed]);
+  assert.deepEqual(seen.at(-1).fields, { [removed]: 'undo this' });
+
+  edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({ remove: true }, pdf));
+  pdf = await PDFDocument.load(await pdf.save());
+  assert.equal(pdf.catalog.get(PDFName.of(removed)), undefined);
+  assert.equal(text(pdf.catalog, kept), 'keep this');
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+
+  assert.throws(() => edition.pdf.saveWorkspace(pdf, { addons: {
+    [first]: { [unclaimed]: null },
+  } }), /unowned/);
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+});
+
+test('v2 catalog deletion refuses an unreadable claimed value and leaves its source intact', async () => {
+  const id = 'sample.delete', owned = 'LAB_DrawingStateV1';
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [owned], catalogForSave: () => ({ [owned]: null }),
+  } } }]);
+  const source = await PDFDocument.create();
+  source.addPage();
+  const unreadable = source.context.obj({ Data: PDFHexString.fromText('opaque') });
+  source.catalog.set(PDFName.of(owned), source.context.register(unreadable));
+  const pdf = await PDFDocument.load(await source.save());
+  assert.throws(() => edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({}, pdf)), /Cannot delete unreadable/);
+  const reopened = await PDFDocument.load(await pdf.save());
+  assert.ok(reopened.catalog.get(PDFName.of(owned)));
+  assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(owned))).get(PDFName.of('Data')).decodeText(), 'opaque');
+});
+
 test('legacy decoding matches short pdf-lib strings and preserves malformed large UTF-16', async () => {
   const id = 'sample.legacy', key = 'LAB_DrawingStateV1';
   const { edition } = composeAddons(foundation, [{ id, addon: {
