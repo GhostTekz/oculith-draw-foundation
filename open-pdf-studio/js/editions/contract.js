@@ -56,6 +56,10 @@ export function assertEditionContract(edition) {
         || edition.pdf.annotationKeys.some((key) => typeof key !== 'string' || !key))) {
       throw new Error('Edition PDF annotationKeys must be an array of names.');
     }
+    if (edition.pdf.annotationKeysToSkipCarry != null && (!Array.isArray(edition.pdf.annotationKeysToSkipCarry)
+        || edition.pdf.annotationKeysToSkipCarry.some((key) => typeof key !== 'string' || !key))) {
+      throw new Error('Edition PDF annotationKeysToSkipCarry must be an array of names.');
+    }
     // Optional: carry the edition's catalog data to pages copied into a new
     // PDF (Extract Pages, Split): (source, extract, pageNumbers).
     // Optional: what a polygon markup's appearance adds, in page space:

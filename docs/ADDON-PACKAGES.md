@@ -2,7 +2,7 @@
 
 Foundation can load several small, independent add-ons after the editor starts. Each package contributes to the interface without replacing the editor. An optional full edition package, when present, loads first; independent packages then add their contributions in the order listed in `addons/enabled.json`. An invalid package is skipped so other packages can still load.
 
-This first package interface supports dialogs, panels, file commands and menu items, toolbar items, and symbol categories and templates. It does not support native helpers, PDF save hooks, account services, or replacing the editor's product identity. The host checks IDs and shortcuts for collisions with built-in entries and earlier packages.
+The package interface supports dialogs, panels, file commands and menu items, toolbar items, and symbol categories and templates. Version 2 contributions may also own namespaced PDF text fields. Independent packages cannot add native helpers, account services, or replace the editor's product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
 
 ## Package format
 
@@ -40,6 +40,29 @@ export function createAddon() {
 ```
 
 Use the edition contract and the sample add-on in the source tree for the exact shapes of contributed entries. Keep IDs stable across releases. The script's ID must match the manifest ID. Packages that request unsupported fields are skipped.
+
+## Namespaced PDF fields
+
+An independent add-on that saves PDF metadata returns `apiVersion: 2` from `createAddon()`. This is the script contract version; the package manifest still uses `schemaVersion: 2` and `hostApiVersion: 1`. Each declared PDF key begins with `ODX_`, then the package ID with punctuation encoded as its two-digit ASCII hex value, then `_` and a letter-led field name. For `example.tools`, the prefix is `ODX_example_2etools_`. The editor rejects duplicate or unowned keys before loading a package.
+
+```js
+export function createAddon() {
+  const field = 'ODX_example_2etools_State';
+  return {
+    apiVersion: 2,
+    id: 'example.tools',
+    pdf: {
+      catalogKeys: [field],
+      applyCatalog(doc, values) { doc.exampleState = values[field] || ''; },
+      catalogForSave(doc) { return doc.exampleState ? { [field]: doc.exampleState } : {}; },
+    },
+  };
+}
+```
+
+`annotationKeys` declares text fields on markup dictionaries. `decorateAnnotation(model, values)` receives only that package's decoded fields when a markup loads. `annotationForSave(model)` returns a map of owned text fields to write. All PDF callbacks are synchronous. Catalog values are limited to 256 KiB each, annotation values to 16 KiB each. Omitted values leave existing source fields intact when the editor can verify the annotation's identity; an invalid return value stops the save. The callbacks receive document and annotation models, not mutable PDF objects. Arbitrary PDF writes, appearance changes, and page-specific catalog remapping are outside this interface. Extract Pages and Split refuse a PDF with a present v2 catalog field until a package interface can safely remap it.
+
+The full edition package continues to use its existing PDF hooks. Foundation preserves unknown catalog and annotation data when its corresponding add-on is absent.
 
 ## Build and manage a package
 

@@ -142,6 +142,12 @@ function neemLagenMee(srcDoc, destDoc, gebruikt, copier) {
 
 /** A new PDF with `pageNumbers` (1-based, in this order) of `srcDoc`. */
 export async function extractPdfLibPages(srcDoc, pageNumbers) {
+  // Independent add-ons own these catalog entries. Without the owning add-on,
+  // the host cannot know which page references or state must be remapped.
+  // Refuse before copying any pages, including when no add-on is installed.
+  if (srcDoc.catalog.keys().some((key) => key.decodeText().startsWith('ODX_'))) {
+    throw new Error('Cannot extract pages with add-on PDF data until its catalog can be remapped.');
+  }
   const extractDoc = await PDFDocument.create();
   await srcDoc.flush();
   const src = srcDoc.context;

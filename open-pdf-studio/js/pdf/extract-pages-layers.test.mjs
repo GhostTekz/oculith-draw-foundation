@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { register } from 'node:module';
-import { PDFDocument, PDFName, PDFDict } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, PDFHexString } from 'pdf-lib';
 
 register('../core/app-test-hooks.mjs', import.meta.url);
 register('./saver-test-hooks.mjs', import.meta.url);
@@ -128,4 +128,23 @@ test('pages without layered markups extract as before', async () => {
   assert.equal(extract.getPageCount(), 2);
   assert.equal(extract.catalog.get(N('OCProperties')), undefined);
   assert.equal(extract.catalog.get(N('OPS_AnnotLayers')), undefined);
+});
+
+test('unknown add-on catalog fields refuse extraction without an installed add-on', async () => {
+  const source = await PDFDocument.create();
+  source.addPage([200, 200]);
+  source.addPage([200, 200]);
+  const addonKey = N('ODX_missing_2eaddon_State');
+  const ordinaryKey = N('OtherPublisherData');
+  source.catalog.set(addonKey, PDFHexString.fromText('page-linked state'));
+  source.catalog.set(ordinaryKey, PDFHexString.fromText('unrelated metadata'));
+  const reopened = await PDFDocument.load(await source.save());
+
+  await assert.rejects(extractPdfLibPages(reopened, [1]), /Cannot extract pages with add-on PDF data/);
+  assert.equal(reopened.catalog.get(addonKey).decodeText(), 'page-linked state');
+  assert.equal(reopened.getPageCount(), 2);
+
+  reopened.catalog.delete(addonKey);
+  const extract = await extractPdfLibPages(reopened, [2]);
+  assert.equal(extract.getPageCount(), 1, 'unrelated catalog keys do not block extraction');
 });

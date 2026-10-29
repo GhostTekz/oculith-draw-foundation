@@ -103,3 +103,18 @@ test('generic annotation extraction transports only declared add-on fields by re
   assert.equal(withAddon.get(`@ref:${first.objectNumber}R`).extensionFields.OPS_ExtensionField, 'first');
   assert.equal(withAddon.get(`@ref:${second.objectNumber}R`).extensionFields.OPS_ExtensionField, 'second');
 });
+
+test('oversized declared annotation field is skipped before decoding', async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 200]);
+  const key = N('ODX_sample_State');
+  const annotation = pdf.context.obj({ Type: N('Annot'), Subtype: N('Square'), Rect: [10, 20, 50, 60],
+    ODX_sample_State: PDFString.of('x'.repeat((16384 + 1) * 4 + 1)) });
+  const ref = pdf.context.register(annotation);
+  page.node.set(N('Annots'), pdf.context.obj([ref]));
+  const opened = await PDFDocument.load(await pdf.save());
+  const loaded = opened.context.lookup(opened.context.lookup(opened.getPage(0).node.get(N('Annots'))).get(0));
+  loaded.get(key).decodeText = () => { throw new Error('decoded oversized annotation value'); };
+  const colors = await extractAnnotationColors(1, opened, { annotationKeys: ['ODX_sample_State'] });
+  assert.equal(colors.get(`@ref:${ref.objectNumber}R`)?.extensionFields, undefined);
+});

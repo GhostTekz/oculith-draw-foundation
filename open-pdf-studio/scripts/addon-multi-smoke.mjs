@@ -40,6 +40,24 @@ try {
     const { getPanelEntry } = await import('/js/solid/components/panels/panelRegistry.js');
     const { getCommand } = await import('/js/solid/commands/registry.js');
     getCommand('sample.second.command')?.run();
+    const { PDFDocument, PDFName, PDFHexString } = globalThis.__ocudrawHost.module('pdf-lib');
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([200, 200]);
+    const source = { sampleAddonWorkspace: { legacy: true }, sampleSecondState: 'independent catalog' };
+    edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave(source, pdf));
+    const annot = pdf.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [10, 10, 20, 20] });
+    edition.pdf.writeAnnotation({ sampleSecondMarkup: 'independent annotation' }, annot,
+      { PDFName, pdfTextString: PDFHexString.fromText });
+    page.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.register(annot)]));
+    const reopened = await PDFDocument.load(await pdf.save());
+    const loaded = {};
+    edition.pdf.applyWorkspace(loaded, edition.pdf.readWorkspace(reopened));
+    const annots = reopened.context.lookup(reopened.getPages()[0].node.get(PDFName.of('Annots')));
+    const loadedAnnot = reopened.context.lookup(annots.get(0));
+    const annotationValue = loadedAnnot.get(PDFName.of('ODX_sample_2esecond_Markup')).decodeText();
+    const decorated = edition.pdf.decorateLoadedAnnotation({}, { extensionFields: {
+      ODX_sample_2esecond_Markup: annotationValue,
+    } });
     return {
       id: edition.id,
       panels: edition.panelIds,
@@ -49,6 +67,11 @@ try {
       menu: edition.fileMenuItems,
       toolbar: edition.toolbarItems?.map((item) => item.id),
       styles: [...document.querySelectorAll('style[data-edition-plugin]')].map((style) => style.dataset.editionPlugin),
+      pdfRoundTrip: {
+        legacy: loaded.sampleAddonWorkspace?.legacy,
+        catalog: loaded.sampleSecondState,
+        annotation: decorated.sampleSecondMarkup,
+      },
     };
   });
   assert.equal(result.id, 'sample-addon');
@@ -59,9 +82,11 @@ try {
   assert.deepEqual(result.menu, ['sample.second.command']);
   assert.deepEqual(result.toolbar, ['sample-second-button']);
   assert.deepEqual(result.styles, ['sample.first', 'sample.second']);
+  assert.deepEqual(result.pdfRoundTrip, { legacy: true,
+    catalog: 'independent catalog', annotation: 'independent annotation' });
   assert.deepEqual(errors, []);
   await context.close();
-  console.log('Multi add-on smoke passed: legacy base, two contributions, collision isolation.');
+  console.log('Multi add-on smoke passed: legacy base, two contributions, collision isolation, PDF round trip.');
 } finally {
   await browser.close();
   await server.close();
