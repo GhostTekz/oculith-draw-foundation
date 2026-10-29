@@ -495,6 +495,7 @@ struct AddonManifest {
     target: Option<AddonTarget>,
     files: HashMap<String, String>,
     helper: Option<String>,
+    sidecars: Option<Vec<String>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -561,9 +562,14 @@ struct VerifiedPackage {
     script: Vec<u8>,
     css: String,
     helper: Option<(std::path::PathBuf, String)>,
+    sidecars: Vec<(String, String)>,
 }
 
 fn addon_helper_name() -> &'static str { if cfg!(windows) { "helper.exe" } else { "helper" } }
+
+fn addon_companion_name(index: usize) -> String {
+    format!("companion-{index}{}", if cfg!(windows) { ".exe" } else { "" })
+}
 
 fn addon_helper_header(path: &std::path::Path) -> bool {
     use std::io::Read;
@@ -749,19 +755,26 @@ fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> O
     if !valid_addon_id(id) || fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
     let manifest_path = addon_file(root, "manifest.json")?;
     let manifest: AddonManifest = serde_json::from_slice(&read_bounded_addon_file(&manifest_path, 1024 * 1024)?).ok()?;
-    if !matches!(manifest.schema_version, 2 | 3) || manifest.host_api_version != HOST_API_VERSION
+    let sidecars = manifest.sidecars.as_deref().unwrap_or(&[]);
+    if !matches!(manifest.schema_version, 2 | 3 | 4) || manifest.host_api_version != HOST_API_VERSION
         || manifest.id != id || manifest.editor_version != editor_version
         || !valid_addon_version(&manifest.version)
         || !addon_manifest_target_compatible(&manifest)
         || (manifest.schema_version == 2 && manifest.helper.is_some())
-        || (manifest.schema_version == 3 &&
+        || (manifest.schema_version < 4 && manifest.sidecars.is_some())
+        || (manifest.schema_version == 4 &&
+            (sidecars.is_empty() || sidecars.len() > 4 || sidecars.iter().enumerate()
+                .any(|(index, name)| name != &addon_companion_name(index + 1))))
+        || (manifest.schema_version >= 3 &&
             (manifest.helper.as_deref() != Some(addon_helper_name()) || manifest.target.is_none()
                 || manifest.target.as_ref().is_some_and(|target| target.arch == "universal")))
-        || manifest.files.is_empty() || manifest.files.len() > if manifest.schema_version == 3 { 4 } else { 3 }
+        || manifest.files.is_empty() || manifest.files.len() > if manifest.schema_version == 2 { 3 } else { 4 + sidecars.len() }
         || !manifest.files.contains_key("plugin.js")
-        || (manifest.schema_version == 3 && !manifest.files.contains_key(addon_helper_name()))
+        || (manifest.schema_version >= 3 && !manifest.files.contains_key(addon_helper_name()))
+        || (manifest.schema_version == 4 && !manifest.files.contains_key("NOTICES.txt"))
+        || sidecars.iter().any(|name| !manifest.files.contains_key(name))
         || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css" && name != "NOTICES.txt"
-            && !(manifest.schema_version == 3 && name == addon_helper_name())) {
+            && !(manifest.schema_version >= 3 && name == addon_helper_name()) && !sidecars.contains(name)) {
         return None;
     }
     let mut listed = 0;
@@ -794,13 +807,18 @@ fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> O
         if bytes.is_empty() || !sha256_bytes_match(&bytes, expected) { return None; }
         std::str::from_utf8(&bytes).ok()?;
     }
-    let helper = if manifest.schema_version == 3 {
+    for name in sidecars {
+        let path = addon_file(root, name)?;
+        if !verified_helper_file(&path, manifest.files.get(name)?) { return None; }
+    }
+    let helper = if manifest.schema_version >= 3 {
         let path = addon_file(root, addon_helper_name())?;
         let hash = manifest.files.get(addon_helper_name())?;
         if !verified_helper_file(&path, hash) { return None; }
         Some((path, hash.clone()))
     } else { None };
-    Some(VerifiedPackage { id: id.into(), script, css, helper })
+    let sidecars = sidecars.iter().map(|name| (name.clone(), manifest.files.get(name).unwrap().clone())).collect();
+    Some(VerifiedPackage { id: id.into(), script, css, helper, sidecars })
 }
 
 fn verified_packages(app: &tauri::AppHandle) -> &'static [VerifiedPackage] {
@@ -848,6 +866,9 @@ pub(crate) fn package_helper_path(app: &tauri::AppHandle, id: &str) -> Option<st
     let root = addons.join("packages").join(id);
     let checked = addon_file(&root, addon_helper_name())?;
     if &checked != path || !verified_helper_file(&checked, expected) { return None; }
+    for (name, expected) in &package.sidecars {
+        if !verified_helper_file(&addon_file(&root, name)?, expected) { return None; }
+    }
     Some(checked)
 }
 
@@ -1034,6 +1055,30 @@ mod addon_tests {
         assert!(verified_package(&package, id, "2026.68.0").is_none());
         fs::write(&helper, &header).unwrap();
         manifest["target"]["arch"] = "wrong".into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        manifest["target"]["arch"] = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" }.into();
+        let companion_name = addon_companion_name(1);
+        let companion = package.join(&companion_name);
+        fs::write(&companion, &header).unwrap();
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&companion, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        manifest["schemaVersion"] = 4.into();
+        manifest["sidecars"] = serde_json::json!([companion_name]);
+        manifest["files"][&companion_name] = sha256_file(&companion).unwrap().into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert_eq!(verified_package(&package, id, "2026.68.0").unwrap().sidecars.len(), 1);
+        fs::write(&companion, b"tampered").unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::write(&companion, &header).unwrap();
+        manifest["sidecars"] = serde_json::json!(["wrong-name"]);
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        manifest["sidecars"] = serde_json::json!([companion_name]);
+        fs::remove_file(&notices).unwrap();
+        manifest["files"].as_object_mut().unwrap().remove("NOTICES.txt");
         fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(verified_package(&package, id, "2026.68.0").is_none());
         fs::remove_dir_all(root).unwrap();

@@ -154,3 +154,42 @@ test('native package rejects a fake header and leaves no output', async () => {
     await assert.rejects(readFile(path.join(output, 'manifest.json')), /ENOENT/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('native v4 companions install beside helper and fail closed on tampering', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'pack-addon-companion-test-'));
+  try {
+    const pluginDir = path.join(root, 'source');
+    await mkdir(pluginDir);
+    await writeFile(path.join(pluginDir, 'plugin.js'), 'export const createAddon = () => ({ apiVersion: 1 });');
+    const helper = path.join(root, 'helper-source');
+    const companion = path.join(root, 'companion-source');
+    await writeFile(helper, syntheticNativeHeader());
+    await writeFile(companion, syntheticNativeHeader());
+    if (process.platform !== 'win32') { await chmod(helper, 0o755); await chmod(companion, 0o755); }
+    const notices = path.join(root, 'notices-source');
+    await writeFile(notices, 'Companion dependency notices\n');
+    const output = path.join(root, 'package');
+    const manifest = await packAddon({ pluginDir, output, id: 'native.companion', version: '1.0.0', helper,
+      sidecars: [companion], notices });
+    const name = process.platform === 'win32' ? 'companion-1.exe' : 'companion-1';
+    assert.equal(manifest.schemaVersion, 4);
+    assert.deepEqual(manifest.sidecars, [name]);
+    const appDataDir = path.join(root, 'data');
+    await installAddon({ packageDir: output, appDataDir });
+    const installed = path.join(appDataDir, 'addons/packages/native.companion');
+    assert.deepEqual(await verifyAddonPackage(installed), manifest);
+    assert.deepEqual(await readFile(path.join(installed, name)), syntheticNativeHeader());
+    await writeFile(path.join(output, name), Buffer.alloc(256, 7));
+    await assert.rejects(verifyAddonPackage(output), /hash mismatch/);
+    assert.deepEqual(await verifyAddonPackage(installed), manifest);
+    await rm(path.join(output, name));
+    await symlink(companion, path.join(output, name));
+    await assert.rejects(verifyAddonPackage(output), /Invalid add-on file/);
+    await assert.rejects(packAddon({ pluginDir, output: path.join(root, 'missing-notices'), id: 'native.missing',
+      version: '1.0.0', helper, sidecars: [companion] }), /files do not match/);
+    await assert.rejects(packAddon({ pluginDir, output: path.join(root, 'missing-helper'), id: 'native.missing',
+      version: '1.0.0', sidecars: [companion], notices }), /Companions require/);
+    await removeAddon({ id: 'native.companion', appDataDir });
+    await assert.rejects(readFile(path.join(installed, name)), /ENOENT/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
