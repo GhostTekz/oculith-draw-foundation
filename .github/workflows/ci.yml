@@ -32,9 +32,8 @@ jobs:
           node scripts/community-export-verify.mjs --published --bundle
       - name: Offline PDF round trip
         working-directory: open-pdf-studio
-        run: |
-          npx playwright install --with-deps chromium
-          CHROMIUM_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')" npm run smoke:community-offline
+        timeout-minutes: 10
+        run: CHROMIUM_PATH="$(command -v google-chrome)" npm run smoke:community-offline
       - name: Native compile
         run: |
           cargo build -p pdfium-worker --locked
