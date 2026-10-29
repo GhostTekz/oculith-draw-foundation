@@ -80,7 +80,15 @@ npx vite build --logLevel error   # production frontend build
 
 The unit tests run on real PDF bytes from the real saver and loader where it matters, so a change to saving or loading is checked end to end.
 
-The `Foundation CI` workflow runs on every pull request update. It checks the source boundary, editor and native compilation, and offline browser save/reopen without building installers. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
+The `Foundation CI` workflow runs on every pull request update. It checks the source boundary, editor, and offline browser save/reopen without building installers. It also compiles Rust when the PR changes a native or build input, and on every push to `main`. For a PR that changes only documented frontend paths, it skips Rust setup, Linux native dependencies, and Cargo. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
+
+The native compile decision uses the PR merge commit and its first parent, so it checks the full proposed diff against the current base. Renames are evaluated as both a removal and an addition. It fails closed and compiles if the merge parent or diff cannot be read. The path policy is:
+
+| PR changes | Native compile |
+| --- | --- |
+| Only `docs/`, root README/licence/contributor files, `open-pdf-studio/js/`, `styles/`, `public/`, or frontend HTML/config | Skipped; source, editor, and browser checks still run |
+| Cargo files, Rust crates, `src-tauri/` resources/config/icons, package manifests, runtime/build scripts, workflows, or any unknown path | Required |
+| Push to `main` | Required |
 
 The separate `Foundation installers` workflow builds Linux DEB and AppImage, Windows NSIS, and macOS app packages. It also starts the AppImage on Debian and Fedora and installs and removes the Windows package. It runs weekly on `main`, on manual dispatch, or once when a maintainer adds the `ci:installers` label to a pull request. If the label is already present, marking a draft ready for review runs it again. New commits do **not** rerun the installer matrix. After a candidate changes, remove and reapply the label to test the new head; check that all three installer jobs succeeded for the final candidate before merging or shipping. Manual dispatch becomes available after the workflow exists on the default branch; select the candidate branch and verify its commit in the run. A release also runs its release build workflow as required by the release process.
 
