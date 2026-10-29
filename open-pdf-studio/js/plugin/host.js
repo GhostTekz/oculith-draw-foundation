@@ -1,9 +1,8 @@
 // The published interface between the editor (LGPL-3.0-or-later) and an
-// edition plug-in. A plug-in is a separate program file, installed beside
-// the editor and loaded at start (boot.js); it contains none of the
-// editor's code and reaches the editor only through the modules listed
-// here, at run time, the way a program uses a shared library. Removing or
-// replacing the plug-in leaves a complete editor (Oculith Draw Foundation).
+// edition plug-in. The plug-in is installed beside the editor and loaded at
+// start (boot.js). It contains no editor code and reaches the editor through
+// the modules listed here at run time. Removing or replacing the plug-in
+// leaves a complete editor (Oculith Draw Foundation).
 //
 // The list is the interface: a module the plug-in needs must be added here
 // on purpose (the plug-in build refuses any other import of editor code).
