@@ -47,6 +47,8 @@ Use the edition contract and the sample add-on in the source tree for the exact 
 
 `createAddon()` builds its descriptor before the editor loads the modules named in the script's `requires` export. It may use only the early host modules at that point: `solid-js`, `solid-js/web`, `solid-js/store`, `pdf-lib`, and `js/solid/data/lucideIcons.js`. Required modules load after accepted contributions are composed and before editor startup; use them in panel components, callbacks, or later actions.
 
+The host passes `createAddon(context)` a frozen object with `pdfKeys`, a frozen array of PDF key names already claimed by the selected edition and earlier accepted add-ons. A package may omit its optional `pdf` contribution when a key is occupied and still provide its panel. The host checks ownership again during composition, so two packages cannot claim the same key even if they ignore this context.
+
 ## Namespaced PDF fields
 
 An independent add-on that saves PDF metadata returns `apiVersion: 2` from `createAddon()`. This is the script contract version; its manifest can use schema version 2 or 3 and `hostApiVersion: 1`. Each declared PDF key begins with `ODX_`, then the package ID with punctuation encoded as its two-digit ASCII hex value, then `_` and a letter-led field name. For `example.tools`, the prefix is `ODX_example_2etools_`. The editor rejects duplicate or unowned keys before loading a package.

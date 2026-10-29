@@ -150,7 +150,13 @@ async function installEdition(found) {
       if (!Array.isArray(required) || required.some((id) => typeof id !== 'string' || !provides(id))) {
         throw new Error('Add-on requests an unsupported editor module');
       }
-      const addon = await imported.plugin.createAddon();
+      // Give descriptor construction only the already claimed PDF names, not
+      // the mutable edition. A package may omit an optional PDF contribution
+      // while keeping its panel; composeAddons still rejects any collision.
+      const pdfKeys = Object.freeze([...new Set([
+        ...(composed.pdf?.catalogKeys || []), ...(composed.pdf?.annotationKeys || []),
+      ])]);
+      const addon = await imported.plugin.createAddon(Object.freeze({ pdfKeys }));
       if (acceptedIds.has(entry.id)) throw new Error(`Duplicate add-on id: ${entry.id}`);
       const result = composeAddons(composed, [{ id: entry.id, addon }], { reservedTemplateIds });
       if (result.rejected.length) throw result.rejected[0].error;
