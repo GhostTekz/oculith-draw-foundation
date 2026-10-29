@@ -10,6 +10,7 @@
 // The edition carries its own catalog data for the pages (carryToExtract).
 import { PDFDocument, PDFObjectCopier, PDFPage, PDFName, PDFArray, PDFDict, PDFRef, PDFStream } from 'pdf-lib';
 import { edition } from '../editions/active.js';
+import { unclaimedLegacyCatalogKeys } from '../editions/pdf-hooks.js';
 
 const N = (s) => PDFName.of(s);
 const LAGEN_SLEUTEL = 'OPS_AnnotLayers';
@@ -147,6 +148,9 @@ export async function extractPdfLibPages(srcDoc, pageNumbers) {
   // Refuse before copying any pages, including when no add-on is installed.
   if (srcDoc.catalog.keys().some((key) => key.decodeText().startsWith('ODX_'))) {
     throw new Error('Cannot extract pages with add-on PDF data until its catalog can be remapped.');
+  }
+  if (unclaimedLegacyCatalogKeys(srcDoc, edition.pdf?.catalogKeys).length) {
+    throw new Error('Cannot extract pages with unclaimed legacy PDF data until its catalog can be remapped.');
   }
   const extractDoc = await PDFDocument.create();
   await srcDoc.flush();
