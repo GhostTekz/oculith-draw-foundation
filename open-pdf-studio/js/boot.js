@@ -1,7 +1,7 @@
 // Start-up. An optional add-on is loaded through js/plugin/host.js before
 // the editor starts; without one, the editor runs as Foundation.
 import { EARLY, HOST_API_VERSION, installHost, loadHostModules, provides } from './plugin/host.js';
-import { finish, setEdition, setStatus, side, startLaunchScreen } from './launch-screen.js';
+import { finish, setEdition, setStatus, showLaunchActions, side, startLaunchScreen } from './launch-screen.js';
 import { edition as foundation } from './editions/community.js';
 import { composeAddons, resolvePluginEntries } from './editions/compose-addons.js';
 
@@ -192,6 +192,13 @@ async function installEdition(found) {
   await ready;
   if (plugin?.launch) {
     try { await plugin.launch({ side, setStatus }); } catch (error) { console.error('[edition] launch step failed', error); }
+  } else if (composed.launchActions?.length) {
+    // File-association opens and restored sessions should proceed directly
+    // to the document. Empty workspaces can offer an optional launch action.
+    const { state } = await import('./core/state.js');
+    if (!state.documents.length && !state.preferences.restoreLastSession) {
+      await showLaunchActions(composed.launchActions);
+    }
   }
   await finish();
 })();

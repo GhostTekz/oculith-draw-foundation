@@ -98,6 +98,23 @@ test('independent home actions compose without changing the base or hiding later
   } }]).accepted, []);
 });
 
+test('launch actions compose in order and reject duplicate or invalid actions', () => {
+  const action = (id) => ({ id, label: () => id, run: () => {} });
+  const result = composeAddons(foundation, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', launchActions: [action('one.open')] } },
+    { id: 'duplicate', addon: { apiVersion: 2, id: 'duplicate', launchActions: [action('one.open')] } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', launchActions: [action('two.open')] } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.match(result.rejected[0].error.message, /Duplicate launch action id/);
+  assert.deepEqual(result.edition.launchActions.map((item) => item.id), ['one.open', 'two.open']);
+  assert.equal(foundation.launchActions, undefined);
+  for (const invalid of [
+    { apiVersion: 1, id: 'bad', launchActions: [action('bad.open')] },
+    { apiVersion: 2, id: 'bad', launchActions: [{ id: 'bad.open', label: 'Open', run: () => {} }] },
+  ]) assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: invalid }]).accepted, []);
+});
+
 test('independent document title providers resolve local names in order and survive a failing provider', async () => {
   const calls = [];
   const result = composeAddons(foundation, [

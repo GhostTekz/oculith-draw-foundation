@@ -48,6 +48,11 @@ export function assertEditionContract(edition) {
   if (edition.authorName != null && typeof edition.authorName !== 'function') {
     throw new Error('Edition authorName must be a function.');
   }
+  if (edition.launchActions != null && (!Array.isArray(edition.launchActions)
+      || edition.launchActions.some((action) => typeof action?.id !== 'string' || !action.id
+        || typeof action.label !== 'function' || typeof action.run !== 'function'))) {
+    throw new Error('Edition launchActions must contain labeled actions.');
+  }
   if (edition.home != null) {
     if (typeof edition.home.title !== 'function' || typeof edition.home.description !== 'function'
         || !Array.isArray(edition.home.actions) || edition.home.actions.some((action) =>

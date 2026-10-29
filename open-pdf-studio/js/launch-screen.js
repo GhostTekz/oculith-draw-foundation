@@ -67,6 +67,65 @@ export function side() {
   };
 }
 
+/** Offer installed add-on actions after the editor is ready. Only a click runs one. */
+export async function showLaunchActions(actions) {
+  const slot = side();
+  if (!slot.element || !Array.isArray(actions) || !actions.length) return;
+  const card = document.createElement('div');
+  card.className = 'ls-addon-card';
+  card.dataset.addonLaunch = '';
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'ls-addon-eyebrow';
+  eyebrow.textContent = 'READY TO WORK';
+  const title = document.createElement('h2');
+  title.textContent = 'Open your workspace';
+  const description = document.createElement('p');
+  description.className = 'ls-addon-description';
+  description.textContent = 'Choose an add-on action, or continue to your drawing workspace.';
+  const choices = document.createElement('div');
+  choices.className = 'ls-addon-choices';
+  const notice = document.createElement('p');
+  notice.className = 'ls-addon-notice';
+  notice.setAttribute('role', 'status');
+  card.append(eyebrow, title, description, choices, notice);
+  const available = actions.flatMap((action) => {
+    try {
+      const label = action.label();
+      return typeof label === 'string' && label.trim() ? [{ action, label: label.trim() }] : [];
+    } catch { return []; }
+  });
+  if (!available.length) return;
+  await new Promise((resolve) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      slot.close();
+      resolve();
+    };
+    for (const { action, label } of available) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ls-addon-action';
+      button.textContent = label;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try { await action.run(); done(); }
+        catch { notice.textContent = 'This action could not open. Try again or continue.'; button.disabled = false; }
+      });
+      choices.append(button);
+    }
+    const continueButton = document.createElement('button');
+    continueButton.type = 'button';
+    continueButton.className = 'ls-addon-continue';
+    continueButton.textContent = 'Continue to workspace';
+    continueButton.addEventListener('click', done);
+    choices.append(continueButton);
+    slot.element.replaceChildren(card);
+    slot.open();
+  });
+}
+
 /** Fade the launch screen out (after its minimum time) and remove it. */
 export async function finish() {
   const el = root();
