@@ -79,6 +79,25 @@ test('v1 full edition stays the base when contributions fail or succeed', () => 
   assert.deepEqual(result.edition.panelIds, ['existing', 'new']);
 });
 
+test('independent home actions compose without changing the base or hiding later packages', () => {
+  const action = (id) => ({ id, label: () => id, run: () => {} });
+  const baseAction = action('base.open');
+  const base = { ...foundation, home: { title: () => 'Welcome', description: () => 'Open a drawing', actions: [baseAction] } };
+  const result = composeAddons(base, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', homeActions: [action('one.open')] } },
+    { id: 'bad', addon: { apiVersion: 2, id: 'bad', homeActions: [action('one.open')] } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', homeActions: [action('two.open')] } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.match(result.rejected[0].error.message, /Duplicate home action id/);
+  assert.deepEqual(result.edition.home.actions.map((item) => item.id), ['base.open', 'one.open', 'two.open']);
+  assert.equal(result.edition.home.title(), 'Welcome');
+  assert.deepEqual(base.home.actions, [baseAction]);
+  assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: {
+    apiVersion: 1, id: 'bad', homeActions: [action('bad.open')],
+  } }]).accepted, []);
+});
+
 test('old native binaries fall back to the singleton edition command', async () => {
   const calls = [];
   const entries = await resolvePluginEntries(async (command) => {

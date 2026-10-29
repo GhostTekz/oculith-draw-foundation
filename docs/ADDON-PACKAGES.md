@@ -2,7 +2,7 @@
 
 Foundation can load several small, independent add-ons after the editor starts. Each package contributes to the interface without replacing the editor. An optional full edition package, when present, loads first; independent packages then add their contributions in the order listed in `addons/enabled.json`. An invalid package is skipped so other packages can still load.
 
-The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, symbol categories and templates, Markups List groups, and styled box tools. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
+The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, home actions, symbol categories and templates, Markups List groups, and styled box tools. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
 
 ## Package format
 
@@ -48,6 +48,27 @@ Use the edition contract and the sample add-on in the source tree for the exact 
 `createAddon()` builds its descriptor before the editor loads the modules named in the script's `requires` export. It may use only the early host modules at that point: `solid-js`, `solid-js/web`, `solid-js/store`, `pdf-lib`, and `js/solid/data/lucideIcons.js`. Required modules load after accepted contributions are composed and before editor startup; use them in panel components, callbacks, or later actions.
 
 The host passes `createAddon(context)` a frozen object with `pdfKeys`, a frozen array of PDF key names already claimed by the selected edition and earlier accepted add-ons. A package may omit its optional `pdf` contribution when a key is occupied and still provide its panel. The host checks ownership again during composition, so two packages cannot claim the same key even if they ignore this context.
+
+## Home actions
+
+A version 2 contribution may return `homeActions`: an array of objects with a
+stable `id`, a `label()` callback, and a `run()` callback. Each action appears
+on the empty drawing workspace beside the editor's Open PDF action. Its
+callback runs only when the user clicks it. The editor preserves the active
+edition's home title, description, and actions, and rejects a duplicate home
+action ID without disturbing other packages. Use the published host modules
+inside `run()` to open a contributed panel or command; no account or network
+operation belongs in the editor itself. In this example, `activatePanel` comes
+from the published `js/solid/components/panels/panelActions.js` host module,
+listed in the package's `requires` export.
+
+```js
+homeActions: [{
+  id: 'example.tools.open',
+  label: () => 'Open tools',
+  run: () => activatePanel('example-tools'),
+}],
+```
 
 ## Namespaced PDF fields
 
