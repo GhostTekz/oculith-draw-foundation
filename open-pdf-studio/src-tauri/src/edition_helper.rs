@@ -239,6 +239,49 @@ pub async fn edition_helper_share_file(
     Ok(true)
 }
 
+/// Share an editor-authorized PDF with one enabled package helper. The
+/// package's web code must obtain the path through an explicit user action;
+/// the file scope itself does not establish which tab is active.
+#[tauri::command]
+pub async fn addon_helper_share_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, EditionHelper>,
+    package_id: String,
+    path: String,
+) -> Result<String, String> {
+    use tauri_plugin_fs::FsExt;
+    if package_id.is_empty() || !crate::package_helper_enabled(&app, &package_id) {
+        return Err(NO_PACKAGE_HELPER.into());
+    }
+    let pdf = check_shareable_pdf(std::path::Path::new(&path))?;
+    if !app.fs_scope().is_allowed(std::path::Path::new(&path))
+        || !app.fs_scope().is_allowed(&pdf)
+    {
+        return Err("This file is not open in the editor.".into());
+    }
+    send(&app, &state, Some(&package_id), "host.shareFile", json!({ "path": &pdf })).await?;
+    Ok(pdf.to_string_lossy().into_owned())
+}
+
+fn check_shareable_pdf(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    use std::io::Read;
+    let invalid = || "Only a regular PDF of at most 250 MiB can be shared.".to_string();
+    if !path.is_absolute()
+        || !path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("pdf"))
+    {
+        return Err(invalid());
+    }
+    let metadata = path.symlink_metadata().map_err(|_| invalid())?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > FILE_CAP {
+        return Err(invalid());
+    }
+    let real = dunce::canonicalize(path).map_err(|_| invalid())?;
+    let mut magic = [0; 5];
+    std::fs::File::open(&real).and_then(|mut file| file.read_exact(&mut magic)).map_err(|_| invalid())?;
+    if &magic != b"%PDF-" { return Err(invalid()); }
+    Ok(real)
+}
+
 async fn send(app: &tauri::AppHandle, state: &EditionHelper, package_id: Option<&str>, method: &str, params: Value) -> Reply {
     if let Some(package_id) = package_id {
         if !crate::package_helper_enabled(app, package_id) {
@@ -318,4 +361,38 @@ fn check_drawing(root: &std::path::Path, pdf: &std::path::Path) -> Result<(), St
         return Err(fail());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod share_file_tests {
+    use super::{check_shareable_pdf, FILE_CAP};
+
+    #[test]
+    fn only_regular_pdfs_are_shareable() {
+        let root = std::env::temp_dir().join(format!(
+            "oculith-share-file-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let pdf = root.join("drawing.pdf");
+        std::fs::write(&pdf, b"%PDF-1.7\n").unwrap();
+        assert_eq!(check_shareable_pdf(&pdf).unwrap(), dunce::canonicalize(&pdf).unwrap());
+        assert!(check_shareable_pdf(&root).is_err());
+        assert!(check_shareable_pdf(&root.join("missing.pdf")).is_err());
+        let fake = root.join("fake.pdf");
+        std::fs::write(&fake, b"not a pdf").unwrap();
+        assert!(check_shareable_pdf(&fake).is_err());
+        let large = root.join("large.pdf");
+        let file = std::fs::File::create(&large).unwrap();
+        file.set_len(FILE_CAP + 1).unwrap();
+        drop(file);
+        assert!(check_shareable_pdf(&large).is_err());
+        #[cfg(unix)] {
+            let link = root.join("linked.pdf");
+            std::os::unix::fs::symlink(&pdf, &link).unwrap();
+            assert!(check_shareable_pdf(&link).is_err());
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }

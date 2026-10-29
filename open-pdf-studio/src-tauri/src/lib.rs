@@ -4523,6 +4523,7 @@ pub fn run(opts: StartupOpts) {
             edition_helper::edition_helper_call,
             edition_helper::addon_helper_available,
             edition_helper::addon_helper_call,
+            edition_helper::addon_helper_share_file,
             edition_helper::edition_helper_share_file,
             edition_helper::edition_allow_drawing,
             write_file,
