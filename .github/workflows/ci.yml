@@ -10,14 +10,43 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          # PRs use the synthetic merge commit. Its first parent is the base
+          # branch and its second parent is the PR head.
+          fetch-depth: 2
+      - name: Decide whether native compilation is needed
+        id: native
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=true
+          reason='main or unknown event'
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            parents="$(git rev-list --parents -n 1 HEAD 2>/dev/null || true)"
+            read -r commit base head extra <<< "$parents"
+            if [[ -n "${base:-}" && -n "${head:-}" && -z "${extra:-}" ]] \
+              && git diff --name-only -z "$base" "$commit" > "$RUNNER_TEMP/changed-files"; then
+              required=false
+              reason='frontend or documentation only'
+              while IFS= read -r -d '' path; do
+                case "$path" in
+                  README.md|CONTRIBUTING.md|CLAUDE.md|LICENSE.md|SBOM.cdx.json|docs/*|\
+                  open-pdf-studio/js/*|open-pdf-studio/styles/*|open-pdf-studio/public/*|\
+                  open-pdf-studio/index.html|open-pdf-studio/tsconfig.json|\
+                  open-pdf-studio/vite.config.js|open-pdf-studio/vite.web-unit.config.js)
+                    ;;
+                  *) required=true; reason='native, build, workflow, or unknown source'; break ;;
+                esac
+              done < "$RUNNER_TEMP/changed-files"
+            else
+              reason='merge parent or diff unavailable'
+            fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "Native compile: $required ($reason)"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Native dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake nasm libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libtesseract-dev libleptonica-dev pkg-config
       - name: Source boundary
         run: node open-pdf-studio/scripts/community-export-verify.mjs --published
       - name: Editor checks
@@ -41,7 +70,15 @@ jobs:
         working-directory: open-pdf-studio
         timeout-minutes: 10
         run: CHROMIUM_PATH="$(command -v google-chrome)" node scripts/addon-multi-smoke.mjs
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.native.outputs.required == 'true'
+      - name: Native dependencies
+        if: steps.native.outputs.required == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake nasm libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libtesseract-dev libleptonica-dev pkg-config
       - name: Native compile
+        if: steps.native.outputs.required == 'true'
         run: |
           cargo build -p pdfium-worker --locked
           cargo check -p open-pdf-studio --no-default-features --locked
