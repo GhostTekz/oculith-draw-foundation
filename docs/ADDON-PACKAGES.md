@@ -2,7 +2,7 @@
 
 Foundation can load several small, independent add-ons after the editor starts. Each package contributes to the interface without replacing the editor. An optional full edition package, when present, loads first; independent packages then add their contributions in the order listed in `addons/enabled.json`. An invalid package is skipped so other packages can still load.
 
-The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, and symbol categories and templates. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
+The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, symbol categories and templates, Markups List groups, and styled box tools. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
 
 ## Package format
 
@@ -77,6 +77,37 @@ For an existing text catalog field, `legacyCatalogKeys` may declare its exact, v
 For page extraction of a claimed legacy text field, `catalogForExtract(source)` must synchronously return a replacement string for every present owned field. `source` has frozen `fields`, `presentKeys`, and `pages`. Each page entry gives `sourcePage`, `targetPage`, and arrays of decoded strings from the exact versioned annotation tags in `extractAnnotationKeys`. This claim permits extraction reads only; it does not grant annotation load or save callbacks. Each tag is limited to 16 KiB, with a 2 MiB and 50,000-tag transport ceiling. The host checks that the copied pages still carry those tags. Missing callbacks, unreadable values, changed tags, and partial results stop extraction without writing the target catalog. Unknown versioned vendor fields without an owner also stop extraction.
 
 The full edition package continues to use its existing PDF hooks. Foundation preserves unknown catalog and annotation data when its corresponding add-on is absent.
+
+## Markups List groups
+
+A version 2 add-on may return `listGrouping: { paths, select }`. `paths(doc, annotations)` runs when the visible Markups List builds and returns a `Map` from current annotation objects to one group row description each, or `null` for no groups. It must be synchronous. Group IDs begin with `addon:<package-id>:` and have a nonempty suffix; the same ID describes the same row. A description has a nonempty `name` (at most 160 characters) and may include a CSS hex `color`, an annotation ID as `dominant`, and `hideDominant: true`. IDs are limited to 160 characters. Invalid output from one package is ignored for that list build.
+
+```js
+listGrouping: {
+  paths(doc, annotations) {
+    return new Map(annotations.filter((ann) => ann.subject === 'Review')
+      .map((ann) => [ann, { id: 'addon:example.tools:review', name: 'Review' }]));
+  },
+  select(groupId, ctrlKey) {
+    // Select this package's group in the editor using published host modules.
+  },
+},
+```
+
+The editor calls `select(groupId, ctrlKey)` when a user clicks that package's group row. Drops onto package groups are disabled. A full edition's groups keep priority when they claim the same annotation; among independent packages, enabled order decides priority. The editor routes selection only for group IDs present in the current list. Packages should compute paths without mutating the document or annotations.
+
+## Styled box tools
+
+A version 2 add-on may contribute up to 16 aliases of the editor's ordinary box tool. Each `boxTools` entry has an ID beginning with `addon:<package-id>:` and a letter-led suffix of up to 64 letters, digits, periods, underscores, or hyphens. The editor uses its own box creator, preview, undo, rendering, and PDF saver. The package may set only `color`, `strokeColor`, `fillColor`, `lineWidth`, `opacity`, and `subject`. Colors are six-digit hex values; `fillColor: null` means no fill, line width must be greater than 0 and at most 50, opacity is 0–1, and subject is at most 120 characters. An omitted stroke or base color inherits the other. Invalid entries reject that package without affecting earlier packages.
+
+```js
+boxTools: [{
+  id: 'addon:example.tools:review-box',
+  style: { strokeColor: '#176087', fillColor: null, lineWidth: 2, subject: 'Review' },
+}],
+```
+
+The add-on can expose its tool with a toolbar item or file command whose `run` calls `setTool('addon:example.tools:review-box')` from the published `js/tools/manager.js` host module. Put that module in the package's `requires` list and call it after startup. Box aliases use drag creation; they do not add a keyboard shortcut. Removing the package and restarting leaves the editor's built-in box tool available.
 
 ## Build and manage a package
 
