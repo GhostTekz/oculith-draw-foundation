@@ -2,7 +2,7 @@
 
 Foundation can load several small, independent add-ons after the editor starts. Each package contributes to the interface without replacing the editor. An optional full edition package, when present, loads first; independent packages then add their contributions in the order listed in `addons/enabled.json`. An invalid package is skipped so other packages can still load.
 
-The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, and symbol categories and templates. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
+The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, symbol categories and templates, and Markups List groups. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
 
 ## Package format
 
@@ -69,6 +69,24 @@ export function createAddon() {
 `annotationKeys` declares text fields on markup dictionaries. `decorateAnnotation(model, values)` receives only that package's decoded fields when a markup loads. `annotationForSave(model)` returns a map of owned text fields to write. All PDF callbacks are synchronous. Catalog values are limited to 256 KiB each, annotation values to 16 KiB each. Omitted values leave existing source fields intact when the editor can verify the annotation's identity; an invalid return value stops the save. The callbacks receive document and annotation models, not mutable PDF objects. Arbitrary PDF writes, appearance changes, and page-specific catalog remapping are outside this interface. Extract Pages and Split refuse a PDF with a present v2 catalog field until a package interface can safely remap it.
 
 The full edition package continues to use its existing PDF hooks. Foundation preserves unknown catalog and annotation data when its corresponding add-on is absent.
+
+## Markups List groups
+
+A version 2 add-on may return `listGrouping: { paths, select }`. `paths(doc, annotations)` runs when the visible Markups List builds and returns a `Map` from current annotation objects to one group row description each, or `null` for no groups. It must be synchronous. Group IDs begin with `addon:<package-id>:` and have a nonempty suffix; the same ID describes the same row. A description has a nonempty `name` (at most 160 characters) and may include a CSS hex `color`, an annotation ID as `dominant`, and `hideDominant: true`. IDs are limited to 160 characters. Invalid output from one package is ignored for that list build.
+
+```js
+listGrouping: {
+  paths(doc, annotations) {
+    return new Map(annotations.filter((ann) => ann.subject === 'Review')
+      .map((ann) => [ann, { id: 'addon:example.tools:review', name: 'Review' }]));
+  },
+  select(groupId, ctrlKey) {
+    // Select this package's group in the editor using published host modules.
+  },
+},
+```
+
+The editor calls `select(groupId, ctrlKey)` when a user clicks that package's group row. Drops onto package groups are disabled. A full edition's groups keep priority when they claim the same annotation; among independent packages, enabled order decides priority. The editor routes selection only for group IDs present in the current list. Packages should compute paths without mutating the document or annotations.
 
 ## Build and manage a package
 

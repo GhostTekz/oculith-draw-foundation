@@ -29,6 +29,11 @@ export function assertEditionContract(edition) {
       if (typeof edition.pointer[name] !== 'function') throw new Error(`Edition pointer ${name} must be a function.`);
     }
   }
+  if (edition.listGroupings != null && (!Array.isArray(edition.listGroupings)
+      || edition.listGroupings.some((grouping) => typeof grouping?.id !== 'string'
+        || typeof grouping.paths !== 'function' || typeof grouping.select !== 'function'))) {
+    throw new Error('Edition listGroupings must contain package IDs and paths/select callbacks.');
+  }
   if (edition.undo != null && typeof edition.undo.restoreExtensionState !== 'function') {
     throw new Error('Edition undo restoreExtensionState must be a function.');
   }

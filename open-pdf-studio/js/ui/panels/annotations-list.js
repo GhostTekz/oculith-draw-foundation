@@ -1,4 +1,6 @@
 import { perfRecord } from '../../core/perf.js';
+import { edition } from '../../editions/active.js';
+import { collectAddonListGroups } from './addon-list-groups.js';
 import { $PROXY } from 'solid-js';
 import { $RAW } from 'solid-js/store';
 import i18next from '../../i18n/config.js';
@@ -95,6 +97,7 @@ let noSpaceLabel = '(No Space)';
 // A loaded add-on may add a group level and handle selection of its group rows.
 let extensionGrouping = null;
 export function setExtensionListGrouping(hooks) { extensionGrouping = hooks || null; }
+let addonGroupOwners = new Map();
 const extensionRowsSeen = new Set();
 function openNewExtensionRows(paths) {
   if (!paths?.size) return;
@@ -610,7 +613,11 @@ function buildAnnotationsList(filterValue) {
 
   const groupCg = correctionGroupIds(annotations);
   const pathMemo = new Map();
-  let extensionPaths = null; try { extensionPaths = extensionGrouping?.paths(doc, annotations) || null; } catch { extensionPaths = null; }
+  let legacyPaths = null; try { legacyPaths = extensionGrouping?.paths(doc, annotations) || null; } catch { legacyPaths = null; }
+  const addonGroups = collectAddonListGroups(edition.listGroupings, doc, annotations, legacyPaths,
+    (id) => extensionGrouping?.ownsGroup?.(id) === true);
+  const extensionPaths = addonGroups.paths;
+  addonGroupOwners = addonGroups.owners;
   openNewExtensionRows(extensionPaths);
   const pathOf = (ann) => {
     let path = pathMemo.get(ann);
@@ -1446,6 +1453,7 @@ export async function selectMarkupRange(anchorKey, clickedKey, page) {
  */
 export async function selectMarkupGroupItem(groupId, ctrlKey = false) {
   if (extensionGrouping?.ownsGroup?.(groupId)) return extensionGrouping.select?.(groupId, ctrlKey);
+  if (addonGroupOwners.has(groupId)) return addonGroupOwners.get(groupId)(groupId, ctrlKey);
   const doc = getActiveDocument();
   if (!doc) return;
   const leden = membersOfGroup(doc.annotations, groupId);
@@ -1503,7 +1511,7 @@ export async function dropMarkupsOnCategory(ids, target) {
   const set = new Set(ids || []);
   const markups = (doc?.annotations || []).filter(a => set.has(a.id));
   if (!doc || !markups.length || !target) return 0;
-  if (extensionGrouping?.ownsGroup?.(target.groupId)) return 0;
+  if (extensionGrouping?.ownsGroup?.(target.groupId) || addonGroupOwners.has(target.groupId)) return 0;
   if (target.groupId) {
     const r = addToGroup(doc.annotations, markups, target.groupId, { clone: cloneAnnotation });
     if (!r) return 0;
