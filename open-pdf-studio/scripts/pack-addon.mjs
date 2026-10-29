@@ -15,7 +15,7 @@ async function hashFile(name) {
   return hash.digest('hex');
 }
 
-export async function packAddon({ pluginDir, output, id, version, helper, expectedEditorVersion = editorVersion }) {
+export async function packAddon({ pluginDir, output, id, version, helper, notices, expectedEditorVersion = editorVersion }) {
   if (typeof pluginDir !== 'string' || !pluginDir || typeof output !== 'string' || !output) {
     throw new Error('A source directory and output directory are required.');
   }
@@ -60,6 +60,17 @@ export async function packAddon({ pluginDir, output, id, version, helper, expect
       if (process.platform !== 'win32') await chmod(destination, info.mode & 0o777);
       files[helperName] = await hashFile(destination);
     }
+    if (notices) {
+      const input = path.resolve(notices);
+      const info = await lstat(input);
+      if (!info.isFile() || info.isSymbolicLink() || !info.size || info.size > 4 * 1024 * 1024) {
+        throw new Error('Notices must be a regular UTF-8 file of at most 4 MiB.');
+      }
+      const destination = path.join(stage, 'NOTICES.txt');
+      new TextDecoder('utf-8', { fatal: true }).decode(await readFile(input));
+      await copyFile(input, destination);
+      files['NOTICES.txt'] = await hashFile(destination);
+    }
     const os = { linux: 'linux', win32: 'windows', darwin: 'macos' }[process.platform];
     const manifest = { schemaVersion: helper ? 3 : 2, id, version, hostApiVersion: 1, editorVersion: expectedEditorVersion,
       ...(helper ? { target: { os, arch: process.arch }, helper: helperName } : {}), files };
@@ -82,9 +93,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       else if (flag === '--id') options.id = args[i + 1];
       else if (flag === '--version') options.version = args[i + 1];
       else if (flag === '--helper') options.helper = args[i + 1];
+      else if (flag === '--notices') options.notices = args[i + 1];
       else throw new Error(`Unknown option: ${flag}`);
     }
-    if (!options.pluginDir || !options.output || !options.id || !options.version) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION [--helper FILE]');
+    if (!options.pluginDir || !options.output || !options.id || !options.version) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION [--helper FILE] [--notices FILE]');
     const manifest = await packAddon(options);
     console.log(`Built ${manifest.id} ${manifest.version} at ${options.output}.`);
   } catch (error) { console.error(error.message); process.exitCode = 1; }

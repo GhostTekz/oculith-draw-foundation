@@ -15,6 +15,7 @@ const MAX_MANIFEST = 1024 * 1024;
 const MAX_ADDONS = 64;
 const REMOVAL_PREFIX = '.remove-';
 const MAX_HELPER = 128 * 1024 * 1024;
+const MAX_NOTICES = 4 * 1024 * 1024;
 const HELPER_NAME = process.platform === 'win32' ? 'helper.exe' : 'helper';
 
 function nativeHeaderMatches(bytes) {
@@ -72,8 +73,9 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
     throw new Error(`Add-on manifest is incompatible with editor ${expectedEditorVersion}.`);
   }
   const names = Object.keys(manifest.files);
-  if (!names.includes('plugin.js') || names.length > (manifest.schemaVersion === 3 ? 3 : 2) ||
-      names.some((name) => name !== 'plugin.js' && name !== 'plugin.css' && name !== manifest.helper) ||
+  if (!names.includes('plugin.js') || names.length > (manifest.schemaVersion === 3 ? 4 : 3) ||
+      names.some((name) => name !== 'plugin.js' && name !== 'plugin.css' && name !== manifest.helper &&
+        name !== 'NOTICES.txt') ||
       (manifest.schemaVersion === 3 && !names.includes(manifest.helper))) {
     throw new Error('Add-on files do not match the package schema.');
   }
@@ -97,7 +99,8 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
     const file = path.join(root, name);
     const stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || !stat.size ||
-        stat.size > (name === 'plugin.js' ? 64 * 1024 * 1024 : name === manifest.helper ? MAX_HELPER : 16 * 1024 * 1024)) {
+        stat.size > (name === 'plugin.js' ? 64 * 1024 * 1024 : name === manifest.helper ? MAX_HELPER
+          : name === 'NOTICES.txt' ? MAX_NOTICES : 16 * 1024 * 1024)) {
       throw new Error(`Invalid add-on file: ${name}.`);
     }
     if (await sha256(file) !== manifest.files[name].toLowerCase()) throw new Error(`Add-on hash mismatch: ${name}.`);
