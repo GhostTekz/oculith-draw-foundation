@@ -1,4 +1,4 @@
-// Build a portable, script-only add-on package from plugin.js and optional plugin.css.
+// Build a verified add-on package from script, style, and optional native files.
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -15,13 +15,17 @@ async function hashFile(name) {
   return hash.digest('hex');
 }
 
-export async function packAddon({ pluginDir, output, id, version, helper, notices, expectedEditorVersion = editorVersion }) {
+export async function packAddon({ pluginDir, output, id, version, helper, sidecars = [], notices, expectedEditorVersion = editorVersion }) {
   if (typeof pluginDir !== 'string' || !pluginDir || typeof output !== 'string' || !output) {
     throw new Error('A source directory and output directory are required.');
   }
   if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) ||
       typeof version !== 'string' || !/^[A-Za-z0-9._+-]{1,64}$/.test(version)) {
     throw new Error('Invalid add-on ID or version.');
+  }
+  if (!Array.isArray(sidecars) || sidecars.length > 4 || (sidecars.length && !helper) ||
+      sidecars.some((file) => typeof file !== 'string' || !file)) {
+    throw new Error('Companions require one to four source files and a helper.');
   }
   const source = path.resolve(pluginDir);
   const destination = path.resolve(output);
@@ -60,6 +64,18 @@ export async function packAddon({ pluginDir, output, id, version, helper, notice
       if (process.platform !== 'win32') await chmod(destination, info.mode & 0o777);
       files[helperName] = await hashFile(destination);
     }
+    const sidecarNames = [];
+    for (const [index, sidecar] of sidecars.entries()) {
+      const input = path.resolve(sidecar);
+      const info = await lstat(input);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('Companion must be a regular file.');
+      const name = `companion-${index + 1}${process.platform === 'win32' ? '.exe' : ''}`;
+      const packed = path.join(stage, name);
+      await copyFile(input, packed);
+      if (process.platform !== 'win32') await chmod(packed, info.mode & 0o777);
+      files[name] = await hashFile(packed);
+      sidecarNames.push(name);
+    }
     if (notices) {
       const input = path.resolve(notices);
       const info = await lstat(input);
@@ -72,8 +88,9 @@ export async function packAddon({ pluginDir, output, id, version, helper, notice
       files['NOTICES.txt'] = await hashFile(destination);
     }
     const os = { linux: 'linux', win32: 'windows', darwin: 'macos' }[process.platform];
-    const manifest = { schemaVersion: helper ? 3 : 2, id, version, hostApiVersion: 1, editorVersion: expectedEditorVersion,
-      ...(helper ? { target: { os, arch: process.arch }, helper: helperName } : {}), files };
+    const manifest = { schemaVersion: sidecarNames.length ? 4 : helper ? 3 : 2, id, version, hostApiVersion: 1, editorVersion: expectedEditorVersion,
+      ...(helper ? { target: { os, arch: process.arch }, helper: helperName } : {}),
+      ...(sidecarNames.length ? { sidecars: sidecarNames } : {}), files };
     await writeFile(path.join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     await verifyAddonPackage(stage, expectedEditorVersion);
     await rename(stage, destination);
@@ -94,9 +111,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       else if (flag === '--version') options.version = args[i + 1];
       else if (flag === '--helper') options.helper = args[i + 1];
       else if (flag === '--notices') options.notices = args[i + 1];
+      else if (flag === '--sidecar') (options.sidecars ??= []).push(args[i + 1]);
       else throw new Error(`Unknown option: ${flag}`);
     }
-    if (!options.pluginDir || !options.output || !options.id || !options.version) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION [--helper FILE] [--notices FILE]');
+    if (!options.pluginDir || !options.output || !options.id || !options.version) throw new Error('Usage: node scripts/pack-addon.mjs --source DIR --output DIR --id ID --version VERSION [--helper FILE] [--sidecar FILE ...] [--notices FILE]');
     const manifest = await packAddon(options);
     console.log(`Built ${manifest.id} ${manifest.version} at ${options.output}.`);
   } catch (error) { console.error(error.message); process.exitCode = 1; }
