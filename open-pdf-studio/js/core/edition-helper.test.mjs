@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addonHelperAvailable, addonHelperCall, helperCall, onAddonHelperEvent,
+  addonHelperAvailable, addonHelperCall, helperCall, onAddonHelperEvent, shareAddonFile,
 } from './edition-helper.js';
 
 test('package calls carry their ID and do not change the full-edition route', async () => {
@@ -19,6 +19,20 @@ test('package calls carry their ID and do not change the full-edition route', as
       { command: 'addon_helper_call', args: { packageId: 'second.tools', method: 'ping', params: { value: 7 } } },
       { command: 'edition_helper_call', args: { method: 'ping', params: null } },
     ]);
+  } finally { delete globalThis.window; }
+});
+
+test('file sharing targets only the requested package helper command', async () => {
+  const calls = [];
+  globalThis.window = { __TAURI__: { core: { invoke: async (command, args) => {
+    calls.push({ command, args });
+    return true;
+  } } } };
+  try {
+    assert.equal(await shareAddonFile('sample.tools', '/drawings/sample.pdf'), true);
+    assert.deepEqual(calls, [{ command: 'addon_helper_share_file', args: {
+      packageId: 'sample.tools', path: '/drawings/sample.pdf',
+    } }]);
   } finally { delete globalThis.window; }
 });
 

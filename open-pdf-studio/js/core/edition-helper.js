@@ -119,3 +119,8 @@ export function fromBase64(text) {
 export function shareFile(path) {
   return invoke('edition_helper_share_file', { path });
 }
+
+/** Share an editor-authorized PDF with one enabled package's verified helper. */
+export function shareAddonFile(packageId, path) {
+  return invoke('addon_helper_share_file', { packageId, path });
+}
