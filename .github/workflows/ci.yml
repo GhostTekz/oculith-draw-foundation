@@ -25,7 +25,7 @@ jobs:
             parents="$(git rev-list --parents -n 1 HEAD 2>/dev/null || true)"
             read -r commit base head extra <<< "$parents"
             if [[ -n "${base:-}" && -n "${head:-}" && -z "${extra:-}" ]] \
-              && git diff --name-only -z "$base" "$commit" > "$RUNNER_TEMP/changed-files"; then
+              && git diff --no-renames --name-only -z "$base" "$commit" > "$RUNNER_TEMP/changed-files"; then
               required=false
               reason='frontend or documentation only'
               while IFS= read -r -d '' path; do

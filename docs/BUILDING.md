@@ -82,7 +82,7 @@ The unit tests run on real PDF bytes from the real saver and loader where it mat
 
 The `Foundation CI` workflow runs on every pull request update. It checks the source boundary, editor, and offline browser save/reopen without building installers. It also compiles Rust when the PR changes a native or build input, and on every push to `main`. For a PR that changes only documented frontend paths, it skips Rust setup, Linux native dependencies, and Cargo. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
 
-The native compile decision uses the PR merge commit and its first parent, so it checks the full proposed diff against the current base. It fails closed and compiles if the merge parent or diff cannot be read. The path policy is:
+The native compile decision uses the PR merge commit and its first parent, so it checks the full proposed diff against the current base. Renames are evaluated as both a removal and an addition. It fails closed and compiles if the merge parent or diff cannot be read. The path policy is:
 
 | PR changes | Native compile |
 | --- | --- |
