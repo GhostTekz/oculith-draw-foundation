@@ -4,7 +4,7 @@ import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
 import { validateBoxTools } from './box-tools.js';
 
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', 'documentTitle', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', 'documentTitle', 'authorName', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -132,6 +132,9 @@ export function validateAddon(addon, expectedId) {
   if (addon.documentTitle != null && (addon.apiVersion !== 2 || typeof addon.documentTitle !== 'function')) {
     throw new Error('Document title provider requires add-on API version 2 and a function');
   }
+  if (addon.authorName != null && (addon.apiVersion !== 2 || typeof addon.authorName !== 'function')) {
+    throw new Error('Author name provider requires add-on API version 2 and a function');
+  }
   if (addon.dialogs != null && (typeof addon.dialogs !== 'object' || Array.isArray(addon.dialogs))) {
     throw new Error('dialogs must be an object');
   }
@@ -215,6 +218,9 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
           }
           return '';
         } : edition.documentTitle,
+        // A later provider owns the current author. Falling back to a stale
+        // earlier provider after sign-out could reuse the previous identity.
+        authorName: addon.authorName || edition.authorName,
       };
       accepted.push(id);
     } catch (error) {

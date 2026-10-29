@@ -118,6 +118,22 @@ test('independent document title providers resolve local names in order and surv
   ]) assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: bad }]).accepted, []);
 });
 
+test('the latest author provider owns future edits, including an empty signed-out name', async () => {
+  const base = { ...foundation, authorName: () => 'Previous person' };
+  const result = composeAddons(base, [{ id: 'author', addon: {
+    apiVersion: 2, id: 'author', authorName: async () => '',
+  } }]);
+  assert.deepEqual(result.accepted, ['author']);
+  assert.equal(await result.edition.authorName(), '');
+  assert.equal(base.authorName(), 'Previous person');
+  for (const authorName of ['name', () => 'Name']) {
+    const apiVersion = typeof authorName === 'string' ? 2 : 1;
+    assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: {
+      apiVersion, id: 'bad', authorName,
+    } }]).accepted, []);
+  }
+});
+
 test('old native binaries fall back to the singleton edition command', async () => {
   const calls = [];
   const entries = await resolvePluginEntries(async (command) => {

@@ -45,6 +45,9 @@ export function assertEditionContract(edition) {
   if (edition.documentTitle != null && typeof edition.documentTitle !== 'function') {
     throw new Error('Edition documentTitle must be a function.');
   }
+  if (edition.authorName != null && typeof edition.authorName !== 'function') {
+    throw new Error('Edition authorName must be a function.');
+  }
   if (edition.home != null) {
     if (typeof edition.home.title !== 'function' || typeof edition.home.description !== 'function'
         || !Array.isArray(edition.home.actions) || edition.home.actions.some((action) =>

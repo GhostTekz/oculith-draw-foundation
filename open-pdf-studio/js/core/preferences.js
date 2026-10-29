@@ -8,7 +8,7 @@ import { preferencesMirrorJson } from './preferences-mirror.js';
 import { voegSamenMetStandaarden } from './preferences-merge.js';
 import { randkleurVoorVoorkeur, randkleurenUitVoorkeur } from '../annotations/fill-utils.js';
 import { zetRanddikte } from '../annotations/rendering/textbox-layout.js';
-import { edition } from '../editions/active.js';
+import { refreshDefaultAuthor } from './default-author.js';
 
 // Load preferences from Rust file storage, with localStorage migration fallback
 export async function loadPreferences() {
@@ -92,7 +92,7 @@ export async function loadPreferences() {
     }
   }
 
-  applyPreferences();
+  await applyPreferences();
 }
 
 // Save preferences to Rust file storage + localStorage mirror.
@@ -180,7 +180,8 @@ export function applyPreferences() {
     applyTheme(state.preferences.theme);
   }
 
-  // Update default author from preferences
+  // Show the local preference immediately; the optional provider may read
+  // local state asynchronously. Existing annotations keep their own authors.
   state.defaultAuthor = state.preferences.authorName || 'User';
 
   // Update color picker default
@@ -197,6 +198,7 @@ export function applyPreferences() {
   import('../tools/screenshot-annotate.js')
     .then((m) => m.applyPrintScreenHotkeyPref())
     .catch(() => {});
+  return refreshDefaultAuthor();
 }
 
 // Show preferences dialog (bridges to Solid.js dialog)

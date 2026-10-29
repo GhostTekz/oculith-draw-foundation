@@ -31,6 +31,7 @@ import { edition } from './editions/active.js';
 import { assertEditionContract } from './editions/contract.js';
 import { registerTemplate } from './symbols/registry.js';
 import { loadPreferences, savePreferences } from './core/preferences.js';
+import { refreshDefaultAuthor } from './core/default-author.js';
 import { initDomElements } from './ui/dom-elements.js';
 import { initPropertiesPanel } from './ui/panels/properties-panel.js';
 import { initToolPalette } from './solid/components/ToolPalette.jsx';
@@ -223,6 +224,7 @@ async function init() {
 
   // Load user preferences (before render so theme is applied)
   await loadPreferences();
+  await refreshDefaultAuthor();
   // Panel hosts, toolbars and profile (workspaceLayout.js), before the first
   // render so the hosts mount in their saved layout.
   restoreWorkspaceLayout();
