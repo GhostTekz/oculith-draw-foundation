@@ -20,6 +20,7 @@ import { gevelPreset } from '../../gevelelement/herkenning.js';
 import { onderdeelOnderPunt } from '../../gevelelement/element.js';
 import i18next from '../../i18n/config.js';
 import { findAnnotationsAt } from '../../annotations/geometry.js';
+import { notifySelectPointerMove } from '../../annotations/extension-overlay.js';
 import { edition } from '../../editions/active.js';
 import { typeName } from '../../quantities/categories.js';
 import { CYCLE_SPOT_PX, sameSpot, nextCycleId, cyclePosition } from '../selection-cycle.js';
@@ -458,6 +459,8 @@ export const selectTool = {
   onPointerMove(ctx, e) {
     const { x, y, state, canvas, canvasCtx } = ctx;
     if (edition.pointer?.event?.('move', ctx, e)) return;
+    notifySelectPointerMove({ x, y, pageNumber: ctx.pageNum,
+      documentId: getActiveDocument()?.id, idle: !state.isRubberBanding });
 
     // Rubber band: update the live end-point and let the render overlay pass
     // (rendering.js drawRubberBand) paint the marquee. Drawing it there —
