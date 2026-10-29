@@ -35,6 +35,10 @@ test('extracted Foundation package carries exact notices and no private add-on f
     const result = await verifyFoundationPackage(root, { artifact });
     assert.equal(result.product, 'Oculith Draw Foundation');
     assert.match(result.sourceCommit, /^[0-9a-f]{40}$/);
+    assert.equal(result.sourceTree,
+      execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: path.resolve(project, '..'), encoding: 'utf8' }).trim());
+    assert.equal(result.sourceArchiveUrl,
+      `https://github.com/GhostTekz/oculith-foundation/archive/${result.sourceCommit}.tar.gz`);
     assert.ok(result.noticeFilesChecked > 50);
     assert.equal(result.artifactSha256, createHash('sha256').update('package bytes').digest('hex'));
     const receipt = path.join(root, 'package-audit.json');
