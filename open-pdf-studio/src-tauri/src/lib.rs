@@ -757,10 +757,10 @@ fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> O
         || (manifest.schema_version == 3 &&
             (manifest.helper.as_deref() != Some(addon_helper_name()) || manifest.target.is_none()
                 || manifest.target.as_ref().is_some_and(|target| target.arch == "universal")))
-        || manifest.files.is_empty() || manifest.files.len() > if manifest.schema_version == 3 { 3 } else { 2 }
+        || manifest.files.is_empty() || manifest.files.len() > if manifest.schema_version == 3 { 4 } else { 3 }
         || !manifest.files.contains_key("plugin.js")
         || (manifest.schema_version == 3 && !manifest.files.contains_key(addon_helper_name()))
-        || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css"
+        || manifest.files.keys().any(|name| name != "plugin.js" && name != "plugin.css" && name != "NOTICES.txt"
             && !(manifest.schema_version == 3 && name == addon_helper_name())) {
         return None;
     }
@@ -788,6 +788,12 @@ fn verified_package(root: &std::path::Path, id: &str, editor_version: &str) -> O
         if !sha256_bytes_match(&bytes, expected) { return None; }
         String::from_utf8(bytes).ok()?
     } else { String::new() };
+    if let Some(expected) = manifest.files.get("NOTICES.txt") {
+        let path = addon_file(root, "NOTICES.txt")?;
+        let bytes = read_bounded_addon_file(&path, 4 * 1024 * 1024)?;
+        if bytes.is_empty() || !sha256_bytes_match(&bytes, expected) { return None; }
+        std::str::from_utf8(&bytes).ok()?;
+    }
     let helper = if manifest.schema_version == 3 {
         let path = addon_file(root, addon_helper_name())?;
         let hash = manifest.files.get(addon_helper_name())?;
@@ -1011,10 +1017,45 @@ mod addon_tests {
         manifest["files"][addon_helper_name()] = sha256_file(&helper).unwrap().into();
         fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(verified_package(&package, id, "2026.68.0").unwrap().helper.is_some());
+        let notices = package.join("NOTICES.txt");
+        fs::write(&notices, b"Licensed components\n").unwrap();
+        manifest["files"]["NOTICES.txt"] = sha256_file(&notices).unwrap().into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_some());
+        fs::write(&notices, b"tampered\n").unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::write(&notices, vec![b'x'; 4 * 1024 * 1024 + 1]).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::write(&notices, b"Licensed components\n").unwrap();
+        fs::write(package.join("unlisted.txt"), b"extra").unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::remove_file(package.join("unlisted.txt")).unwrap();
         fs::write(&helper, b"tampered").unwrap();
         assert!(verified_package(&package, id, "2026.68.0").is_none());
         fs::write(&helper, &header).unwrap();
         manifest["target"]["arch"] = "wrong".into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn v2_package_accepts_verified_notices_only() {
+        let root = addon_test_dir();
+        let packages = root.join("packages");
+        let id = "script.notice";
+        write_test_package(&packages, id, b"export const createAddon = () => ({});");
+        let package = packages.join(id);
+        let notices = package.join("NOTICES.txt");
+        fs::write(&notices, b"Private add-on terms\n").unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("manifest.json")).unwrap()).unwrap();
+        manifest["files"]["NOTICES.txt"] = sha256_file(&notices).unwrap().into();
+        fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_some());
+        fs::write(&notices, b"changed\n").unwrap();
+        assert!(verified_package(&package, id, "2026.68.0").is_none());
+        fs::write(&notices, b"\xff").unwrap();
+        manifest["files"]["NOTICES.txt"] = sha256_file(&notices).unwrap().into();
         fs::write(package.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(verified_package(&package, id, "2026.68.0").is_none());
         fs::remove_dir_all(root).unwrap();
