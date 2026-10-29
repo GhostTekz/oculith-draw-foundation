@@ -5,10 +5,29 @@ import { PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
 const BASE = Symbol('base PDF hooks');
 const ADDONS = Symbol('PDF add-ons');
-const FIELDS = new Set(['catalogKeys', 'annotationKeys', 'applyCatalog', 'catalogForSave',
+const FIELDS = new Set(['catalogKeys', 'legacyCatalogKeys', 'annotationKeys', 'applyCatalog', 'catalogForSave',
   'decorateAnnotation', 'annotationForSave']);
 const MAX_CATALOG_TEXT = 256 * 1024;
+const MAX_LEGACY_CATALOG_BYTES = 2 * 1024 * 1024;
 const MAX_ANNOTATION_TEXT = 16 * 1024;
+// These entries belong to the editor, even though they use a vendor-style
+// name. Independent packages may claim only other, exact legacy names.
+const EDITOR_CATALOG_KEYS = new Set(`OPS_AnnotLayers OPS_AssembliesV1 OPS_CaptionTemplateV1
+  OPS_FormulaCaptionsV1 OPS_MarkupCheckmarkColumnV1 OPS_MarkupChoiceColumn2V1
+  OPS_MarkupChoiceColumn2V2 OPS_MarkupChoiceColumnV1 OPS_MarkupChoiceColumnV2
+  OPS_MarkupFormulaColumnV1 OPS_MarkupFormulaColumnV2 OPS_MarkupFormulaColumnV3
+  OPS_MarkupNumberColumn2V1 OPS_MarkupNumberColumnV1 OPS_MarkupStatusSetV1
+  OPS_MarkupTextColumn OPS_MarkupTextColumn2V1 OPS_Preview OPS_Spaces
+  OPS_ToolSequences`.split(/\s+/));
+const encoder = new TextEncoder();
+const LEGACY_CATALOG_NAME = /^[A-Z][A-Z0-9]{1,15}_[A-Za-z][A-Za-z0-9_]*V[1-9][0-9]*$/;
+
+/** Unknown versioned vendor catalog fields may contain page-specific state. */
+export function unclaimedLegacyCatalogKeys(pdfDoc, claimed = []) {
+  const known = new Set([...EDITOR_CATALOG_KEYS, ...claimed]);
+  return pdfDoc.catalog.keys().map((key) => key.decodeText())
+    .filter((key) => LEGACY_CATALOG_NAME.test(key) && !known.has(key));
+}
 
 /** Reversible ASCII encoding prevents packages with punctuation in their IDs sharing a prefix. */
 export function pdfKeyPrefix(id) {
@@ -34,14 +53,35 @@ function declaredKeys(id, field, values) {
   return [...keys];
 }
 
+function legacyCatalogKeys(values) {
+  if (values == null) return [];
+  if (!Array.isArray(values)) throw new Error('PDF legacyCatalogKeys must be an array');
+  const seen = new Set();
+  for (const key of values) {
+    // Require an explicit vendor namespace and a versioned field. This rules
+    // out PDF structural names and the editor's own catalog entries.
+    if (typeof key !== 'string' || key.length > 127
+        || !LEGACY_CATALOG_NAME.test(key)
+        || EDITOR_CATALOG_KEYS.has(key) || seen.has(key)) {
+      throw new Error(`Invalid or duplicate PDF legacy catalog key: ${String(key)}`);
+    }
+    seen.add(key);
+  }
+  return [...seen];
+}
+
 export function validatePdfContribution(id, pdf) {
   if (!pdf || typeof pdf !== 'object' || Array.isArray(pdf)) throw new Error('PDF contribution must be an object');
   for (const field of Object.keys(pdf)) if (!FIELDS.has(field)) throw new Error(`Unsupported PDF operation: ${field}`);
   const catalogKeys = declaredKeys(id, 'catalogKeys', pdf.catalogKeys);
+  const legacyKeys = legacyCatalogKeys(pdf.legacyCatalogKeys);
+  if (legacyKeys.some((key) => catalogKeys.includes(key))) throw new Error('Duplicate PDF catalog key');
   const annotationKeys = declaredKeys(id, 'annotationKeys', pdf.annotationKeys);
-  if (!catalogKeys.length && !annotationKeys.length) throw new Error('PDF contribution must declare owned keys');
+  if (!catalogKeys.length && !legacyKeys.length && !annotationKeys.length) {
+    throw new Error('PDF contribution must declare owned keys');
+  }
   for (const name of ['applyCatalog', 'catalogForSave']) {
-    if (pdf[name] != null && (!catalogKeys.length || typeof pdf[name] !== 'function')) {
+    if (pdf[name] != null && (!catalogKeys.length && !legacyKeys.length || typeof pdf[name] !== 'function')) {
       throw new Error(`PDF ${name} requires declared catalog keys and a function`);
     }
   }
@@ -50,19 +90,22 @@ export function validatePdfContribution(id, pdf) {
       throw new Error(`PDF ${name} requires declared annotation keys and a function`);
     }
   }
-  return { id, catalogKeys, annotationKeys, ...Object.fromEntries(
+  return { id, catalogKeys: [...catalogKeys, ...legacyKeys], legacyCatalogKeys: legacyKeys,
+    annotationKeys, ...Object.fromEntries(
     [...FIELDS].filter((name) => typeof pdf[name] === 'function').map((name) => [name, pdf[name]])) };
 }
 
-function textFields(values, keys, limit, id) {
+function textFields(values, keys, limit, id, legacyKeys = []) {
   if (values == null) return {};
   if (typeof values !== 'object' || Array.isArray(values) || typeof values.then === 'function') {
     throw new Error(`PDF ${id} fields must be a synchronous object`);
   }
   const allowed = new Set(keys);
+  const legacy = new Set(legacyKeys);
   const result = {};
   for (const [key, value] of Object.entries(values)) {
-    if (!allowed.has(key) || typeof value !== 'string' || value.length > limit) {
+    if (!allowed.has(key) || typeof value !== 'string'
+        || (legacy.has(key) ? encoder.encode(value).length > MAX_LEGACY_CATALOG_BYTES : value.length > limit)) {
       throw new Error(`PDF ${id} returned an unowned or oversized field: ${key}`);
     }
     result[key] = value;
@@ -70,17 +113,40 @@ function textFields(values, keys, limit, id) {
   return result;
 }
 
-function readCatalog(pdfDoc, keys) {
+function readCatalog(pdfDoc, keys, legacyKeys = []) {
   const fields = {};
+  const legacy = new Set(legacyKeys);
   for (const key of keys) {
-    const raw = pdfDoc.catalog.get(PDFName.of(key));
-    const value = raw === undefined ? null : pdfDoc.context.lookup(raw);
+    let value;
+    try {
+      const raw = pdfDoc.catalog.get(PDFName.of(key));
+      value = raw === undefined ? null : pdfDoc.context.lookup(raw);
+    } catch { continue; }
     // Hex UTF-16 and escaped literal strings can need four source characters
     // per decoded character. Bound the raw representation before decodeText.
+    const max = legacy.has(key) ? MAX_LEGACY_CATALOG_BYTES : MAX_CATALOG_TEXT;
     if ((value instanceof PDFString || value instanceof PDFHexString)
-        && value.value.length <= (MAX_CATALOG_TEXT + 1) * 4) {
-      const decoded = value.decodeText();
-      if (decoded.length <= MAX_CATALOG_TEXT) fields[key] = decoded;
+        && value.value.length <= (max + 1) * 4) {
+      let decoded;
+      try {
+        if (legacy.has(key)) {
+          const bytes = value.asBytes();
+          // pdf-lib's UTF-16 decoder spreads all code points into one call and
+          // overflows for large workspaces. Keep its behavior for small strings;
+          // reject malformed large UTF-16 rather than normalize source bytes.
+          if (bytes.length <= 64 * 1024) {
+            decoded = value.decodeText();
+          } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+            decoded = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
+          } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+            decoded = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
+          }
+        } else decoded = value.decodeText();
+      } catch { continue; /* Unreadable source stays in the PDF. */ }
+      if (decoded !== undefined
+          && (legacy.has(key) ? encoder.encode(decoded).length <= max : decoded.length <= max)) {
+        fields[key] = decoded;
+      }
     }
   }
   return fields;
@@ -122,7 +188,8 @@ export function composePdfHooks(current, id, contribution) {
     annotationKeysToSkipCarry: base?.annotationKeys || [],
     readWorkspace(pdfDoc) {
       return { base: base?.readWorkspace?.(pdfDoc),
-        addons: Object.fromEntries(addons.map((addon) => [addon.id, readCatalog(pdfDoc, addon.catalogKeys)])) };
+        addons: Object.fromEntries(addons.map((addon) => [addon.id,
+          readCatalog(pdfDoc, addon.catalogKeys, addon.legacyCatalogKeys)])) };
     },
     applyWorkspace(doc, data) {
       base?.applyWorkspace?.(doc, data ? data.base : null);
@@ -135,14 +202,25 @@ export function composePdfHooks(current, id, contribution) {
     },
     workspaceForSave(doc, pdfDoc) {
       return { base: base?.workspaceForSave?.(doc, pdfDoc),
-        addons: Object.fromEntries(addons.map((addon) => [addon.id,
-          textFields(addon.catalogForSave?.(doc), addon.catalogKeys, MAX_CATALOG_TEXT, addon.id)])) };
+        addons: Object.fromEntries(addons.map((addon) => {
+          const fields = Object.freeze(readCatalog(pdfDoc, addon.catalogKeys, addon.legacyCatalogKeys));
+          const presentKeys = Object.freeze(addon.catalogKeys.filter((key) =>
+            pdfDoc.catalog.get(PDFName.of(key)) !== undefined));
+          const source = Object.freeze({ fields, presentKeys });
+          return [addon.id, textFields(addon.catalogForSave?.(doc, source), addon.catalogKeys,
+            MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys)];
+        })) };
     },
     saveWorkspace(pdfDoc, data) {
       base?.saveWorkspace?.(pdfDoc, data?.base);
       for (const addon of addons) {
-        const fields = textFields(data?.addons?.[addon.id], addon.catalogKeys, MAX_CATALOG_TEXT, addon.id);
+        const fields = textFields(data?.addons?.[addon.id], addon.catalogKeys, MAX_CATALOG_TEXT,
+          addon.id, addon.legacyCatalogKeys);
         for (const [key, value] of Object.entries(fields)) {
+          if (addon.legacyCatalogKeys.includes(key) && pdfDoc.catalog.get(PDFName.of(key)) !== undefined
+              && !Object.hasOwn(readCatalog(pdfDoc, [key], [key]), key)) {
+            throw new Error(`Cannot replace unreadable PDF legacy catalog key: ${key}`);
+          }
           pdfDoc.catalog.set(PDFName.of(key), PDFHexString.fromText(value));
         }
       }

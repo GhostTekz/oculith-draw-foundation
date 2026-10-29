@@ -5,6 +5,7 @@ import { edition as foundation } from './community.js';
 import { composeAddons } from './compose-addons.js';
 import { assertEditionContract } from './contract.js';
 import { pdfKeyPrefix } from './pdf-hooks.js';
+import { extractPdfLibPages } from '../pdf/extract-pages-core.js';
 import { carryUnmodeledAnnotationKeys } from '../pdf/saver/unmodeled-annotation-keys.js';
 
 const key = (id, suffix) => `${pdfKeyPrefix(id)}${suffix}`;
@@ -179,4 +180,76 @@ test('catalog callbacks only run for packages with source fields, and oversized 
   reopened.catalog.set(PDFName.of(keys[1]), oversized);
   edition.pdf.applyWorkspace({}, edition.pdf.readWorkspace(reopened));
   assert.deepEqual(called, [ids[0], ids[0]], 'oversized package field is skipped before decode');
+});
+
+test('an independent package claims an exact legacy text key without replacing unreadable source data', async () => {
+  const id = 'sample.legacy', legacy = 'LAB_DrawingStateV1';
+  const contribution = { legacyCatalogKeys: [legacy],
+    applyCatalog(doc, fields) { doc.state = fields[legacy]; },
+    catalogForSave(doc, source) {
+      assert.ok(Object.isFrozen(source) && Object.isFrozen(source.fields)
+        && Object.isFrozen(source.presentKeys));
+      assert.deepEqual(Object.keys(source.fields).filter((key) => key !== legacy), []);
+      return doc.state ? { [legacy]: doc.state } : {};
+    },
+  };
+  const { edition, rejected } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: contribution } }]);
+  assert.deepEqual(rejected, []);
+  assert.deepEqual(edition.pdf.catalogKeys, [legacy]);
+
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  const large = 'x'.repeat(300 * 1024);
+  edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({ state: large }, pdf));
+  const reopened = await PDFDocument.load(await pdf.save());
+  const loaded = {};
+  edition.pdf.applyWorkspace(loaded, edition.pdf.readWorkspace(reopened));
+  assert.equal(loaded.state, large);
+  assert.equal(new TextDecoder('utf-16be').decode(reopened.catalog.get(PDFName.of(legacy)).asBytes()), large);
+
+  const invalid = reopened.context.obj({ Data: PDFHexString.fromText('opaque') });
+  reopened.catalog.set(PDFName.of(legacy), reopened.context.register(invalid));
+  assert.throws(() => edition.pdf.saveWorkspace(reopened,
+    edition.pdf.workspaceForSave({ state: 'replace' }, reopened)), /unreadable/);
+  assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(legacy))), invalid);
+  edition.pdf.saveWorkspace(reopened, edition.pdf.workspaceForSave({}, reopened));
+  assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(legacy))), invalid);
+});
+
+test('legacy decoding matches short pdf-lib strings and preserves malformed large UTF-16', async () => {
+  const id = 'sample.legacy', key = 'LAB_DrawingStateV1';
+  const { edition } = composeAddons(foundation, [{ id, addon: {
+    apiVersion: 2, id, pdf: { legacyCatalogKeys: [key] },
+  } }]);
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  for (const raw of [PDFHexString.fromText('valid 😀'), PDFHexString.of('FEFFD8000041')]) {
+    pdf.catalog.set(PDFName.of(key), raw);
+    assert.equal(edition.pdf.readWorkspace(pdf).addons[id][key], raw.decodeText());
+  }
+  const malformed = PDFHexString.fromText('x'.repeat(70 * 1024));
+  malformed.value = `${malformed.value.slice(0, -4)}D800`;
+  pdf.catalog.set(PDFName.of(key), malformed);
+  const before = malformed.toString();
+  assert.deepEqual(edition.pdf.readWorkspace(pdf).addons[id], {});
+  assert.throws(() => edition.pdf.saveWorkspace(pdf, {
+    addons: { [id]: { [key]: 'replacement' } },
+  }), /unreadable/);
+  assert.equal(pdf.catalog.get(PDFName.of(key)).toString(), before);
+  const reopened = await PDFDocument.load(await pdf.save());
+  assert.equal(reopened.catalog.get(PDFName.of(key)).toString(), before);
+});
+
+test('legacy claims reject editor and structural keys; unknown versioned data blocks extract', async () => {
+  for (const legacy of ['Pages', 'OPS_MarkupStatusSetV1', 'LAB_State']) {
+    const id = 'sample.legacy';
+    const candidate = { apiVersion: 2, id, pdf: { legacyCatalogKeys: [legacy] } };
+    const result = composeAddons(foundation, [{ id, addon: candidate }]);
+    assert.equal(result.accepted.length, 0);
+  }
+  const source = await PDFDocument.create();
+  source.addPage();
+  source.catalog.set(PDFName.of('LAB_DrawingStateV1'), PDFHexString.fromText('page-specific'));
+  await assert.rejects(extractPdfLibPages(source, [1]), /unclaimed legacy PDF data/);
+  assert.equal(text(source.catalog, 'LAB_DrawingStateV1'), 'page-specific');
 });
