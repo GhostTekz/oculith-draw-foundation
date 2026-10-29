@@ -4,7 +4,7 @@ import { composePdfHooks, validatePdfContribution } from './pdf-hooks.js';
 import { validateBoxTools } from './box-tools.js';
 
 const SLOTS = ['panels', 'fileCommands', 'fileMenuItems', 'toolbarItems', 'symbolCategories', 'symbolTemplates'];
-const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', ...SLOTS]);
+const ALLOWED = new Set(['apiVersion', 'id', 'dialogs', 'pdf', 'listGrouping', 'boxTools', 'homeActions', 'documentTitle', ...SLOTS]);
 const CORE_PANELS = new Set([
   'thumbnails', 'sheets', 'bookmarks', 'layers', 'toolChest', 'links', 'measurements',
   'properties', 'formFields', 'signatures', 'attachments', 'search', 'tags', 'spaces',
@@ -129,6 +129,9 @@ export function validateAddon(addon, expectedId) {
       throw new Error('Home actions need label and run callbacks');
     }
   }
+  if (addon.documentTitle != null && (addon.apiVersion !== 2 || typeof addon.documentTitle !== 'function')) {
+    throw new Error('Document title provider requires add-on API version 2 and a function');
+  }
   if (addon.dialogs != null && (typeof addon.dialogs !== 'object' || Array.isArray(addon.dialogs))) {
     throw new Error('dialogs must be an object');
   }
@@ -182,6 +185,7 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
       const usedTools = new Set([...(edition.tools?.shapeToolIds || []), ...(edition.boxTools || []).map((tool) => tool.id)]);
       for (const tool of boxTools) if (usedTools.has(tool.id)) throw new Error(`Duplicate tool id: ${tool.id}`);
       const homeActions = edition.home?.actions || [];
+      const previousTitle = edition.documentTitle;
       const usedHomeActions = new Set(homeActions.map((action) => action.id).filter(Boolean));
       for (const action of addon.homeActions || []) {
         if (usedHomeActions.has(action.id)) throw new Error(`Duplicate home action id: ${action.id}`);
@@ -201,6 +205,16 @@ export function composeAddons(base, candidates, { reservedShortcuts = [], reserv
           description: edition.home?.description || (() => 'Open a plan set to place symbols, mark up details, and measure the work.'),
           actions: [...homeActions, ...addon.homeActions],
         } : edition.home,
+        documentTitle: addon.documentTitle ? async (path) => {
+          for (const provider of [previousTitle, addon.documentTitle]) {
+            if (!provider) continue;
+            try {
+              const title = await provider(path);
+              if (typeof title === 'string' && title.trim()) return title;
+            } catch { /* A title provider cannot stop document opening or later providers. */ }
+          }
+          return '';
+        } : edition.documentTitle,
       };
       accepted.push(id);
     } catch (error) {

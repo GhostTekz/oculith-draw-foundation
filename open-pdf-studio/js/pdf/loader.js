@@ -577,9 +577,10 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     doc.fileName = filePath ? filePath.split(/[\\/]/).pop() : 'Untitled';
     // An add-on may supply a display name for a locally opened document.
     if (filePath && edition.documentTitle) {
-      void edition.documentTitle(filePath).then(name => {
-        if (name && doc.filePath === filePath) {
-          doc.fileName = name;
+      void Promise.resolve().then(() => edition.documentTitle(filePath)).then(name => {
+        const title = typeof name === 'string' ? name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 180) : '';
+        if (title && doc.filePath === filePath) {
+          doc.fileName = title;
           updateWindowTitle();
         }
       }).catch(() => {});

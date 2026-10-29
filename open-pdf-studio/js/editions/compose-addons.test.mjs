@@ -98,6 +98,26 @@ test('independent home actions compose without changing the base or hiding later
   } }]).accepted, []);
 });
 
+test('independent document title providers resolve local names in order and survive a failing provider', async () => {
+  const calls = [];
+  const result = composeAddons(foundation, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', documentTitle: async (path) => {
+      calls.push(['one', path]); throw new Error('unavailable local index');
+    } } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', documentTitle: (path) => {
+      calls.push(['two', path]); return '  Drawing A-101  ';
+    } } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.equal(await result.edition.documentTitle('/local/drawing.pdf'), '  Drawing A-101  ');
+  assert.deepEqual(calls, [['one', '/local/drawing.pdf'], ['two', '/local/drawing.pdf']]);
+  assert.equal(foundation.documentTitle, undefined);
+  for (const bad of [
+    { apiVersion: 1, id: 'bad', documentTitle: () => 'bad' },
+    { apiVersion: 2, id: 'bad', documentTitle: 'bad' },
+  ]) assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: bad }]).accepted, []);
+});
+
 test('old native binaries fall back to the singleton edition command', async () => {
   const calls = [];
   const entries = await resolvePluginEntries(async (command) => {

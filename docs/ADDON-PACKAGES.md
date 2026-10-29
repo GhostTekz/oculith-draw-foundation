@@ -70,6 +70,18 @@ homeActions: [{
 }],
 ```
 
+## Local document titles
+
+An independent add-on may also return `documentTitle(path)` with `apiVersion: 2`.
+The editor calls this optional provider after opening a local PDF and displays
+a nonempty string as that document's tab and window title. Control characters
+are removed and the result is limited to 180 characters. If several add-ons
+provide a title, the first nonempty result wins; a provider error leaves the
+file open and lets later providers answer. The callback should use local data
+only: opening a PDF does not imply consent to contact a service. The editor
+passes only the local path and applies an asynchronous answer only while the
+document still has that path.
+
 ## Namespaced PDF fields
 
 An independent add-on that saves PDF metadata returns `apiVersion: 2` from `createAddon()`. This is the script contract version; its manifest can use schema version 2 or 3 and `hostApiVersion: 1`. Each declared PDF key begins with `ODX_`, then the package ID with punctuation encoded as its two-digit ASCII hex value, then `_` and a letter-led field name. For `example.tools`, the prefix is `ODX_example_2etools_`. The editor rejects duplicate or unowned keys before loading a package.
