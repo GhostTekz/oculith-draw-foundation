@@ -2089,13 +2089,60 @@ fn recover_plugin_backup(plugin_dir: &std::path::Path, backup: &std::path::Path)
     Ok(())
 }
 
+// zip 2.x indexes central-directory entries by name and silently replaces
+// earlier entries with the same name. Inspect the raw directory before using
+// its deduplicated view so an archive cannot hide entries from our checks.
+fn validate_plugin_central_directory(file: &mut fs::File, start: u64, parsed_count: usize) -> Result<(), String> {
+    use std::io::{Read, Seek};
+    let len = file.metadata().map_err(|e| format!("Cannot inspect plugin archive: {e}"))?.len();
+    let mut position = start;
+    let mut count = 0;
+    let mut names = std::collections::HashSet::new();
+    loop {
+        if position.checked_add(4).is_none_or(|end| end > len) {
+            return Err("Invalid plugin central directory".into());
+        }
+        file.seek(std::io::SeekFrom::Start(position)).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        let mut header = [0u8; 46];
+        file.read_exact(&mut header[..4]).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        if &header[..4] != b"PK\x01\x02" { break; }
+        if position.checked_add(header.len() as u64).is_none_or(|end| end > len) {
+            return Err("Invalid plugin central directory".into());
+        }
+        file.read_exact(&mut header[4..]).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        let name_len = u16::from_le_bytes([header[28], header[29]]) as u64;
+        let extra_len = u16::from_le_bytes([header[30], header[31]]) as u64;
+        let comment_len = u16::from_le_bytes([header[32], header[33]]) as u64;
+        let next = position.checked_add(header.len() as u64)
+            .and_then(|n| n.checked_add(name_len))
+            .and_then(|n| n.checked_add(extra_len))
+            .and_then(|n| n.checked_add(comment_len))
+            .ok_or("Invalid plugin central directory")?;
+        if next > len { return Err("Invalid plugin central directory".into()); }
+        let mut name = vec![0u8; name_len as usize];
+        file.read_exact(&mut name).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        if !names.insert(name) { return Err("Duplicate plugin archive path".into()); }
+        count += 1;
+        if count > MAX_PLUGIN_ARCHIVE_FILES { return Err("Plugin archive has too many files".into()); }
+        position = next;
+    }
+    if count != parsed_count { return Err("Duplicate or hidden plugin archive path".into()); }
+    Ok(())
+}
+
 fn install_plugin_archive(src_path: &std::path::Path, plugins_dir: &std::path::Path) -> Result<serde_json::Value, String> {
-    use std::io::Read;
+    use std::io::{Read, Seek};
     let file = fs::File::open(src_path).map_err(|e| format!("Failed to open plugin file: {e}"))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {e}"))?;
+    let archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {e}"))?;
     if archive.len() == 0 || archive.len() > MAX_PLUGIN_ARCHIVE_FILES {
         return Err("Plugin archive has too many files".into());
     }
+    let central_start = archive.central_directory_start();
+    let parsed_count = archive.len();
+    let mut file = archive.into_inner();
+    validate_plugin_central_directory(&mut file, central_start, parsed_count)?;
+    file.seek(std::io::SeekFrom::Start(0)).map_err(|e| format!("Cannot rewind plugin archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {e}"))?;
     let manifest_content = {
         let mut entry = archive.by_name("plugin.json").map_err(|_| "Plugin archive must contain plugin.json")?;
         if entry.size() > MAX_PLUGIN_MANIFEST_BYTES { return Err("Plugin manifest is too large".into()); }
@@ -2240,12 +2287,16 @@ mod legacy_plugin_install_tests {
     use super::*;
     use std::io::Write;
 
+    fn write_manifest(zip: &mut zip::ZipWriter<fs::File>, id: &str) {
+        zip.start_file("plugin.json", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(format!(r#"{{"id":"{id}"}}"#).as_bytes()).unwrap();
+    }
+
     fn archive(path: &std::path::Path, id: &str, script: Option<&str>) {
         let file = fs::File::create(path).unwrap();
         let mut zip = zip::ZipWriter::new(file);
         let options = zip::write::SimpleFileOptions::default();
-        zip.start_file("plugin.json", options).unwrap();
-        zip.write_all(format!(r#"{{"id":"{id}"}}"#).as_bytes()).unwrap();
+        write_manifest(&mut zip, id);
         if let Some(script) = script {
             zip.start_file("index.js", options).unwrap();
             zip.write_all(script.as_bytes()).unwrap();
@@ -2282,6 +2333,100 @@ mod legacy_plugin_install_tests {
         archive(&replacement, "com.example.plugin", Some("new"));
         install_plugin_archive(&replacement, &plugins).unwrap();
         assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"new");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn path_traversal_archive_preserves_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-path-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("traversal.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("../escape.txt", options).unwrap();
+        zip.write_all(b"bad").unwrap();
+        zip.finish().unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Unsafe plugin archive path"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after traversal entry");
+        assert!(!root.join("escape.txt").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn duplicate_archive_names_preserve_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-duplicate-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("duplicate.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("other.js", options).unwrap();
+        zip.write_all(b"bad").unwrap();
+        zip.finish().unwrap();
+        // ZipWriter refuses duplicate names; replace equal-length names in
+        // the local and central headers to exercise the raw-directory check.
+        let mut bytes = fs::read(&file).unwrap();
+        let mut replacements = 0;
+        for index in 0..=bytes.len() - b"other.js".len() {
+            if &bytes[index..index + b"other.js".len()] == b"other.js" {
+                bytes[index..index + b"index.js".len()].copy_from_slice(b"index.js");
+                replacements += 1;
+            }
+        }
+        assert!(replacements >= 2);
+        fs::write(&file, bytes).unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Duplicate plugin archive path"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after duplicate entry");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oversized_archive_entry_preserves_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-size-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("oversized.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("large.bin", options.compression_method(zip::CompressionMethod::Deflated).compression_level(Some(1))).unwrap();
+        let block = [0u8; 1024 * 1024];
+        for _ in 0..(MAX_PLUGIN_EXTRACTED_BYTES / block.len() as u64 + 1) {
+            zip.write_all(&block).unwrap();
+        }
+        zip.finish().unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Plugin archive is too large"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after oversized entry");
         fs::remove_dir_all(root).unwrap();
     }
 }
