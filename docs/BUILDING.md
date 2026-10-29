@@ -23,6 +23,11 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev 
 - `libtesseract-dev` and `libleptonica-dev` are linked for OCR. On Linux the build uses the system Tesseract instead of compiling it.
 - `cmake` and `nasm` build libjpeg-turbo for the Rust renderer.
 
+The candidate DEB is built on Ubuntu 22.04 and declares `libtesseract4`, the
+runtime ABI linked by that build. The installer gate installs the DEB in a
+clean Ubuntu 22.04 container and checks that the app starts. The AppImage has
+separate startup checks on Debian 13 and Fedora 44.
+
 On other distributions, install the same libraries under their local names.
 
 ### Windows
