@@ -2,7 +2,7 @@
 
 Foundation can load several small, independent add-ons after the editor starts. Each package contributes to the interface without replacing the editor. An optional full edition package, when present, loads first; independent packages then add their contributions in the order listed in `addons/enabled.json`. An invalid package is skipped so other packages can still load.
 
-The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, symbol categories and templates, Markups List groups, and styled box tools. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
+The contribution interface supports dialogs, panels, file commands and menu items, toolbar items, symbol categories and templates, Markups List groups, styled box tools, and package-owned undo state. Version 2 contributions may own namespaced PDF text fields; a schema version 3 package may also supply one native helper. The editor provides no built-in network service, and packages cannot replace its product identity. The host checks IDs, shortcuts, and PDF keys for collisions with built-in entries and earlier packages.
 
 ## Package format
 
@@ -77,6 +77,29 @@ For an existing text catalog field, `legacyCatalogKeys` may declare its exact, v
 For page extraction of a claimed legacy text field, `catalogForExtract(source)` must synchronously return a replacement string for every present owned field. `source` has frozen `fields`, `presentKeys`, and `pages`. Each page entry gives `sourcePage`, `targetPage`, and arrays of decoded strings from the exact versioned annotation tags in `extractAnnotationKeys`. This claim permits extraction reads only; it does not grant annotation load or save callbacks. Each tag is limited to 16 KiB, with a 2 MiB and 50,000-tag transport ceiling. The host checks that the copied pages still carry those tags. Missing callbacks, unreadable values, changed tags, and partial results stop extraction without writing the target catalog. Unknown versioned vendor fields without an owner also stop extraction.
 
 The full edition package continues to use its existing PDF hooks. Foundation preserves unknown catalog and annotation data when its corresponding add-on is absent.
+
+## Package-owned undo state
+
+A version 2 add-on may return `undo: { restoreExtensionState }` when it edits document state outside annotations. After changing the active document, call `recordExtensionStateChange(doc, packageId, previous, next)` from the published `js/core/undo-manager.js` host module. The package ID must equal the add-on descriptor and manifest ID. The host records plain snapshots and calls `restoreExtensionState(doc, state, meta)` for that package's undo or redo. A restorer receives only its own package's state; other package IDs continue to their own restorers or the full edition. The callback must be synchronous and restore every field the edit changed. A malformed undo descriptor rejects that package.
+
+```js
+export function createAddon() {
+  return {
+    apiVersion: 2,
+    id: 'example.tools',
+    undo: {
+      restoreExtensionState(doc, state) { doc.exampleState = state; },
+    },
+  };
+}
+
+// Later, after the host modules load and the active document is available:
+const previous = doc.exampleState;
+doc.exampleState = next;
+recordExtensionStateChange(doc, 'example.tools', previous, next);
+```
+
+`recordExtensionStateChange` returns `false` for a background document or an unchanged snapshot. A package should revert its mutation if recording fails. Keep snapshots bounded; the editor's undo history shares a byte budget with other changes. To include extra restore metadata, pass `{ oldMeta, newMeta }` as the fifth argument and accept `meta` in the callback.
 
 ## Markups List groups
 
