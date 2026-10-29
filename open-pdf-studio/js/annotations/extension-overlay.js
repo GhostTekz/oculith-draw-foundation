@@ -3,6 +3,31 @@
 const renderers = new Set();
 const underlays = new Set();
 const MAX_UNDERLAYS = 32;
+const selectPointerObservers = new Set();
+const MAX_POINTER_OBSERVERS = 32;
+
+// Optional, read-only select-tool pointer observations. The callback receives
+// page coordinates, never the mutable tool context or DOM event. Its return
+// value cannot consume the editor's selection or drag behavior.
+export function addSelectPointerObserver(observer) {
+  if (typeof observer !== 'function') throw new TypeError('A pointer observer is required.');
+  if (!selectPointerObservers.has(observer) && selectPointerObservers.size >= MAX_POINTER_OBSERVERS) {
+    throw new Error('Too many pointer observers.');
+  }
+  selectPointerObservers.add(observer);
+  return () => selectPointerObservers.delete(observer);
+}
+
+export function notifySelectPointerMove(point) {
+  if (selectPointerObservers.size === 0 || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)
+      || !Number.isSafeInteger(point?.pageNumber) || point.pageNumber < 1) return;
+  const snapshot = Object.freeze({ x: point.x, y: point.y, pageNumber: point.pageNumber,
+    documentId: point.documentId, idle: !!point.idle });
+  for (const observer of selectPointerObservers) {
+    try { observer(snapshot); }
+    catch (error) { console.warn('[pointer] extension observer failed', error); }
+  }
+}
 
 // Read-only page decoration behind markups. The editor owns the canvas and
 // restores its transform/style after each contribution. PDF output never runs
