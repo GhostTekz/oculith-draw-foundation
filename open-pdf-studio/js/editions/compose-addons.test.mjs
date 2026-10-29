@@ -151,6 +151,44 @@ test('the latest author provider owns future edits, including an empty signed-ou
   }
 });
 
+test('undo restorers are scoped to their package and fall through to the full edition', () => {
+  const calls = [];
+  const fullEdition = { ...foundation, undo: { restoreExtensionState(...args) {
+    calls.push(['base', ...args]); return true;
+  } } };
+  const doc = {};
+  const result = composeAddons(fullEdition, ['one', 'two'].map((id) => ({ id,
+    addon: { apiVersion: 2, id, undo: { restoreExtensionState(...args) {
+      calls.push([id, ...args]); return true;
+    } } },
+  })));
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.deepEqual(result.rejected, []);
+  result.edition.undo.restoreExtensionState(doc, 'one', { value: 1 }, { m: 1 });
+  result.edition.undo.restoreExtensionState(doc, 'two', { value: 2 }, null);
+  result.edition.undo.restoreExtensionState(doc, 'edition.workspace', { value: 3 }, null);
+  assert.deepEqual(calls, [
+    ['one', doc, { value: 1 }, { m: 1 }],
+    ['two', doc, { value: 2 }, null],
+    ['base', doc, 'edition.workspace', { value: 3 }, null],
+  ]);
+  assert.equal(fullEdition.undo.restoreExtensionState === result.edition.undo.restoreExtensionState, false);
+  assert.equal(foundation.undo, undefined);
+});
+
+test('malformed undo contributions are rejected without changing the edition', () => {
+  for (const undo of [{}, { restoreExtensionState: () => {}, extra: () => {} },
+    { restoreExtensionState: true }, []]) {
+    const result = composeAddons(foundation, [{ id: 'bad', addon: addon('bad', { apiVersion: 2, undo }) }]);
+    assert.deepEqual(result.accepted, []);
+    assert.equal(result.edition, foundation);
+  }
+  const v1 = composeAddons(foundation, [{ id: 'bad', addon: addon('bad', {
+    undo: { restoreExtensionState() {} },
+  }) }]);
+  assert.deepEqual(v1.accepted, []);
+});
+
 test('old native binaries fall back to the singleton edition command', async () => {
   const calls = [];
   const entries = await resolvePluginEntries(async (command) => {
