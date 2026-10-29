@@ -28,7 +28,7 @@ export default function FileAssocTab() {
             else if (appName.includes('Edge')) appName = 'Microsoft Edge';
             else if (appName.includes('Chrome')) appName = 'Google Chrome';
             else if (appName.includes('Firefox')) appName = 'Mozilla Firefox';
-            else if (/OculithDraw|oculithdraw|OpenPDFStudio|open-pdf-studio/i.test(appName)) appName = tCommon('appName');
+            else if (/OcuDrawCommunity|ocudraw-community|OculithDraw|oculithdraw|OpenPDFStudio|open-pdf-studio/i.test(appName)) appName = tCommon('appName');
             else if (appName.includes('SumatraPDF')) appName = 'SumatraPDF';
             setCurrentApp(appName);
           } else {
@@ -42,7 +42,7 @@ export default function FileAssocTab() {
         exec('xdg-mime query default application/pdf', (err, stdout) => {
           if (err || !stdout.trim()) { setCurrentApp(t('fileAssoc.notSet')); return; }
           const appId = stdout.trim().replace(/\.desktop$/, '');
-          setCurrentApp(/oculithdraw|openpdfstudio|open-pdf-studio/i.test(appId) ? tCommon('appName') : appId);
+          setCurrentApp(/ocudraw-community|oculithdraw|openpdfstudio|open-pdf-studio/i.test(appId) ? tCommon('appName') : appId);
         });
       }
     } catch {

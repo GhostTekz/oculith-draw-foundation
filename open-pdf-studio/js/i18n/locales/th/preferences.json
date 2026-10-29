@@ -154,7 +154,7 @@
     "windowsInstructions": "เปิดการตั้งค่า Windows แล้ว\n\nเพื่อตั้ง Oculith Draw เป็นค่าเริ่มต้น:\n1. เลื่อนลงไปที่ \"เลือกแอปเริ่มต้นตามประเภทไฟล์\"\n2. ค้นหา .pdf\n3. คลิกและเลือก Oculith Draw",
     "windowsFailed": "ไม่สามารถเปิดการตั้งค่า Windows ได้\n\nกรุณาเปิดการตั้งค่า > แอป > แอปเริ่มต้น ด้วยตนเอง",
     "macInstructions": "เพื่อตั้ง Oculith Draw เป็นตัวอ่าน PDF เริ่มต้นบน macOS:\n\n1. คลิกขวาที่ไฟล์ PDF ใดก็ได้ใน Finder\n2. เลือก \"ดูข้อมูล\"\n3. ภายใต้ \"เปิดด้วย\" เลือก Oculith Draw\n4. คลิก \"เปลี่ยนทั้งหมด...\"",
-    "linuxInstructions": "เพื่อตั้ง Oculith Draw เป็นตัวอ่าน PDF เริ่มต้นบน Linux:\n\nรันในเทอร์มินัล:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "เพื่อตั้ง Oculith Draw เป็นตัวอ่าน PDF เริ่มต้นบน Linux:\n\nรันในเทอร์มินัล:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "ตรวจสอบ Finder > ดูข้อมูล",
     "notSet": "ยังไม่ได้ตั้งค่า"
   },

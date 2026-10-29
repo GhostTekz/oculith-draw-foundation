@@ -154,7 +154,7 @@
     "windowsInstructions": "Pengaturan Windows dibuka.\n\nUntuk mengatur Oculith Draw sebagai bawaan:\n1. Gulir ke bawah ke \"Pilih aplikasi bawaan berdasarkan jenis file\"\n2. Temukan .pdf\n3. Klik dan pilih Oculith Draw",
     "windowsFailed": "Tidak dapat membuka Pengaturan Windows.\n\nSilakan buka secara manual Pengaturan > Aplikasi > Aplikasi Bawaan.",
     "macInstructions": "Untuk mengatur Oculith Draw sebagai penampil PDF bawaan di macOS:\n\n1. Klik kanan file PDF mana pun di Finder\n2. Pilih \"Dapatkan Info\"\n3. Di bawah \"Buka dengan\", pilih Oculith Draw\n4. Klik \"Ubah Semua...\"",
-    "linuxInstructions": "Untuk mengatur Oculith Draw sebagai penampil PDF bawaan di Linux:\n\nJalankan di terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Untuk mengatur Oculith Draw sebagai penampil PDF bawaan di Linux:\n\nJalankan di terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Periksa Finder > Dapatkan Info",
     "notSet": "Belum diatur"
   },

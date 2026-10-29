@@ -311,6 +311,7 @@ js/pdf/line-properties-roundtrip.test.mjs
 js/pdf/square-rotation-roundtrip.test.mjs
 js/annotations/durable-markup-id.test.mjs
 js/pdf/markup-layer-roundtrip.test.mjs
+js/pdf/extract-pages-layers.test.mjs
 js/compare/change-report.test.mjs
 js/compare/compare-annotations.test.mjs
 js/compare/revision-geometry.test.mjs
@@ -465,5 +466,6 @@ js/tools/tool-chest-groups.test.mjs
 js/annotations/assemblies.test.mjs
 js/annotations/copy-to-pages.test.mjs
 js/ui/panels/markup-list-window.test.mjs
+js/editions/contract.test.mjs
 js/pdf/unknown-parametric-save.test.mjs
 js/annotations/markup-fields.test.mjs

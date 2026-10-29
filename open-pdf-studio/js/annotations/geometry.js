@@ -1,4 +1,5 @@
 import { state, getActiveDocument } from '../core/state.js';
+import { edition } from '../editions/active.js';
 import { annotationCtx } from '../ui/dom-elements.js';
 import { distanceToLine, isPointNearRect, isPointNearEllipse } from '../utils/math.js';
 import { getAnnotationType } from '../plugins/annotation-type-registry.js';
@@ -279,6 +280,7 @@ export function findAnnotationAt(x, y, pageNum = null, opts = null) {
     nearbySlots = null;
   }
   const candidates = nearbySlots === null ? annotations.length : nearbySlots.length;
+  let priorityAnnotation = null, prioritySize = Infinity;
   for (let candidate = 0; candidate < candidates; candidate++) {
     const i = nearbySlots === null ? annotations.length - 1 - candidate : nearbySlots[candidate];
     const ann = annotations[i];
@@ -297,6 +299,11 @@ export function findAnnotationAt(x, y, pageNum = null, opts = null) {
     // binnenkant is waar je een selectierechthoek begint. Een klik pakt haar
     // dus nooit; je bereikt haar via haar ruimtetag (ruimte-koppeling.js).
     if (raakbaarBijKlik(ann) === false) continue;
+    const priorityHit = edition.pointer?.priorityHit?.(ann, x, y, tol);
+    if (priorityHit !== undefined) {
+      if (priorityHit !== null && priorityHit < prioritySize) { priorityAnnotation = ann; prioritySize = priorityHit; }
+      continue;
+    }
 
     try {
     switch (ann.type) {
@@ -772,6 +779,7 @@ export function findAnnotationAt(x, y, pageNum = null, opts = null) {
       continue;
     }
   }
+  if (priorityAnnotation) return priorityAnnotation;
   return null;
 }
 

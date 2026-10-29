@@ -255,6 +255,41 @@ test('one undo or redo draws the canvas once', async () => {
   assert.equal(tekeningen() - voor, 1, 'redo van een wijziging');
 });
 
+test('add-on document state follows undo, redo, and the saved clean point', async () => {
+  const doc = openen([]);
+  const original = { id: 'sample', items: [{ id: 'one', name: 'First' }] };
+  const changed = kloon(original);
+  changed.items[0].name = 'Updated';
+  doc.sampleExtensionState = kloon(changed);
+  doc.sampleGenerated = false;
+  const previousEdition = globalThis.__ocudrawEdition;
+  globalThis.__ocudrawEdition = { undo: { restoreExtensionState(target, id, value, meta) {
+    if (id !== 'sample') return false;
+    target.sampleExtensionState = value;
+    target.sampleGenerated = !!meta.generated;
+    return true;
+  } } };
+
+  try {
+  assert.equal(undo.recordExtensionStateChange(doc, 'sample', original, changed,
+    { oldMeta: { generated: true }, newMeta: { generated: false } }), true);
+  assert.equal(doc.modified, true);
+  assert.equal(doc.undoStack.length, 1);
+  await undo.undo();
+  assert.deepEqual(kloon(doc.sampleExtensionState), original);
+  assert.equal(doc.sampleGenerated, true);
+  assert.equal(doc.modified, false);
+  await undo.redo();
+  assert.deepEqual(kloon(doc.sampleExtensionState), changed);
+  assert.equal(doc.sampleGenerated, false);
+  assert.equal(doc.modified, true);
+
+  assert.equal(undo.recordExtensionStateChange(doc, 'sample', changed, changed), false);
+  const other = { ...doc, id: 'another-document' };
+  assert.equal(undo.recordExtensionStateChange(other, 'sample', original, changed), false);
+  assert.equal(doc.undoStack.length, 1);
+  } finally { globalThis.__ocudrawEdition = previousEdition; }
+});
 test('annotation layer creation joins object acceptance in one undo transaction', async () => {
   const doc = openen([]);
   const before = [{ id: 'default', name: 'Default', visible: true }];

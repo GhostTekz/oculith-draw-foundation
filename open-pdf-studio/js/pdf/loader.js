@@ -575,6 +575,15 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
 
     doc.filePath = filePath;
     doc.fileName = filePath ? filePath.split(/[\\/]/).pop() : 'Untitled';
+    // An add-on may supply a display name for a locally opened document.
+    if (filePath && edition.documentTitle) {
+      void edition.documentTitle(filePath).then(name => {
+        if (name && doc.filePath === filePath) {
+          doc.fileName = name;
+          updateWindowTitle();
+        }
+      }).catch(() => {});
+    }
 
     // Reset annotation state (per-document)
     doc.annotations = [];
@@ -740,6 +749,23 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
           const { redrawAnnotations, redrawContinuous } = await import('../annotations/rendering.js');
           if (!isClosed() && isActive()) (doc.viewMode === 'continuous' ? redrawContinuous : redrawAnnotations)();
         }
+      }
+    }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
+    // An add-on reads its catalog data only when one of its declared keys is
+    // present. It owns how that state joins an already opened document.
+    pdfLibCatalog(doc).then(async (catalog) => {
+      if (isClosed() || !catalog || !edition.pdf?.readWorkspace) return;
+      const keys = edition.pdf.catalogKeys;
+      if (Array.isArray(keys) && !keys.some((key) => catalog.catalogKeys?.includes(key))) {
+        edition.pdf.applyWorkspace?.(doc, null);
+        return;
+      }
+      const pdfLibDoc = await getSharedPdfLibDoc(doc);
+      if (isClosed() || !pdfLibDoc) return;
+      edition.pdf.applyWorkspace?.(doc, edition.pdf.readWorkspace(pdfLibDoc));
+      if (isActive()) {
+        const { updateAnnotationsList } = await import('../ui/panels/annotations-list.js');
+        if (!isClosed()) updateAnnotationsList();
       }
     }).catch(() => { /* Optional metadata cannot block PDF loading. */ });
 
@@ -1434,7 +1460,8 @@ async function pageMarkupData(doc, source, pageNum, { withList = false } = {}) {
   const t0 = performance.now();
   if (source.session) {
     try {
-      const answer = await source.session.colors(pageNum, { withList });
+      const answer = await source.session.colors(pageNum, { withList,
+        annotationKeys: edition.pdf?.annotationKeys || [] });
       for (const bytes of answer.snippets || []) bewaarKnipsel(bytes);
       applyDeferredRichText(answer.colors);
       perfRecord('load.colorsWorker', answer.ms);
@@ -1456,7 +1483,8 @@ async function pageMarkupData(doc, source, pageNum, { withList = false } = {}) {
   }
   const pdfLibDoc = await getSharedPdfLibDoc(doc).catch(() => null);
   if (!pdfLibDoc) return NO_PAGE_DATA;
-  const colors = await extractAnnotationColors(pageNum, pdfLibDoc);
+  const colors = await extractAnnotationColors(pageNum, pdfLibDoc,
+    { annotationKeys: edition.pdf?.annotationKeys || [] });
   perfRecord('load.colors', performance.now() - t0);
   return { colors, imageSources: 0, images: null, pdfLibDoc };
 }
@@ -1656,13 +1684,18 @@ async function loadAnnotationsForSinglePage(doc, pageNum, waitForColors = false)
   const hasSquareAnnotations = annotations.some(a => a.subtype === 'Square');
   const hasCircleAnnotations = annotations.some(a => a.subtype === 'Circle');
   const hasLineAnnotations = annotations.some(a => a.subtype === 'Line');
+  // Polygons and polylines carry the editor's own data too (fill opacity,
+  // layer, the keys of an outline the file marks as something more): without
+  // it they load as bare shapes until a background pass, which a large file
+  // may never reach while a sheet is open.
+  const hasPolyAnnotations = annotations.some(a => a.subtype === 'Polygon' || a.subtype === 'PolyLine');
   const needsExtraData = annotations.some(a => ['FreeText', 'Square', 'Circle', 'Line', 'PolyLine', 'Polygon', 'Ink', 'Text', 'Highlight', 'Underline', 'StrikeOut', 'Squiggly', 'Stamp', 'Caret', 'Link'].includes(a.subtype));
 
   // The pdf-lib reads of this document: colors and stamp images. A document
   // that is not a large set reads them anyway (loadPDF starts them after
   // the first paint): wait for them rather than read the colors twice.
   let source = doc._pdfLibSource?.settled ? doc._pdfLibSource : null;
-  if (!source && (waitForColors || hasSquareAnnotations || hasCircleAnnotations || hasLineAnnotations
+  if (!source && (waitForColors || hasSquareAnnotations || hasCircleAnnotations || hasLineAnnotations || hasPolyAnnotations
       || (needsExtraData && !doc._deferSharedPdfLib))) {
     await afterFirstPaint(doc);
     if (!state.documents.includes(doc)) return;

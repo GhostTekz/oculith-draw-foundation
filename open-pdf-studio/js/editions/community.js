@@ -1,7 +1,14 @@
-// The editor's edition: Oculith Draw Foundation.
+// The editor's own composition when no add-on is installed.
 export const edition = Object.freeze({
   apiVersion: 1,
   id: 'foundation',
+  dialogs: Object.freeze({}),
+  panels: Object.freeze([]),
+  panelIds: Object.freeze([]),
+  fileCommands: Object.freeze([]),
+  fileMenuItems: Object.freeze([]),
+  symbolCategories: Object.freeze([]),
+  symbolTemplates: Object.freeze([]),
   productName: 'Oculith Draw Foundation',
   logoPath: '/community-icon.svg',
   faviconPath: 'community-icon.svg',

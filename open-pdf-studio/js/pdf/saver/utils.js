@@ -2,6 +2,7 @@ import { PDFName, PDFDict, PDFRef, PDFRawStream, decodePDFRawStream } from 'pdf-
 import { kruisEindpuntenEllips } from '../../annotations/kruis-geometrie.js';
 import { hasFill, hasStroke, colorWithoutStroke, kanZonderRand } from '../../annotations/fill-utils.js';
 import { vlakOmhullende } from '../../annotations/vlak-ringen.js';
+import { edition } from '../../editions/active.js';
 
 // Convert hex color to RGB values (0-1 range)
 export function hexToRgb(hex) {
@@ -409,7 +410,7 @@ export function generateAppearanceStream(context, ann, convertY) {
         const h = ann.height;
         bbox = [0, 0, w, h];
         const lw = ann.lineWidth ?? 2;
-        const shape = null;
+        const shape = ann.type === 'box' ? edition.pdf?.shapeForAnnotation?.(ann) : null;
         const area = shape
           ? `${shape.map(([u, v], i) => `${u * w} ${(1 - v) * h} ${i ? 'l' : 'm'}`).join(' ')} h`
           : `0 0 ${w} ${h} re`;

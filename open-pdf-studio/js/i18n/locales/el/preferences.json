@@ -154,7 +154,7 @@
     "windowsInstructions": "Οι ρυθμίσεις των Windows άνοιξαν.\n\nΓια να ορίσετε το Oculith Draw ως προεπιλογή:\n1. Κάντε κύλιση προς τα κάτω στο \"Επιλογή προεπιλεγμένων εφαρμογών ανά τύπο αρχείου\"\n2. Βρείτε το .pdf\n3. Κάντε κλικ και επιλέξτε Oculith Draw",
     "windowsFailed": "Δεν ήταν δυνατό το άνοιγμα των ρυθμίσεων των Windows.\n\nΠαρακαλώ ανοίξτε χειροκίνητα τις Ρυθμίσεις > Εφαρμογές > Προεπιλεγμένες εφαρμογές.",
     "macInstructions": "Για να ορίσετε το Oculith Draw ως προεπιλεγμένο πρόγραμμα προβολής PDF στο macOS:\n\n1. Κάντε δεξί κλικ σε οποιοδήποτε αρχείο PDF στο Finder\n2. Επιλέξτε \"Πληροφορίες\"\n3. Στο \"Άνοιγμα με\", επιλέξτε Oculith Draw\n4. Κάντε κλικ στο \"Αλλαγή όλων...\"",
-    "linuxInstructions": "Για να ορίσετε το Oculith Draw ως προεπιλεγμένο πρόγραμμα προβολής PDF στο Linux:\n\nΕκτελέστε στο τερματικό:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Για να ορίσετε το Oculith Draw ως προεπιλεγμένο πρόγραμμα προβολής PDF στο Linux:\n\nΕκτελέστε στο τερματικό:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Ελέγξτε στο Finder > Πληροφορίες",
     "notSet": "Δεν έχει οριστεί"
   },

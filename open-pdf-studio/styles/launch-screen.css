@@ -80,6 +80,14 @@
 .ls-dots i:nth-child(2) { animation-delay: .2s; }
 .ls-dots i:nth-child(3) { animation-delay: .4s; }
 
+/* A side card: the scene steps aside and the card comes in beside it, the
+   two centred as a pair with the card level with the monolith's middle
+   (js/launch-screen.js sets --ls-shift and the card's place). */
+.ls-side { position: absolute; z-index: 5; top: 50%; left: 60vw; width: min(380px, 34vw); transform: translate(40px, -50%);
+  opacity: 0; pointer-events: none; transition: opacity .8s ease .25s, transform 1s var(--ls-ease) .2s; }
+.ls.ls-side-open .ls-scene, .ls.ls-side-open .ls-text { transform: translateX(var(--ls-shift, -18vw)); }
+.ls.ls-side-open .ls-side { opacity: 1; transform: translate(0, -50%); pointer-events: auto; }
+.ls.ls-side-open .ls-status { visibility: hidden; }
 
 @keyframes lsRise { from { opacity: 0; transform: translate(-50%, 50px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes lsFade { from { opacity: 0; } }
@@ -94,4 +102,7 @@
   .ls *, .ls *::before { animation: none !important; transition: none !important; }
 }
 @media (max-width: 760px) {
+  .ls.ls-side-open .ls-scene, .ls.ls-side-open .ls-text { transform: translateY(-14vh) scale(.7); }
+  .ls-side { left: 50%; top: auto; bottom: 4vh; width: min(380px, calc(100vw - 32px)); transform: translate(-50%, 40px); }
+  .ls.ls-side-open .ls-side { transform: translate(-50%, 0); }
 }

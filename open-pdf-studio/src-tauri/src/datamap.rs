@@ -9,7 +9,7 @@
 // map; zonder de variabele blijft het gedrag ongewijzigd.
 //
 // Indeling onder `OPDS_DATA_DIR`:
-//   OpenPDFStudio/            voorkeuren, sessie, catalogi, plug-ins
+//   OcuDrawCommunity/         voorkeuren, sessie, catalogi, plug-ins
 //   <identifier>/             app-data (kaders, onderhoeken)
 //   <identifier>/logs/        opstartdiagnose
 //   <identifier>/cache/       cache (o.a. ondertekende versies)
@@ -41,7 +41,7 @@ pub fn override_map() -> Option<PathBuf> {
     override_uit_waarde(std::env::var_os(OVERRIDE_VAR))
 }
 
-/// Basis voor app-eigen lokale data (bevat de submap `OpenPDFStudio`):
+/// Basis voor app-eigen lokale data (bevat de submap `OcuDrawCommunity`):
 /// `OPDS_DATA_DIR` als die gezet is, anders de lokale datamap van het OS.
 pub fn lokale_datamap() -> Option<PathBuf> {
     override_map().or_else(dirs::data_local_dir)

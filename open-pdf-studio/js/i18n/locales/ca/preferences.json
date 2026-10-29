@@ -154,7 +154,7 @@
     "windowsInstructions": "S'ha obert la configuració de Windows.\n\nPer establir Oculith Draw com a aplicació per defecte:\n1. Desplaceu-vos fins a \"Trieu aplicacions per defecte per tipus de fitxer\"\n2. Cerqueu .pdf\n3. Feu clic i seleccioneu Oculith Draw",
     "windowsFailed": "No s'ha pogut obrir la configuració de Windows.\n\nObriu manualment Configuració > Aplicacions > Aplicacions per defecte.",
     "macInstructions": "Per establir Oculith Draw com a visualitzador PDF per defecte al macOS:\n\n1. Feu clic dret sobre qualsevol fitxer PDF al Finder\n2. Seleccioneu \"Obtenir informació\"\n3. A \"Obrir amb\", seleccioneu Oculith Draw\n4. Feu clic a \"Canvia-ho tot...\"",
-    "linuxInstructions": "Per establir Oculith Draw com a visualitzador PDF per defecte al Linux:\n\nExecuteu al terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Per establir Oculith Draw com a visualitzador PDF per defecte al Linux:\n\nExecuteu al terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Comproveu Finder > Obtenir informació",
     "notSet": "No establert"
   },

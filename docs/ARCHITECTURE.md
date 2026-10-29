@@ -31,6 +31,12 @@ flowchart LR
 - **One job per PDF library.** PDFium draws the pixels, PDF.js reads text, structure and annotations, and pdf-lib writes the saved file.
 - **Native work in Rust.** Rendering, geometry, CAD exchange, OCR, printing and file access run in the Rust shell or in separate crates.
 
+## Optional add-ons
+
+Foundation contains the editor and the neutral add-on interface. The startup loader in `js/boot.js` asks the native shell whether a local add-on is installed. An installed add-on receives the versioned host interface in `js/plugin/host.js` and can register commands, panels, dialogs, templates and document hooks. The contract in `js/editions/contract.js` supplies empty defaults, so Foundation starts and works with no add-on. The native helper bridge can connect a separately installed helper process; Foundation does not ship a helper implementation.
+
+Add-on code runs with the editor's privileges. Install only packages from a source you trust. The public interface is a compatibility contract, not a security sandbox. Foundation's source and installers contain no optional product implementation.
+
 ## Desktop shell: Tauri 2
 
 The app is a Tauri 2 program. The shell (`open-pdf-studio/src-tauri/`) is Rust and hosts the interface in the system WebView.

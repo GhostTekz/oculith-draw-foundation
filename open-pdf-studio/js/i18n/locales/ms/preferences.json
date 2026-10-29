@@ -154,7 +154,7 @@
     "windowsInstructions": "Tetapan Windows dibuka.\n\nUntuk menetapkan Oculith Draw sebagai lalai:\n1. Tatal ke bawah ke \"Pilih aplikasi lalai mengikut jenis fail\"\n2. Cari .pdf\n3. Klik dan pilih Oculith Draw",
     "windowsFailed": "Tidak dapat membuka Tetapan Windows.\n\nSila buka Tetapan > Aplikasi > Aplikasi Lalai secara manual.",
     "macInstructions": "Untuk menetapkan Oculith Draw sebagai pemapar PDF lalai pada macOS:\n\n1. Klik kanan mana-mana fail PDF dalam Finder\n2. Pilih \"Dapatkan Maklumat\"\n3. Di bawah \"Buka dengan\", pilih Oculith Draw\n4. Klik \"Tukar Semua...\"",
-    "linuxInstructions": "Untuk menetapkan Oculith Draw sebagai pemapar PDF lalai pada Linux:\n\nJalankan dalam terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Untuk menetapkan Oculith Draw sebagai pemapar PDF lalai pada Linux:\n\nJalankan dalam terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Semak Finder > Dapatkan Maklumat",
     "notSet": "Tidak ditetapkan"
   },

@@ -137,7 +137,7 @@
     "windowsInstructions": "Se abrió la Configuración de Windows.\n\nPara establecer Oculith Draw como predeterminado:\n1. Desplácese hacia abajo hasta \"Elegir aplicaciones predeterminadas por tipo de archivo\"\n2. Busque .pdf\n3. Haga clic y seleccione Oculith Draw",
     "windowsFailed": "No se pudo abrir la Configuración de Windows.\n\nAbra manualmente Configuración > Aplicaciones > Aplicaciones predeterminadas.",
     "macInstructions": "Para establecer Oculith Draw como visor PDF predeterminado en macOS:\n\n1. Haga clic derecho en cualquier archivo PDF en Finder\n2. Seleccione \"Obtener información\"\n3. En \"Abrir con\", seleccione Oculith Draw\n4. Haga clic en \"Cambiar todo...\"",
-    "linuxInstructions": "Para establecer Oculith Draw como visor PDF predeterminado en Linux:\n\nEjecute en la terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Para establecer Oculith Draw como visor PDF predeterminado en Linux:\n\nEjecute en la terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Verificar Finder > Obtener información",
     "notSet": "No establecido"
   },

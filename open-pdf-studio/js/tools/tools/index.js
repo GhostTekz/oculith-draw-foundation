@@ -2,6 +2,7 @@
  * Tool registration — imports all tools and registers them in the tool-registry
  */
 import { registerTool } from '../tool-registry.js';
+import { edition } from '../../editions/active.js';
 import { handTool } from './hand-tool.js';
 import { selectTool } from './select-tool.js';
 import { drawTool } from './draw-tool.js';
@@ -182,4 +183,5 @@ export function registerAllTools() {
   // Spaces panel: draw a space's outline (rectangle or polygon).
   registerTool('spaceRect', spaceRectTool);
   registerTool('spacePolygon', spacePolygonTool);
+  for (const id of edition.tools?.shapeToolIds || []) registerTool(id, shapeTool);
 }

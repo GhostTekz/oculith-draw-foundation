@@ -1,6 +1,7 @@
 import { state, getActiveDocument, getPageRotation } from '../../core/state.js';
 import { nativeOcgHasGroups, nativeOcgPdfJsConfig, nativeOcgSelectionForDocument } from '../../pdf/native-ocg-selection.js';
 import { drawAnnotation } from '../../annotations/rendering.js';
+import { edition } from '../../editions/active.js';
 import { scrollThumbnailToPage } from '../../solid/stores/panels/thumbnailStore.js';
 import { updateAnnotationsList } from './annotations-list.js';
 import { updateAttachmentsList } from './attachments.js';
@@ -719,6 +720,7 @@ async function overlayAnnotationsOnDataURL(dataURL, pageNum, width, height, scal
   // active document's annotations painted on it.
   if (!doc) doc = getActiveDocument();
   const annotations = (doc?.annotations || []).filter(a => a.page === pageNum);
+  annotations.sort((a, b) => Number(!!edition.rendering?.isUnderlay?.(b)) - Number(!!edition.rendering?.isUnderlay?.(a)));
   if (annotations.length === 0) return dataURL;
   try {
     const canvas = document.createElement('canvas');
@@ -937,6 +939,7 @@ async function renderThumbnailToDataURL(pdfDoc, pageNum, doc) {
         // cross-document leak as the other thumbnail paths.
         const docAnn = doc || getActiveDocument();
         const annotations = (docAnn?.annotations || []).filter(a => a.page === pageNum);
+        annotations.sort((a, b) => Number(!!edition.rendering?.isUnderlay?.(b)) - Number(!!edition.rendering?.isUnderlay?.(a)));
         if (annotations.length > 0) {
           ctx.save();
           ctx.scale(thumbScale, thumbScale);

@@ -120,7 +120,7 @@ function pagesForCommand(cmd) {
   const skipTypes = new Set([
     'addWatermark', 'removeWatermark', 'modifyWatermark',
     'addBookmark', 'removeBookmark', 'modifyBookmark',
-    'modifyAnnotationLayers',
+    'modifyExtensionState', 'modifyAnnotationLayers',
     // pageStructure (insert/delete/reorder pages) shifts page numbers and is
     // handled by restorePageState → clearThumbnailCache + generateThumbnails,
     // which regenerates every thumbnail. A per-page hook here would be wrong.
@@ -160,7 +160,7 @@ function commandPreservesSelection(cmd) {
   if (cmd.type === 'modifyAnnotation' || cmd.type === 'bulkModify' ||
       cmd.type === 'reorderAnnotations' || cmd.type === 'modifyMeasureScale' ||
       cmd.type === 'modifyPageScales' || cmd.type === 'modifySpaces' ||
-      cmd.type === 'modifyAssemblies' ||
+      cmd.type === 'modifyAssemblies' || cmd.type === 'modifyExtensionState' ||
       cmd.type === 'modifyAnnotationLayers') {
     return true;
   }
@@ -562,6 +562,11 @@ function applyUndo(cmd, lookup) {
       doc.assemblies = clonePlainValue(cmd.oldState);
       break;
     }
+    case 'modifyExtensionState': {
+      globalThis.__ocudrawEdition?.undo?.restoreExtensionState?.(doc, cmd.extensionId,
+        clonePlainValue(cmd.oldState), clonePlainValue(cmd.oldMeta));
+      break;
+    }
     case 'modifyAnnotationLayers': {
       doc.annotationLayers = clonePlainValue(cmd.oldState);
       break;
@@ -763,6 +768,11 @@ function applyRedo(cmd, lookup) {
     }
     case 'modifyAssemblies': {
       doc.assemblies = clonePlainValue(cmd.newState);
+      break;
+    }
+    case 'modifyExtensionState': {
+      globalThis.__ocudrawEdition?.undo?.restoreExtensionState?.(doc, cmd.extensionId,
+        clonePlainValue(cmd.newState), clonePlainValue(cmd.newMeta));
       break;
     }
     case 'modifyAnnotationLayers': {
@@ -1033,6 +1043,23 @@ export function recordAssemblies(oldState, newState) {
   });
 }
 
+// Extension-owned PDF workspace state follows the same document history and
+// clean point as ordinary annotations. Refuse a stale or background document
+// so an asynchronous import cannot record its change on another tab's stack.
+export function recordExtensionStateChange(doc, extensionId, oldState, newState,
+  { oldMeta = null, newMeta = null } = {}) {
+  if (!doc || doc !== getActiveDocument()) return false;
+  if (JSON.stringify(oldState) === JSON.stringify(newState)
+      && JSON.stringify(oldMeta) === JSON.stringify(newMeta)) return false;
+  execute({
+    type: 'modifyExtensionState', extensionId,
+    oldState: clonePlainValue(oldState),
+    newState: clonePlainValue(newState),
+    oldMeta: clonePlainValue(oldMeta),
+    newMeta: clonePlainValue(newMeta),
+  });
+  return true;
+}
 export function recordAnnotationLayersChange(doc, oldState, newState) {
   if (!doc || doc !== getActiveDocument()) return false;
   if (JSON.stringify(oldState) === JSON.stringify(newState)) return false;

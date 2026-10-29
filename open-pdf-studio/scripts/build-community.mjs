@@ -1,11 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// Native output and bundle staging go to <target>/community (CARGO_TARGET_DIR or OCUDRAW_TARGET_BASE names the base).
-const editionTargetDir = (edition, env = process.env) => path.join(path.resolve(project,
-  env.OCUDRAW_TARGET_BASE || env.CARGO_TARGET_DIR || path.resolve(project, '..', 'target')), edition);
+const editionTargetDir = (env = process.env) => path.join(path.resolve(project,
+  env.OCUDRAW_TARGET_BASE || env.CARGO_TARGET_DIR || path.resolve(project, '..', 'target')), 'community');
 
 export function communityBuildCommand(args = []) {
   const frontendOnly = args.includes('--frontend-only');
@@ -29,13 +27,12 @@ export function communityBuildCommand(args = []) {
   }
   return frontendOnly
     ? { command: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', 'build'],
-      env: { OCUDRAW_EDITION: 'community', CARGO_TARGET_DIR: editionTargetDir('community') } }
+      env: { OCUDRAW_EDITION: 'community', CARGO_TARGET_DIR: editionTargetDir() } }
     : {
       command: process.execPath,
       args: [path.join(project, 'node_modules', '@tauri-apps', 'cli', 'tauri.js'),
-        'build', '--config', 'src-tauri/tauri.community.conf.json', ...forwarded,
-        '--', '--no-default-features'],
-      env: { OCUDRAW_EDITION: 'community', CARGO_TARGET_DIR: editionTargetDir('community') },
+        'build', '--config', 'src-tauri/tauri.community.conf.json', ...forwarded],
+      env: { OCUDRAW_EDITION: 'community', CARGO_TARGET_DIR: editionTargetDir() },
     };
 }
 
@@ -48,7 +45,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       || base.identifier !== 'com.ghosttekz.ocudraw.community'
       || base.bundle?.windows?.nsis?.installerHooks
       || base.bundle?.windows?.nsis?.template) {
-      throw new Error('Build the native Community app from a Community source export.');
+      throw new Error('Foundation identity or installer configuration is invalid.');
     }
   }
   const result = spawnSync(spec.command, spec.args, {

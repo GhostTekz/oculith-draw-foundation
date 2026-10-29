@@ -66,6 +66,7 @@ const ENTRIES = [
   // Spaces (the external editor Alt+S): named, nested regions; markups get a Space column.
   { id: 'spaces', title: 'common:spaces.title', commandLabel: 'common:spaces.title', icon: lucide('square-dashed'), shortcut: 'Alt+S',
     component: body(() => import('./SpacesPanel.jsx')) },
+  ...edition.panels,
   { id: 'quantities', title: 'common:panelHost.quantities', icon: lucide('sheet'), shortcut: null,
     component: body(() => import('../left-panel/panels/SchedulesPanel.jsx')) },
   { id: 'markupsList', title: 'common:panelHost.markupsList', icon: lucide('list'), shortcut: 'Alt+L',

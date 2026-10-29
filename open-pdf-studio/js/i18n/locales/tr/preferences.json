@@ -137,7 +137,7 @@
     "windowsInstructions": "Windows Ayarları açıldı.\n\nOculith Draw'yu varsayılan olarak ayarlamak için:\n1. \"Dosya türüne göre varsayılan uygulamaları seçin\" bölümüne gidin\n2. .pdf dosyasını bulun\n3. Tıklayın ve Oculith Draw'yu seçin",
     "windowsFailed": "Windows Ayarları açılamadı.\n\nLütfen Ayarlar > Uygulamalar > Varsayılan Uygulamalar bölümünü manuel olarak açın.",
     "macInstructions": "macOS'te Oculith Draw'yu varsayılan PDF görüntüleyici olarak ayarlamak için:\n\n1. Finder'da herhangi bir PDF dosyasına sağ tıklayın\n2. \"Bilgi Al\" seçeneğini seçin\n3. \"Birlikte Aç\" altında Oculith Draw'yu seçin\n4. \"Tümünü Değiştir...\" düğmesine tıklayın",
-    "linuxInstructions": "Linux'ta Oculith Draw'yu varsayılan PDF görüntüleyici olarak ayarlamak için:\n\nTerminalde çalıştırın:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Linux'ta Oculith Draw'yu varsayılan PDF görüntüleyici olarak ayarlamak için:\n\nTerminalde çalıştırın:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Finder > Bilgi Al seçeneğini kontrol edin",
     "notSet": "Ayarlanmadı"
   },

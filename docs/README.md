@@ -10,7 +10,7 @@ Oculith Draw Foundation is made by [Oculith](https://oculith.io). The source is 
 2. Set a scale and measure a sheet: [Measuring](GUIDE.md#measuring).
 3. Save reusable tools in the [Tool Chest](GUIDE.md#tool-chest), and review your work in the [Markups List](GUIDE.md#markups-list).
 4. To build the app yourself, follow [Building from source](BUILDING.md).
-5. To work on the code, read the [architecture](ARCHITECTURE.md) and the [file format](FILE-FORMAT.md).
+5. To work on the code, read the [architecture](ARCHITECTURE.md), [add-on interface](ADDONS.md), and [file format](FILE-FORMAT.md).
 
 ## Documents
 
@@ -25,6 +25,10 @@ How the app is built. It describes the Tauri 2 shell, the SolidJS interface, and
 ### [File format](FILE-FORMAT.md)
 
 What Oculith Draw writes into a PDF. Markups are standard PDF annotations with appearance streams, plus private `OPS_*` keys that let the app restore its own data. The page lists those keys on annotations, pages and the document catalog (custom columns, status sets, spaces, assemblies, layers), and explains what other PDF readers see.
+
+### [Add-ons](ADDONS.md)
+
+How an optional local add-on connects to the editor, what the host validates, and how to install or remove the active package.
 
 ### [Building from source](BUILDING.md)
 

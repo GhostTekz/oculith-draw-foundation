@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { communityBuildCommand } from './build-community.mjs';
 
-test('Community Tauri build selects the public config and disables private Cargo feature', () => {
+test('Foundation Tauri build selects the public config', () => {
   const build = communityBuildCommand(['--no-bundle']);
   assert.equal(build.args[0].endsWith('/@tauri-apps/cli/tauri.js') || build.args[0].endsWith('\\@tauri-apps\\cli\\tauri.js'), true);
   assert.deepEqual(build.args.slice(1), [
-    'build', '--config', 'src-tauri/tauri.community.conf.json', '--no-bundle', '--', '--no-default-features',
+    'build', '--config', 'src-tauri/tauri.community.conf.json', '--no-bundle',
   ]);
   assert.equal(build.env.OCUDRAW_EDITION, 'community');
   assert.match(build.env.CARGO_TARGET_DIR, /[\\/]community$/);
@@ -23,7 +23,7 @@ test('Community frontend build selects the existing prepared build path', () => 
   assert.equal(build.env.OCUDRAW_EDITION, 'community');
 });
 
-test('Community package uses distinct executable and worker names', () => {
+test('Foundation package uses the public executable and worker names', () => {
   const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.community.conf.json', import.meta.url)));
   assert.equal(config.mainBinaryName, 'ocudraw-community');
   assert.deepEqual(config.bundle.externalBin, ['binaries/ocudraw-community-pdfium-worker']);

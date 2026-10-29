@@ -311,6 +311,10 @@ export default function NavigationBar() {
               </div>
             </Show>
           </div>
+          {/* An edition's own buttons. */}
+          <For each={edition.toolbarItems || []}>{(item) => (
+            <Btn id={`nav-${item.id}`} icon={item.icon} title={item.title} onClick={() => item.run()} />
+          )}</For>
           {/* Profile switcher (the external editor): the Oculith ▸ Profiles commands. */}
           <div class="nav-split-btn nav-profile">
             <Btn id="nav-profile" icon={ICON.profile} title={profileTitle()} onClick={openProfileMenu} />

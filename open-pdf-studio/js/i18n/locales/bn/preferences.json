@@ -154,7 +154,7 @@
     "windowsInstructions": "উইন্ডোজ সেটিংস খোলা হয়েছে।\n\nOculith Draw ডিফল্ট হিসেবে সেট করতে:\n1. \"ফাইলের ধরন অনুযায়ী ডিফল্ট অ্যাপ নির্বাচন করুন\" এ স্ক্রল করুন\n2. .pdf খুঁজুন\n3. ক্লিক করুন এবং Oculith Draw নির্বাচন করুন",
     "windowsFailed": "উইন্ডোজ সেটিংস খোলা যায়নি।\n\nঅনুগ্রহ করে ম্যানুয়ালি সেটিংস > অ্যাপস > ডিফল্ট অ্যাপস খুলুন।",
     "macInstructions": "macOS-এ Oculith Draw কে ডিফল্ট PDF ভিউয়ার হিসেবে সেট করতে:\n\n1. ফাইন্ডারে যেকোনো PDF ফাইলে ডান-ক্লিক করুন\n2. \"তথ্য পান\" নির্বাচন করুন\n3. \"এর সাথে খুলুন\" এ Oculith Draw নির্বাচন করুন\n4. \"সমস্ত পরিবর্তন করুন...\" ক্লিক করুন",
-    "linuxInstructions": "লিনাক্সে Oculith Draw কে ডিফল্ট PDF ভিউয়ার হিসেবে সেট করতে:\n\nটার্মিনালে চালান:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "লিনাক্সে Oculith Draw কে ডিফল্ট PDF ভিউয়ার হিসেবে সেট করতে:\n\nটার্মিনালে চালান:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "ফাইন্ডার > তথ্য পান দেখুন",
     "notSet": "সেট করা নেই"
   },

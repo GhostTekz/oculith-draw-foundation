@@ -20,6 +20,7 @@ import { gevelPreset } from '../../gevelelement/herkenning.js';
 import { onderdeelOnderPunt } from '../../gevelelement/element.js';
 import i18next from '../../i18n/config.js';
 import { findAnnotationsAt } from '../../annotations/geometry.js';
+import { edition } from '../../editions/active.js';
 import { typeName } from '../../quantities/categories.js';
 import { CYCLE_SPOT_PX, sameSpot, nextCycleId, cyclePosition } from '../selection-cycle.js';
 
@@ -98,6 +99,7 @@ export const selectTool = {
 
   onPointerDown(ctx, e) {
     const { x, y, state } = ctx;
+    if (edition.pointer?.event?.('down', ctx, e)) return;
     const pdfaLocked = ctx.isPdfAReadOnly();
     const doc = getActiveDocument();
     const selAnns = doc ? doc.selectedAnnotations : [];
@@ -455,6 +457,7 @@ export const selectTool = {
 
   onPointerMove(ctx, e) {
     const { x, y, state, canvas, canvasCtx } = ctx;
+    if (edition.pointer?.event?.('move', ctx, e)) return;
 
     // Rubber band: update the live end-point and let the render overlay pass
     // (rendering.js drawRubberBand) paint the marquee. Drawing it there —
@@ -558,6 +561,7 @@ export const selectTool = {
 
   onPointerUp(ctx, e) {
     const { x, y, state } = ctx;
+    if (edition.pointer?.event?.('up', ctx, e)) return;
 
     // Rubber band selection end
     if (state.isRubberBanding) {
@@ -607,6 +611,7 @@ export const selectTool = {
           const hit = inSelectieVak(ann, bounds, { x: rbX, y: rbY, width: rbW, height: rbH }, mode);
           if (hit) selected.push(ann);
         }
+        if (edition.pointer?.filterMarquee) selected.splice(0, selected.length, ...edition.pointer.filterMarquee(selected));
         // A markup in a group brings its whole group (the external editor); Alt picks members.
         if (doc && !e?.altKey) selected.splice(0, selected.length, ...expandToGroups(doc.annotations, selected));
         if (doc) {

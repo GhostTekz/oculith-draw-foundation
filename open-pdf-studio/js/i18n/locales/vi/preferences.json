@@ -154,7 +154,7 @@
     "windowsInstructions": "Đã mở Cài đặt Windows.\n\nĐể đặt Oculith Draw làm mặc định:\n1. Cuộn xuống \"Chọn ứng dụng mặc định theo loại tệp\"\n2. Tìm .pdf\n3. Nhấp và chọn Oculith Draw",
     "windowsFailed": "Không thể mở Cài đặt Windows.\n\nVui lòng mở thủ công Cài đặt > Ứng dụng > Ứng dụng Mặc định.",
     "macInstructions": "Để đặt Oculith Draw làm trình xem PDF mặc định trên macOS:\n\n1. Nhấp chuột phải vào bất kỳ tệp PDF nào trong Finder\n2. Chọn \"Lấy Thông tin\"\n3. Trong \"Mở bằng\", chọn Oculith Draw\n4. Nhấp \"Thay đổi Tất cả...\"",
-    "linuxInstructions": "Để đặt Oculith Draw làm trình xem PDF mặc định trên Linux:\n\nChạy trong terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Để đặt Oculith Draw làm trình xem PDF mặc định trên Linux:\n\nChạy trong terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Kiểm tra Finder > Lấy Thông tin",
     "notSet": "Chưa đặt"
   },

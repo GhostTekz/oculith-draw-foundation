@@ -80,6 +80,8 @@ npx vite build --logLevel error   # production frontend build
 
 The unit tests run on real PDF bytes from the real saver and loader where it matters, so a change to saving or loading is checked end to end.
 
+The public CI also checks the source boundary, runs an offline browser save/reopen test, and builds Linux, Windows and macOS installers. Run the source boundary check locally with `node scripts/community-export-verify.mjs --published` from `open-pdf-studio/` in a clean Foundation clone. This check scans tracked source files for private product traces and validates the dependency inventory against the lockfiles.
+
 The Rust crates have their own tests:
 
 ```bash
@@ -130,7 +132,7 @@ With `CARGO_TARGET_DIR` set, `tauri:community` uses it as the base and builds in
 ## Notices and bill of materials
 
 - The third-party notices are in `open-pdf-studio/src-tauri/package-notices/`. The app ships them under `notices/`.
-- `SBOM.cdx.json` lists every locked Cargo and npm dependency, including platform alternatives. `SOURCE-MANIFEST.json` holds a SHA-256 hash of every file in the source release.
+- `SBOM.cdx.json` lists every locked Cargo and npm dependency, including platform alternatives. The private source export is verified against a SHA-256 manifest before it is synchronized to the public repository; the public repository omits that manifest because it identifies the private source commit.
 - Branded drawing templates are not part of the source; add your own title blocks.
 
 See [Credits](CREDITS.md) for the projects the app is built on.

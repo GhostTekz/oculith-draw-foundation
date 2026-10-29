@@ -19,6 +19,7 @@ import { ruimOnbereikbaarOp } from './saver/vervangen-opruimen.js';
 import { inspectSource, snapshotObjects, reserveObjectNumbers, buildIncrement, prepareForWrite,
   appendBytes, compactionDue, MAX_REVISIONS } from './saver/incremental.js';
 import { extPaginaPlan, extHoudtPlek, extVoorRegistratie } from './saver/ext-behoud.js';
+import { carryUnmodeledAnnotationKeys, hasUnmodeledAnnotationKeys } from './saver/unmodeled-annotation-keys.js';
 import { writeMarkupGroups } from './markup-group-pdf.js';
 import { extNatief } from './saver/ext-natief.js';
 import { ONDERWERP_IN_SUBJ } from './loader/annotatie-opmerking.js';
@@ -307,7 +308,7 @@ function snapshotValue(h, value, depth) {
   }
   snapshotWord(h, 11);
   for (const key in value) {
-    if (key.startsWith('_pending') || key === 'nm') continue;
+    if (key.startsWith('_pending') || key === 'nm' || key === 'pdfSource') continue;
     const v = value[key];
     if (v === undefined || typeof v === 'function') continue;
     snapshotMix(h, key);
@@ -524,6 +525,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     // /Annots-array): wordt vlak voor save() opgeruimd als niets er nog naar
     // wijst, anders groeit het bestand bij elke save (saver/vervangen-opruimen.js).
     const vervangenObjecten = [];
+    const rewrittenSources = [];
 
     // Strip PDF/A metadata — saved file no longer conforms to PDF/A
     if (activeDoc && activeDoc.pdfaCompliance) {
@@ -579,6 +581,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       savedMarkupTextColumn, savedMarkupChoiceColumn);
     if (!doc.markupNumberColumn && savedMarkupNumberColumn) doc.markupNumberColumn = savedMarkupNumberColumn;
     const savedMarkupStatusSet = markupStatusSetForSave(doc, pdfDocLib);
+    const savedExtensionWorkspace = edition.pdf?.workspaceForSave?.(doc, pdfDocLib);
     if (!doc.markupStatusSet && doc.markupStatusSet !== false && savedMarkupStatusSet) doc.markupStatusSet = savedMarkupStatusSet;
     const savedMarkupCheckmarkColumn = markupCheckmarkColumnForSave(doc, pdfDocLib,
       savedMarkupTextColumn, savedMarkupChoiceColumn, savedMarkupNumberColumn);
@@ -767,6 +770,12 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       const annotsLijst = annotsRef ? context.lookup(annotsRef) : null;
       const extPlan = pageAnnotsLoaded && annotsLijst instanceof PDFArray
         ? extPaginaPlan(context, pageAnnotations, annotsLijst.asArray(), activeDoc?._extBron) : null;
+      const claimedSourceRefs = new Set(pageAnnotations.flatMap((model) => {
+        const refs = [];
+        if (model.pdfSource?.modelId === model.id) refs.push(model.pdfSource.ref);
+        if (model.extBron?.ref) refs.push(model.extBron.ref);
+        return refs;
+      }));
       if (extPlan) vervangenObjecten.push(...extPlan.oudeVerwijzingen);
       if (annotsRef) {
         const lookedUp = context.lookup(annotsRef);
@@ -794,6 +803,10 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
             } else if (dict.get(PDFName.of('OPS_SnippetKey'))) {
               oudeKnipselStempels.push(ref); // wordt vervangen; resten opruimen
             } else {
+              if (!(ref instanceof PDFRef) && hasUnmodeledAnnotationKeys(dict)
+                  && !claimedSourceRefs.has(ref.toString())) {
+                throw new Error('PDF annotation has unmodeled fields without a safe source match; save with its add-on available.');
+              }
               verwijderdeRefs.push(ref);
             }
           }
@@ -1547,10 +1560,24 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
                 const pgDash = ann.borderStyle === 'dashed' ? '[8 4] 0 d\n' : ann.borderStyle === 'dotted' ? '[2 2] 0 d\n' : '';
                 pgContent += `q\n${borderWidth} w\n${pgDash}${psr} ${psg} ${psb} RG\n${pad}S\nQ\n`;
               }
+              let pgNeedsFont = false;
+              // An add-on may add to a polygon's appearance.
+              const pgExtra = edition.pdf?.polygonAppearance?.(ann, { X: convertX, Y: convertY, pageRot, doc });
+              if (pgExtra?.content) {
+                pgContent += pgExtra.content;
+                pgNeedsFont = !!pgExtra.needsFont;
+                if (Array.isArray(pgExtra.rect)) {
+                  const [ex1, ey1, ex2, ey2] = pgExtra.rect;
+                  const [rx1, ry1, rx2, ry2] = polygonDict.Rect;
+                  polygonDict.Rect = [Math.min(rx1, ex1), Math.min(ry1, ey1), Math.max(rx2, ex2), Math.max(ry2, ey2)];
+                  annotDict.set(PDFName.of('Rect'), context.obj(polygonDict.Rect));
+                }
+              }
               if (pgContent) {
                 attachVectorAP(context, annotDict, {
                   content: pgContent,
                   fillAlpha: pgFill ? pgFillAlpha : undefined,
+                  needsFont: pgNeedsFont,
                 }, polygonDict.Rect);
               }
             }
@@ -3261,6 +3288,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
           if (carriedFrom) annotDict.set(PDFName.of('OPS_CarriedFromV1'), pdfTextString(carriedFrom));
           const assemblyId = assemblyIdText(ann.assemblyId);
           if (assemblyId) annotDict.set(PDFName.of('OPS_AssemblyIdV1'), pdfTextString(assemblyId));
+          edition.pdf?.writeAnnotation?.(ann, annotDict, { PDFName, pdfTextString });
           // Vul-alfa bewaren (zie fillOpacity hierboven) — één plek voor elke
           // annotatiesoort, vlak voordat de dict de pagina in gaat.
           if (fillOpacity !== undefined && fillOpacity !== null && fillOpacity !== opacity
@@ -3288,6 +3316,11 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
           // voor alle soorten. Zonder lagen is laagOcgs null en komt er niets bij.
           const ocRef = ocVoorAnnotatie(laagOcgs, ann);
           if (ocRef && typeof annotDict.set === 'function') annotDict.set(PDFName.of('OC'), ocRef);
+          // A loaded markup may carry fields owned by an add-on that is not
+          // installed in this editor. Keep those fields when editing its
+          // ordinary shape, after verifying the original PDF object identity.
+          carryUnmodeledAnnotationKeys(context, annotsLijst instanceof PDFArray ? annotsLijst.asArray() : [],
+            annRaw, annotDict, edition.pdf?.annotationKeys);
           const extRef = extVoorRegistratie(context, annRaw, annotDict, extPlan, { fillOpacity });
           // Wat the external editor op elke markering schrijft (/P, /NM, /Subj, datums, /RC,
           // /Measure): saver/ext-natief.js.
@@ -3300,6 +3333,9 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
             parentAnnotRef = context.register(annotDict);
             annotsArray.push(parentAnnotRef);
           }
+          const savedName = annotDict.get(PDFName.of('NM'));
+          rewrittenSources.push({ model: annRaw, ref: parentAnnotRef.toString(),
+            nm: savedName instanceof PDFString || savedName instanceof PDFHexString ? savedName.decodeText() : '' });
           alleenBytes?.refs.set(annRaw, parentAnnotRef);
           if (annotDict instanceof PDFDict) groepDicts.set(annRaw.id, { ref: parentAnnotRef, dict: annotDict });
           if (annRaw.type === 'caret' || annRaw.type === 'textStrikethrough') {
@@ -3475,6 +3511,7 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     saveMarkupSecondNumberColumn(pdfDocLib, savedMarkupSecondNumberColumn);
     saveMarkupCheckmarkColumn(pdfDocLib, savedMarkupCheckmarkColumn);
     saveMarkupStatusSet(pdfDocLib, savedMarkupStatusSet);
+    edition.pdf?.saveWorkspace?.(pdfDocLib, savedExtensionWorkspace);
     saveMarkupFormulaColumn(pdfDocLib, savedMarkupFormulaColumn);
     // Formula columns and Custom Captions (formula-captions-pdf.js).
     saveFormulaCaptions(pdfDocLib, formulaCaptionsForSave(doc, pdfDocLib));
@@ -3633,6 +3670,12 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
     // A close/reload during the atomic write cannot be undone here. Keep the
     // new live document dirty, and never publish the old save as its state.
     if (!stillCurrent() || !editsUnchanged()) throw changedDuringSave();
+
+    // The next save reads the bytes just written. A rewritten annotation now
+    // has a new PDF reference; keep its provenance aligned with those bytes.
+    for (const { model, ref, nm } of rewrittenSources) {
+      model.pdfSource = { ref, modelId: model.id, nm };
+    }
 
     if (activeDoc.pdfaCompliance) {
       activeDoc.pdfaCompliance = null;

@@ -87,3 +87,4 @@ registerCommand({
   keywords: ['clipboard', 'image', 'screenshot'],
   run: () => import('../../tools/screenshot-annotate.js').then((m) => m.annotateClipboardScreenshot()),
 });
+for (const command of edition.fileCommands) registerCommand(command);

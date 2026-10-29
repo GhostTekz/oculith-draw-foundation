@@ -154,7 +154,7 @@
     "windowsInstructions": "Настройките на Windows са отворени.\n\nЗа да зададете Oculith Draw като програма по подразбиране:\n1. Превъртете надолу до \"Изберете програми по подразбиране по тип файл\"\n2. Намерете .pdf\n3. Щракнете и изберете Oculith Draw",
     "windowsFailed": "Не можа да се отворят настройките на Windows.\n\nМоля, отворете ръчно Настройки > Приложения > Програми по подразбиране.",
     "macInstructions": "За да зададете Oculith Draw като програма по подразбиране за PDF на macOS:\n\n1. Щракнете с десен бутон върху произволен PDF файл във Finder\n2. Изберете \"Информация\"\n3. Под \"Отвори с\" изберете Oculith Draw\n4. Щракнете \"Промени всички...\"",
-    "linuxInstructions": "За да зададете Oculith Draw като програма по подразбиране за PDF на Linux:\n\nИзпълнете в терминала:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "За да зададете Oculith Draw като програма по подразбиране за PDF на Linux:\n\nИзпълнете в терминала:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Проверете Finder > Информация",
     "notSet": "Не е зададено"
   },

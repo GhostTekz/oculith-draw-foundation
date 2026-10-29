@@ -4,10 +4,12 @@
 #![recursion_limit = "256"]
 
 mod atomic_file;
+mod edition_helper;
 mod display_list_cache;
 pub mod cad_export;
 pub mod cad_import;
 pub mod datamap;
+mod identity_migration;
 mod email;
 pub mod linux_runtime;
 pub mod logboek;
@@ -462,10 +464,340 @@ fn get_username() -> String {
     whoami::username()
 }
 
+/// Optional editor add-on. The command shape is kept for existing clients.
+/// A release serves verified script bytes as an asset; development sends the
+/// script over IPC because its pages come from the development server.
+#[derive(serde::Serialize)]
+struct EditionPlugin {
+    url: Option<String>,
+    js: Option<String>,
+    css: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AddonManifest {
+    schema_version: u32,
+    id: String,
+    version: String,
+    host_api_version: u32,
+    editor_version: String,
+    #[serde(default, deserialize_with = "deserialize_addon_target")]
+    target: Option<AddonTarget>,
+    files: HashMap<String, String>,
+    helper: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddonTarget {
+    os: String,
+    arch: String,
+}
+
+fn deserialize_addon_target<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<AddonTarget>, D::Error> {
+    <AddonTarget as serde::Deserialize>::deserialize(deserializer).map(Some)
+}
+
+fn addon_target_matches(target: &AddonTarget) -> bool {
+    if !matches!(target.os.as_str(), "linux" | "windows" | "macos")
+        || !matches!(target.arch.as_str(), "x64" | "arm64" | "universal")
+        || (target.arch == "universal" && target.os != "macos") {
+        return false;
+    }
+    let os = std::env::consts::OS;
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "x86" => "ia32",
+        "aarch64" => "arm64",
+        other => other,
+    };
+    target.os == os && (target.arch == arch || (os == "macos" && target.arch == "universal"))
+}
+
+fn addon_manifest_target_compatible(manifest: &AddonManifest) -> bool {
+    let native_files = manifest.helper.is_some() || manifest.files.keys().any(|name| name.starts_with("bin/"));
+    match &manifest.target {
+        Some(target) => addon_target_matches(target),
+        None => !native_files,
+    }
+}
+
+struct SelectedAddon {
+    script: Vec<u8>,
+    css: String,
+    helper: Option<(std::path::PathBuf, String)>,
+    bundled: bool,
+    files: Option<HashMap<String, String>>,
+}
+
+/// Selection is fixed for the process lifetime. An add-on update takes effect
+/// on restart, so the script and helper cannot silently come from two versions.
+static SELECTED_ADDON: std::sync::OnceLock<Option<SelectedAddon>> = std::sync::OnceLock::new();
+const EDITION_URL_PREFIX: &str = "/edition/";
+const HOST_API_VERSION: u32 = 1;
+
+fn addon_relative_path(name: &str) -> Option<std::path::PathBuf> {
+    use std::path::Component;
+    if name.is_empty() || name.contains('\\') || name.contains(':') || name.split('/').any(|part| part == "." || part == "..") { return None; }
+    let path = std::path::Path::new(name);
+    if path.components().any(|part| !matches!(part, Component::Normal(_))) { return None; }
+    Some(path.to_owned())
+}
+
+fn addon_file(root: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    if fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
+    let relative = addon_relative_path(name)?;
+    let mut path = root.to_owned();
+    for part in relative.components() {
+        path.push(part);
+        if fs::symlink_metadata(&path).ok()?.file_type().is_symlink() { return None; }
+    }
+    if !path.is_file() { return None; }
+    let real_root = dunce::canonicalize(root).ok()?;
+    let real_file = dunce::canonicalize(&path).ok()?;
+    real_file.starts_with(real_root).then_some(path)
+}
+
+fn sha256_file(path: &std::path::Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path).ok()?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).ok()?;
+        if count == 0 { break; }
+        digest.update(&buffer[..count]);
+    }
+    Some(format!("{:x}", digest.finalize()))
+}
+
+fn addon_hash_matches(path: &std::path::Path, expected: &str) -> bool {
+    expected.len() == 64
+        && expected.bytes().all(|b| b.is_ascii_hexdigit())
+        && sha256_file(path).is_some_and(|hash| hash.eq_ignore_ascii_case(expected))
+}
+
+fn sha256_bytes_match(bytes: &[u8], expected: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    expected.len() == 64
+        && expected.bytes().all(|b| b.is_ascii_hexdigit())
+        && format!("{:x}", Sha256::digest(bytes)).eq_ignore_ascii_case(expected)
+}
+
+fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
+    let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
+    let root = addons.join("active");
+    if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink()
+        || fs::symlink_metadata(&root).ok()?.file_type().is_symlink() { return None; }
+    let manifest_path = addon_file(&root, "manifest.json")?;
+    if manifest_path.metadata().ok()?.len() > 1024 * 1024 { return None; }
+    let manifest: AddonManifest = serde_json::from_slice(&fs::read(manifest_path).ok()?).ok()?;
+    if manifest.schema_version != 1 || manifest.host_api_version != HOST_API_VERSION
+        || !addon_manifest_target_compatible(&manifest)
+        || manifest.editor_version != app.package_info().version.to_string()
+        || manifest.version.is_empty() || manifest.version.len() > 64
+        || !manifest.version.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+' | b'_'))
+        || manifest.id.is_empty()
+        || !manifest.id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
+        || !manifest.id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_')) {
+        return None;
+    }
+    if manifest.files.len() > 64 || !manifest.files.contains_key("plugin.js") { return None; }
+    if manifest.helper.as_ref().is_some_and(|name| !manifest.files.contains_key(name)) { return None; }
+    for (name, expected) in &manifest.files {
+        let path = addon_file(&root, name)?;
+        if !addon_hash_matches(&path, expected) { return None; }
+    }
+    let script_path = addon_file(&root, "plugin.js")?;
+    if script_path.metadata().ok()?.len() > 64 * 1024 * 1024 { return None; }
+    let script = fs::read(script_path).ok()?;
+    if script.is_empty() || !sha256_bytes_match(&script, manifest.files.get("plugin.js")?) { return None; }
+    let css = if manifest.files.contains_key("plugin.css") {
+        let css_path = addon_file(&root, "plugin.css")?;
+        if css_path.metadata().ok()?.len() > 16 * 1024 * 1024 { return None; }
+        let bytes = fs::read(css_path).ok()?;
+        if !sha256_bytes_match(&bytes, manifest.files.get("plugin.css")?) { return None; }
+        String::from_utf8(bytes).ok()?
+    } else { String::new() };
+    let helper = if let Some(name) = manifest.helper {
+        Some((addon_file(&root, &name)?, manifest.files.get(&name)?.clone()))
+    } else { None };
+    Some(SelectedAddon { script, css, helper, bundled: false, files: Some(manifest.files) })
+}
+
+fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
+    let root = if tauri::is_dev() {
+        std::env::var_os("OCUDRAW_EDITION_PLUGIN_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or(app.path().resource_dir().ok()?.join("edition"))
+    } else {
+        app.path().resource_dir().ok()?.join("edition")
+    };
+    let script = fs::read(root.join("plugin.js")).ok()?;
+    if script.is_empty() { return None; }
+    let css = fs::read_to_string(root.join("plugin.css")).unwrap_or_default();
+    Some(SelectedAddon { script, css, helper: None, bundled: true, files: None })
+}
+
+fn selected_addon(app: &tauri::AppHandle) -> Option<&'static SelectedAddon> {
+    SELECTED_ADDON.get_or_init(|| user_addon(app).or_else(|| bundled_addon(app))).as_ref()
+}
+
+pub(crate) fn selected_helper_available(app: &tauri::AppHandle) -> bool {
+    let Some(selected) = selected_addon(app) else { return false; };
+    if selected.helper.is_some() { return true; }
+    selected.bundled && selected_helper_path(app).is_some()
+}
+
+pub(crate) fn selected_helper_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let selected = selected_addon(app)?;
+    if let Some((path, expected)) = &selected.helper {
+        let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
+        if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink() { return None; }
+        let root = addons.join("active");
+        let name = path.strip_prefix(&root).ok()?.to_str()?;
+        let checked = addon_file(&root, name)?;
+        for (name, expected) in selected.files.as_ref()? {
+            if !addon_hash_matches(&addon_file(&root, name)?, expected) { return None; }
+        }
+        return addon_hash_matches(&checked, expected).then_some(checked);
+    }
+    if !selected.bundled { return None; }
+    // A bundled editor can supply a helper through its own trusted install.
+    None
+}
+
+#[tauri::command(async)]
+fn edition_plugin(app: tauri::AppHandle, inline: Option<bool>) -> Option<EditionPlugin> {
+    let addon = selected_addon(&app)?;
+    if tauri::is_dev() || inline.unwrap_or(false) {
+        let js = String::from_utf8(addon.script.clone()).ok()?;
+        return Some(EditionPlugin { url: None, js: Some(js), css: addon.css.clone() });
+    }
+    Some(EditionPlugin { url: Some(format!("{EDITION_URL_PREFIX}plugin.js")), js: None, css: addon.css.clone() })
+}
+
+/// The editor's files, plus the selected add-on script under `/edition/`.
+struct EditionAssets<R: tauri::Runtime>(Box<dyn tauri::Assets<R>>);
+
+impl<R: tauri::Runtime> tauri::Assets<R> for EditionAssets<R> {
+    fn setup(&self, app: &tauri::App<R>) {
+        self.0.setup(app)
+    }
+
+    fn get(&self, key: &tauri::utils::assets::AssetKey) -> Option<std::borrow::Cow<'_, [u8]>> {
+        if key.as_ref() == "/edition/plugin.js" {
+            if let Some(addon) = SELECTED_ADDON.get().and_then(Option::as_ref) {
+                return Some(std::borrow::Cow::Borrowed(&addon.script));
+            }
+        }
+        self.0.get(key)
+    }
+
+    fn iter(&self) -> Box<tauri::utils::assets::AssetsIter<'_>> {
+        self.0.iter()
+    }
+
+    fn csp_hashes(
+        &self,
+        html_path: &tauri::utils::assets::AssetKey,
+    ) -> Box<dyn Iterator<Item = tauri::utils::assets::CspHash<'_>> + '_> {
+        self.0.csp_hashes(html_path)
+    }
+}
+
+#[cfg(test)]
+mod addon_tests {
+    use super::*;
+
+    #[test]
+    fn manifest_contract_and_hashes() {
+        let manifest: AddonManifest = serde_json::from_str(r#"{
+          "schemaVersion":1,"id":"sample.addon","version":"2026.68.0","hostApiVersion":1,
+          "editorVersion":"2026.68.0","target":{"os":"linux","arch":"x64"},"files":{"plugin.js":"abc"},
+          "helper":"bin/worker"
+        }"#).unwrap();
+        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.version, "2026.68.0");
+        assert_eq!(manifest.host_api_version, HOST_API_VERSION);
+        assert!(!addon_target_matches(&AddonTarget { os: "invalid".into(), arch: "invalid".into() }));
+        let current = AddonTarget {
+            os: std::env::consts::OS.into(),
+            arch: match std::env::consts::ARCH { "x86_64" => "x64", "x86" => "ia32", "aarch64" => "arm64", other => other }.into(),
+        };
+        assert!(addon_target_matches(&current));
+        assert!(!addon_target_matches(&AddonTarget { os: current.os, arch: "wrong".into() }));
+        assert_eq!(manifest.target.unwrap().os, "linux");
+        let script_only: AddonManifest = serde_json::from_str(r#"{
+          "schemaVersion":1,"id":"sample.addon","version":"2026.68.0","hostApiVersion":1,
+          "editorVersion":"2026.68.0","files":{"plugin.js":"abc"}
+        }"#).unwrap();
+        assert!(addon_manifest_target_compatible(&script_only));
+        let native_without_target: AddonManifest = serde_json::from_str(r#"{
+          "schemaVersion":1,"id":"sample.addon","version":"2026.68.0","hostApiVersion":1,
+          "editorVersion":"2026.68.0","files":{"plugin.js":"abc","bin/helper":"def"},"helper":"bin/helper"
+        }"#).unwrap();
+        assert!(!addon_manifest_target_compatible(&native_without_target));
+        assert!(serde_json::from_str::<AddonManifest>(r#"{
+          "schemaVersion":1,"id":"sample.addon","version":"2026.68.0","hostApiVersion":1,
+          "editorVersion":"2026.68.0","target":null,"files":{"plugin.js":"abc"}
+        }"#).is_err());
+        assert_eq!(manifest.helper.as_deref(), Some("bin/worker"));
+        assert!(sha256_bytes_match(b"hello", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"));
+        assert!(!sha256_bytes_match(b"hello!", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"));
+    }
+
+    #[test]
+    fn relative_paths_reject_escape() {
+        for name in ["../worker", "bin/../worker", "./worker", "/worker", "C:/worker", "bin\\worker", ""] {
+            assert!(addon_relative_path(name).is_none(), "accepted {name}");
+        }
+        assert_eq!(addon_relative_path("bin/worker").unwrap(), std::path::PathBuf::from("bin/worker"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn addon_file_rejects_symlinked_components() {
+        use std::os::unix::fs::symlink;
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("oculith-addon-test-{}-{unique}", std::process::id()));
+        fs::create_dir_all(root.join("bin")).unwrap();
+        fs::write(root.join("bin/worker"), b"worker").unwrap();
+        assert!(addon_file(&root, "bin/worker").is_some());
+        symlink(root.join("bin"), root.join("linked")).unwrap();
+        assert!(addon_file(&root, "linked/worker").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+/// A stand-in while the editor's files move into EditionAssets.
+struct NoAssets;
+
+impl<R: tauri::Runtime> tauri::Assets<R> for NoAssets {
+    fn get(&self, _key: &tauri::utils::assets::AssetKey) -> Option<std::borrow::Cow<'_, [u8]>> {
+        None
+    }
+
+    fn iter(&self) -> Box<tauri::utils::assets::AssetsIter<'_>> {
+        Box::new(std::iter::empty::<(std::borrow::Cow<'_, str>, std::borrow::Cow<'_, [u8]>)>())
+    }
+
+    fn csp_hashes(
+        &self,
+        _html_path: &tauri::utils::assets::AssetKey,
+    ) -> Box<dyn Iterator<Item = tauri::utils::assets::CspHash<'_>> + '_> {
+        Box::new(std::iter::empty())
+    }
+}
 
 /// The app's context: its configuration and the editor's files.
 fn editor_context() -> tauri::Context<tauri::Wry> {
-    tauri::generate_context!()
+    let mut context = tauri::generate_context!();
+    let editor = context.set_assets(Box::new(NoAssets));
+    context.set_assets(Box::new(EditionAssets(editor)));
+    context
 }
 
 // Fallback commands for when plugins aren't available via global API
@@ -1724,6 +2056,166 @@ fn play_alert_sound() {
 
 // --- Plugin Management ---
 
+const MAX_PLUGIN_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_PLUGIN_ARCHIVE_FILES: usize = 512;
+const MAX_PLUGIN_EXTRACTED_BYTES: u64 = 128 * 1024 * 1024;
+static PLUGIN_INSTALL_LOCK: Mutex<()> = Mutex::new(());
+
+fn valid_plugin_id(id: &str) -> bool {
+    id.len() <= 128
+        && id.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
+        && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+fn plugin_path(plugins_dir: &std::path::Path, id: &str) -> Result<std::path::PathBuf, String> {
+    if !valid_plugin_id(id) { return Err("Invalid plugin id".into()); }
+    Ok(plugins_dir.join(id))
+}
+
+fn recover_plugin_backup(plugin_dir: &std::path::Path, backup: &std::path::Path) -> Result<(), String> {
+    match backup.symlink_metadata() {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("Cannot inspect previous plugin installation: {error}")),
+        Ok(meta) => {
+            if !meta.is_dir() || meta.file_type().is_symlink() { return Err("Unsafe previous plugin installation".into()); }
+            if let Ok(active) = plugin_dir.symlink_metadata() {
+                if !active.is_dir() || active.file_type().is_symlink() { return Err("Unsafe existing plugin installation".into()); }
+                fs::remove_dir_all(backup).map_err(|e| format!("Cannot clean previous plugin installation: {e}"))?;
+            } else {
+                fs::rename(backup, plugin_dir).map_err(|e| format!("Cannot restore previous plugin installation: {e}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+// zip 2.x indexes central-directory entries by name and silently replaces
+// earlier entries with the same name. Inspect the raw directory before using
+// its deduplicated view so an archive cannot hide entries from our checks.
+fn validate_plugin_central_directory(file: &mut fs::File, start: u64, parsed_count: usize) -> Result<(), String> {
+    use std::io::{Read, Seek};
+    let len = file.metadata().map_err(|e| format!("Cannot inspect plugin archive: {e}"))?.len();
+    let mut position = start;
+    let mut count = 0;
+    let mut names = std::collections::HashSet::new();
+    loop {
+        if position.checked_add(4).is_none_or(|end| end > len) {
+            return Err("Invalid plugin central directory".into());
+        }
+        file.seek(std::io::SeekFrom::Start(position)).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        let mut header = [0u8; 46];
+        file.read_exact(&mut header[..4]).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        if &header[..4] != b"PK\x01\x02" { break; }
+        if position.checked_add(header.len() as u64).is_none_or(|end| end > len) {
+            return Err("Invalid plugin central directory".into());
+        }
+        file.read_exact(&mut header[4..]).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        let name_len = u16::from_le_bytes([header[28], header[29]]) as u64;
+        let extra_len = u16::from_le_bytes([header[30], header[31]]) as u64;
+        let comment_len = u16::from_le_bytes([header[32], header[33]]) as u64;
+        let next = position.checked_add(header.len() as u64)
+            .and_then(|n| n.checked_add(name_len))
+            .and_then(|n| n.checked_add(extra_len))
+            .and_then(|n| n.checked_add(comment_len))
+            .ok_or("Invalid plugin central directory")?;
+        if next > len { return Err("Invalid plugin central directory".into()); }
+        let mut name = vec![0u8; name_len as usize];
+        file.read_exact(&mut name).map_err(|e| format!("Cannot read plugin central directory: {e}"))?;
+        if !names.insert(name) { return Err("Duplicate plugin archive path".into()); }
+        count += 1;
+        if count > MAX_PLUGIN_ARCHIVE_FILES { return Err("Plugin archive has too many files".into()); }
+        position = next;
+    }
+    if count != parsed_count { return Err("Duplicate or hidden plugin archive path".into()); }
+    Ok(())
+}
+
+fn install_plugin_archive(src_path: &std::path::Path, plugins_dir: &std::path::Path) -> Result<serde_json::Value, String> {
+    use std::io::{Read, Seek};
+    let file = fs::File::open(src_path).map_err(|e| format!("Failed to open plugin file: {e}"))?;
+    let archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {e}"))?;
+    if archive.len() == 0 || archive.len() > MAX_PLUGIN_ARCHIVE_FILES {
+        return Err("Plugin archive has too many files".into());
+    }
+    let central_start = archive.central_directory_start();
+    let parsed_count = archive.len();
+    let mut file = archive.into_inner();
+    validate_plugin_central_directory(&mut file, central_start, parsed_count)?;
+    file.seek(std::io::SeekFrom::Start(0)).map_err(|e| format!("Cannot rewind plugin archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {e}"))?;
+    let manifest_content = {
+        let mut entry = archive.by_name("plugin.json").map_err(|_| "Plugin archive must contain plugin.json")?;
+        if entry.size() > MAX_PLUGIN_MANIFEST_BYTES { return Err("Plugin manifest is too large".into()); }
+        let mut bytes = Vec::new();
+        entry.by_ref().take(MAX_PLUGIN_MANIFEST_BYTES + 1).read_to_end(&mut bytes)
+            .map_err(|e| format!("Failed to read plugin.json: {e}"))?;
+        if bytes.len() as u64 > MAX_PLUGIN_MANIFEST_BYTES { return Err("Plugin manifest is too large".into()); }
+        bytes
+    };
+    let manifest: serde_json::Value = serde_json::from_slice(&manifest_content)
+        .map_err(|e| format!("Invalid plugin.json: {e}"))?;
+    let plugin_id = manifest.get("id").and_then(|v| v.as_str()).ok_or("plugin.json must have an 'id' field")?;
+    let plugin_dir = plugin_path(plugins_dir, plugin_id)?;
+    let backup = plugins_dir.join(format!(".previous-{plugin_id}"));
+    recover_plugin_backup(&plugin_dir, &backup)?;
+
+    let stage = (0..16).find_map(|_| {
+        let candidate = plugins_dir.join(format!(".plugin-stage-{:016x}", rand::random::<u64>()));
+        match fs::create_dir(&candidate) {
+            Ok(()) => Some(Ok(candidate)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+            Err(e) => Some(Err(format!("Cannot stage plugin: {e}"))),
+        }
+    }).ok_or("Cannot allocate plugin staging directory")??;
+
+    let result = (|| {
+        let mut names = std::collections::HashSet::new();
+        let mut remaining = MAX_PLUGIN_EXTRACTED_BYTES;
+        for i in 0..archive.len() {
+            let entry = archive.by_index(i).map_err(|e| format!("Archive error: {e}"))?;
+            let name = entry.enclosed_name().ok_or("Unsafe plugin archive path")?;
+            if name.components().any(|c| !matches!(c, std::path::Component::Normal(_))) {
+                return Err("Unsafe plugin archive path".into());
+            }
+            if !names.insert(name.clone()) { return Err("Duplicate plugin archive path".into()); }
+            if entry.is_symlink() { return Err("Plugin archive contains a symbolic link".into()); }
+            let destination = stage.join(&name);
+            if entry.is_dir() {
+                fs::create_dir_all(&destination).map_err(|e| format!("Cannot stage plugin directory: {e}"))?;
+            } else {
+                if entry.size() > remaining { return Err("Plugin archive is too large".into()); }
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent).map_err(|e| format!("Cannot stage plugin directory: {e}"))?;
+                }
+                let mut output = fs::File::create(&destination).map_err(|e| format!("Cannot stage plugin file: {e}"))?;
+                let copied = std::io::copy(&mut entry.take(remaining + 1), &mut output)
+                    .map_err(|e| format!("Cannot extract plugin file: {e}"))?;
+                if copied > remaining { return Err("Plugin archive is too large".into()); }
+                remaining -= copied;
+            }
+        }
+        if !stage.join("index.js").is_file() || !stage.join("plugin.json").is_file() {
+            return Err("Plugin archive must contain index.js and plugin.json".into());
+        }
+        if let Ok(meta) = plugin_dir.symlink_metadata() {
+            if !meta.is_dir() || meta.file_type().is_symlink() { return Err("Unsafe existing plugin installation".into()); }
+            fs::rename(&plugin_dir, &backup).map_err(|e| format!("Cannot save previous plugin: {e}"))?;
+        }
+        if let Err(error) = fs::rename(&stage, &plugin_dir) {
+            if backup.is_dir() {
+                fs::rename(&backup, &plugin_dir).map_err(|rollback| format!("Cannot install plugin ({error}) or restore previous plugin ({rollback})"))?;
+            }
+            return Err(format!("Cannot install plugin: {error}"));
+        }
+        if backup.is_dir() {
+            fs::remove_dir_all(&backup).map_err(|e| format!("Plugin installed, but cannot clean previous version: {e}"))?;
+        }
+        Ok(manifest)
+    })();
+    let _ = fs::remove_dir_all(stage);
+    result
+}
+
 fn get_plugins_dir() -> std::path::PathBuf {
     let data_dir = datamap::lokale_datamap().unwrap_or_else(|| std::path::PathBuf::from("."));
     let plugins_dir = data_dir.join(APP_STORAGE_DIR).join("plugins");
@@ -1740,12 +2232,14 @@ fn list_plugins() -> Result<Vec<serde_json::Value>, String> {
 
     if let Ok(entries) = fs::read_dir(&plugins_dir) {
         for entry in entries.flatten() {
+            let name = entry.file_name();
+            if !name.to_str().is_some_and(valid_plugin_id) { continue; }
             let path = entry.path();
-            if path.is_dir() {
-                let manifest_path = path.join("plugin.json");
-                if manifest_path.exists() {
+            if path.symlink_metadata().is_ok_and(|meta| meta.is_dir() && !meta.file_type().is_symlink()) {
+                if let Some(manifest_path) = addon_file(&path, "plugin.json") {
                     if let Ok(content) = fs::read_to_string(&manifest_path) {
                         if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if manifest.get("id").and_then(|id| id.as_str()) != name.to_str() { continue; }
                             plugins.push(manifest);
                         }
                     }
@@ -1759,86 +2253,21 @@ fn list_plugins() -> Result<Vec<serde_json::Value>, String> {
 
 #[tauri::command]
 fn install_plugin(path: String) -> Result<serde_json::Value, String> {
-    let src_path = std::path::Path::new(&path);
-    if !src_path.exists() {
-        return Err("File not found".to_string());
-    }
-
-    let file = fs::File::open(&src_path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid plugin archive: {}", e))?;
-
-    // Read plugin.json from the archive to get the plugin id
-    let manifest_content = {
-        let mut manifest_file = archive.by_name("plugin.json")
-            .map_err(|_| "Plugin archive must contain plugin.json".to_string())?;
-        let mut content = String::new();
-        std::io::Read::read_to_string(&mut manifest_file, &mut content)
-            .map_err(|e| format!("Failed to read plugin.json: {}", e))?;
-        content
-    };
-
-    let manifest: serde_json::Value = serde_json::from_str(&manifest_content)
-        .map_err(|e| format!("Invalid plugin.json: {}", e))?;
-
-    let plugin_id = manifest.get("id")
-        .and_then(|v| v.as_str())
-        .ok_or("plugin.json must have an 'id' field")?;
-
-    // Validate plugin id (prevent path traversal)
-    if plugin_id.contains("..") || plugin_id.contains('/') || plugin_id.contains('\\') {
-        return Err("Invalid plugin id".to_string());
-    }
-
+    let _guard = PLUGIN_INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
     let plugins_dir = get_plugins_dir();
-    let plugin_dir = plugins_dir.join(plugin_id);
-
-    // Remove existing installation
-    if plugin_dir.exists() {
-        let _ = fs::remove_dir_all(&plugin_dir);
-    }
-    fs::create_dir_all(&plugin_dir).map_err(|e| format!("Failed to create plugin dir: {}", e))?;
-
-    // Re-open archive (consumed by by_name above)
-    let file2 = fs::File::open(&src_path).map_err(|e| format!("Failed to reopen file: {}", e))?;
-    let mut archive2 = zip::ZipArchive::new(file2).map_err(|e| format!("Invalid archive: {}", e))?;
-
-    // Extract all files
-    for i in 0..archive2.len() {
-        let mut file = archive2.by_index(i).map_err(|e| format!("Archive error: {}", e))?;
-        let outpath = plugin_dir.join(file.mangled_name());
-
-        // Prevent path traversal
-        if !outpath.starts_with(&plugin_dir) {
-            continue;
-        }
-
-        if file.is_dir() {
-            let _ = fs::create_dir_all(&outpath);
-        } else {
-            if let Some(parent) = outpath.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            let mut outfile = fs::File::create(&outpath)
-                .map_err(|e| format!("Failed to create file: {}", e))?;
-            std::io::copy(&mut file, &mut outfile)
-                .map_err(|e| format!("Failed to extract file: {}", e))?;
-        }
-    }
-
-    Ok(manifest)
+    install_plugin_archive(std::path::Path::new(&path), &plugins_dir)
 }
 
 #[tauri::command]
 fn uninstall_plugin(id: String) -> Result<bool, String> {
-    // Validate id
-    if id.contains("..") || id.contains('/') || id.contains('\\') {
-        return Err("Invalid plugin id".to_string());
-    }
-
+    let _guard = PLUGIN_INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
     let plugins_dir = get_plugins_dir();
-    let plugin_dir = plugins_dir.join(&id);
+    let plugin_dir = plugin_path(&plugins_dir, &id)?;
+    let backup = plugins_dir.join(format!(".previous-{id}"));
+    recover_plugin_backup(&plugin_dir, &backup)?;
 
-    if plugin_dir.exists() {
+    if plugin_dir.symlink_metadata().is_ok() {
+        if !plugin_dir.is_dir() || plugin_dir.is_symlink() { return Err("Unsafe plugin installation".into()); }
         fs::remove_dir_all(&plugin_dir).map_err(|e| format!("Failed to remove plugin: {}", e))?;
     }
 
@@ -1847,23 +2276,159 @@ fn uninstall_plugin(id: String) -> Result<bool, String> {
 
 #[tauri::command(async)]
 fn read_plugin_file(plugin_id: String, file_path: String) -> Result<String, String> {
-    // Validate inputs
-    if plugin_id.contains("..") || plugin_id.contains('/') || plugin_id.contains('\\') {
-        return Err("Invalid plugin id".to_string());
-    }
-    if file_path.contains("..") {
-        return Err("Invalid file path".to_string());
-    }
-
     let plugins_dir = get_plugins_dir();
-    let full_path = plugins_dir.join(&plugin_id).join(&file_path);
+    let plugin_dir = plugin_path(&plugins_dir, &plugin_id)?;
+    let full_path = addon_file(&plugin_dir, &file_path).ok_or("Invalid plugin file path")?;
+    fs::read_to_string(&full_path).map_err(|e| format!("Failed to read file: {}", e))
+}
 
-    // Ensure the resolved path is within the plugin directory
-    if !full_path.starts_with(plugins_dir.join(&plugin_id)) {
-        return Err("Path traversal detected".to_string());
+#[cfg(test)]
+mod legacy_plugin_install_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_manifest(zip: &mut zip::ZipWriter<fs::File>, id: &str) {
+        zip.start_file("plugin.json", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(format!(r#"{{"id":"{id}"}}"#).as_bytes()).unwrap();
     }
 
-    fs::read_to_string(&full_path).map_err(|e| format!("Failed to read file: {}", e))
+    fn archive(path: &std::path::Path, id: &str, script: Option<&str>) {
+        let file = fs::File::create(path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, id);
+        if let Some(script) = script {
+            zip.start_file("index.js", options).unwrap();
+            zip.write_all(script.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn plugin_ids_cannot_name_the_plugins_root() {
+        for id in ["", ".", "..", "../other", "/other", "C:", "a/b", "a\\b", "-bad"] {
+            assert!(!valid_plugin_id(id), "accepted {id:?}");
+        }
+        assert!(valid_plugin_id("com.example.plugin"));
+    }
+
+    #[test]
+    fn malformed_archive_preserves_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        fs::create_dir(&plugins).unwrap();
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+        let malicious = root.join("bad.oppx");
+        archive(&malicious, ".", Some("bad"));
+        assert!(install_plugin_archive(&malicious, &plugins).is_err());
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        let incomplete = root.join("incomplete.oppx");
+        archive(&incomplete, "com.example.plugin", None);
+        assert!(install_plugin_archive(&incomplete, &plugins).is_err());
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        let replacement = root.join("good.oppx");
+        archive(&replacement, "com.example.plugin", Some("new"));
+        install_plugin_archive(&replacement, &plugins).unwrap();
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"new");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn path_traversal_archive_preserves_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-path-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("traversal.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("../escape.txt", options).unwrap();
+        zip.write_all(b"bad").unwrap();
+        zip.finish().unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Unsafe plugin archive path"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after traversal entry");
+        assert!(!root.join("escape.txt").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn duplicate_archive_names_preserve_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-duplicate-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("duplicate.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("other.js", options).unwrap();
+        zip.write_all(b"bad").unwrap();
+        zip.finish().unwrap();
+        // ZipWriter refuses duplicate names; replace equal-length names in
+        // the local and central headers to exercise the raw-directory check.
+        let mut bytes = fs::read(&file).unwrap();
+        let mut replacements = 0;
+        for index in 0..=bytes.len() - b"other.js".len() {
+            if &bytes[index..index + b"other.js".len()] == b"other.js" {
+                bytes[index..index + b"index.js".len()].copy_from_slice(b"index.js");
+                replacements += 1;
+            }
+        }
+        assert!(replacements >= 2);
+        fs::write(&file, bytes).unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Duplicate plugin archive path"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after duplicate entry");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oversized_archive_entry_preserves_existing_plugin() {
+        let root = std::env::temp_dir().join(format!("ocudraw-plugin-size-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&root).unwrap();
+        let plugins = root.join("plugins");
+        let existing = plugins.join("com.example.plugin");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("index.js"), b"old").unwrap();
+
+        let file = root.join("oversized.oppx");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        write_manifest(&mut zip, "com.example.plugin");
+        zip.start_file("index.js", options).unwrap();
+        zip.write_all(b"new").unwrap();
+        zip.start_file("large.bin", options.compression_method(zip::CompressionMethod::Deflated).compression_level(Some(1))).unwrap();
+        let block = [0u8; 1024 * 1024];
+        for _ in 0..(MAX_PLUGIN_EXTRACTED_BYTES / block.len() as u64 + 1) {
+            zip.write_all(&block).unwrap();
+        }
+        zip.finish().unwrap();
+
+        let error = install_plugin_archive(&file, &plugins).unwrap_err();
+        assert!(error.contains("Plugin archive is too large"), "{error}");
+        assert_eq!(fs::read(existing.join("index.js")).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&plugins).unwrap().count(), 1, "staging residue after oversized entry");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 // ─── Allow FS access to a path (for testing / programmatic file opens) ────
@@ -3337,6 +3902,7 @@ pub fn run(opts: StartupOpts) {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build());
+    builder = builder.manage(edition_helper::EditionHelper::default());
 
     // Drag-out window detach is desktop-only (no mobile backend in the crate).
     #[cfg(not(target_os = "android"))]
@@ -3405,6 +3971,11 @@ pub fn run(opts: StartupOpts) {
 
     builder
         .setup(move |app| {
+            if let Some(base) = datamap::lokale_datamap() {
+                if let Err(error) = identity_migration::migrate_profile(&base) {
+                    eprintln!("[startup] settings migration failed: {error}");
+                }
+            }
             // Als eerste, zodat alles wat hierna met `log::` gemeld wordt ook
             // ergens aankomt. Zonder logger zijn die macro's lege hulzen.
             // Mislukt het opzetten, dan draait de app gewoon door.
@@ -3460,6 +4031,7 @@ pub fn run(opts: StartupOpts) {
             // Set the window icon (desktop only — not applicable on Android)
             #[cfg(not(target_os = "android"))]
             if let Some(window) = app.get_webview_window("main") {
+                // Keep the editor identity fixed across add-on installations.
                 let icon_bytes = include_bytes!("../community-icons/icon.png");
                 if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
                     let _ = window.set_icon(icon);
@@ -3584,6 +4156,11 @@ pub fn run(opts: StartupOpts) {
             load_session,
             get_username,
             read_file,
+            edition_plugin,
+            edition_helper::edition_helper_available,
+            edition_helper::edition_helper_call,
+            edition_helper::edition_helper_share_file,
+            edition_helper::edition_allow_drawing,
             write_file,
             write_file_atomic,
             append_file_atomic,

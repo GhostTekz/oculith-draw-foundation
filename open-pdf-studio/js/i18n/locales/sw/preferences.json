@@ -154,7 +154,7 @@
     "windowsInstructions": "Mipangilio ya Windows imefunguliwa.\n\nIli kuweka Oculith Draw kama chaguo-msingi:\n1. Sogeza chini hadi \"Chagua programu chaguo-msingi kwa aina ya faili\"\n2. Tafuta .pdf\n3. Bofya na uchague Oculith Draw",
     "windowsFailed": "Haikuweza kufungua Mipangilio ya Windows.\n\nTafadhali fungua kwa mikono Mipangilio > Programu > Programu Chaguo-msingi.",
     "macInstructions": "Ili kuweka Oculith Draw kama kitazamaji chaguo-msingi cha PDF kwenye macOS:\n\n1. Bofya-kulia faili yoyote ya PDF kwenye Finder\n2. Chagua \"Pata Taarifa\"\n3. Chini ya \"Fungua na\", chagua Oculith Draw\n4. Bofya \"Badilisha Zote...\"",
-    "linuxInstructions": "Ili kuweka Oculith Draw kama kitazamaji chaguo-msingi cha PDF kwenye Linux:\n\nEndesha kwenye terminali:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Ili kuweka Oculith Draw kama kitazamaji chaguo-msingi cha PDF kwenye Linux:\n\nEndesha kwenye terminali:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Angalia Finder > Pata Taarifa",
     "notSet": "Haijawekwa"
   },

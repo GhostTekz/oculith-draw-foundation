@@ -180,7 +180,7 @@
     "windowsInstructions": "Windows-instellingen geopend.\n\nOm Oculith Draw als standaard in te stellen:\n1. Scroll omlaag naar \"Standaardapps per bestandstype kiezen\"\n2. Zoek .pdf\n3. Klik en selecteer Oculith Draw",
     "windowsFailed": "Kan Windows-instellingen niet openen.\n\nOpen handmatig Instellingen > Apps > Standaardapps.",
     "macInstructions": "Om Oculith Draw als standaard PDF-viewer in te stellen op macOS:\n\n1. Klik met de rechtermuisknop op een PDF-bestand in Finder\n2. Selecteer \"Toon info\"\n3. Onder \"Open met\" selecteer Oculith Draw\n4. Klik op \"Wijzig alles...\"",
-    "linuxInstructions": "Om Oculith Draw als standaard PDF-viewer in te stellen op Linux:\n\nVoer uit in terminal:\nxdg-mime default com.ghosttekz.oculithdraw.desktop application/pdf",
+    "linuxInstructions": "Om Oculith Draw als standaard PDF-viewer in te stellen op Linux:\n\nVoer uit in terminal:\nxdg-mime default \"Oculith Draw Foundation.desktop\" application/pdf",
     "checkFinder": "Controleer Finder > Toon info",
     "notSet": "Niet ingesteld"
   },

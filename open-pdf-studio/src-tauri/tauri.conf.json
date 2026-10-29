@@ -116,7 +116,8 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "ocudraw-community"
+          "ocudraw-community",
+          "oculithdraw"
         ]
       }
     }
