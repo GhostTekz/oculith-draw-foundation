@@ -4,6 +4,7 @@
 #![recursion_limit = "256"]
 
 mod atomic_file;
+mod addon_management;
 mod edition_helper;
 mod display_list_cache;
 pub mod cad_export;
@@ -4564,6 +4565,10 @@ pub fn run(opts: StartupOpts) {
             read_file,
             edition_plugin,
             edition_plugins,
+            addon_management::addon_packages_list,
+            addon_management::addon_package_install,
+            addon_management::addon_package_set_enabled,
+            addon_management::addon_package_remove,
             edition_helper::edition_helper_available,
             edition_helper::edition_helper_call,
             edition_helper::addon_helper_available,
