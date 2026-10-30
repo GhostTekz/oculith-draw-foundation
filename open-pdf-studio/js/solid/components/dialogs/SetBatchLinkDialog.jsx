@@ -139,6 +139,7 @@ export default function SetBatchLinkDialog(props) {
 
   /** Write job over `list` (create or remove), then write the outputs. */
   const write = async (mode, list, links, reviewedPlan = null) => {
+    if (indexSource && mode !== 'create') return;
     let dir = '';
     if (isTauri()) {
       dir = await openFolderDialog(ts('outputFolder'));
@@ -196,7 +197,7 @@ export default function SetBatchLinkDialog(props) {
 
   const createLinks = () => write('create', plan().files, chosen(), plan());
   const removeLinks = async () => {
-    if (busy() || !files().length) return;
+    if (indexSource || busy() || !files().length) return;
     if (!(await ask(ts('confirmRemove', { count: files().length }), ts('title')))) return;
     await write('remove', files(), []);
   };
@@ -218,7 +219,7 @@ export default function SetBatchLinkDialog(props) {
         <Show when={phase() === 'preview'}>
           <button class="sheet-links-btn" id="set-link-back" onClick={() => setPhase('options')}>{td('batchLink.back')}</button>
         </Show>
-        <Show when={phase() === 'options'}>
+        <Show when={!indexSource && phase() === 'options'}>
           <button class="sheet-links-btn" id="set-link-remove" disabled={!files().length} onClick={removeLinks}>{ts('remove')}</button>
         </Show>
       </div>
