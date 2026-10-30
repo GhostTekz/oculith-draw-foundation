@@ -18,7 +18,7 @@ import { redrawAnnotations, redrawContinuous } from '../../annotations/rendering
 import { paginaNaarWeergave } from '../../pdf/weergave-ruimte.js';
 import { switchLeftPanelTab } from './left-panel.js';
 import { matchesMarkupSearch } from './markup-search.js';
-import { sortMarkupRows } from './markup-column-sort.js';
+import { memoizeMarkupSortValue, sortMarkupRows } from './markup-column-sort.js';
 import { markupSubjectLabel } from './markup-columns.js';
 import { choiceColumn, choiceValue } from '../../annotations/custom-choice-column.js';
 import { numberColumn, numberValue, numberText } from '../../annotations/custom-number-column.js';
@@ -844,12 +844,7 @@ function buildAnnotationsList(filterValue) {
   }));
 
   // A column sort asks each markup's value once, not twice per comparison.
-  const sortValues = new Map();
-  const sortValue = (ann, column) => {
-    let value = sortValues.get(ann);
-    if (value === undefined && !sortValues.has(ann)) { value = columnValue(ann, column); sortValues.set(ann, value); }
-    return value;
-  };
+  const sortValue = memoizeMarkupSortValue(columnValue);
 
   const pushMarkup = (ann, key, depth = 0, mgAncestors = '') => {
     const listedAnn = byId.get(ann.id);

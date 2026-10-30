@@ -17,6 +17,18 @@ export const THUMBNAIL_DEFER_MS = 500;
  */
 export const THUMBNAIL_RENDER_TIMEOUT_MS = 8_000;
 
+/** Defer hidden thumbnails except pages visible in the detached view. */
+export function partitionThumbnailInvalidations(pageNums, panelShown, detachedRange) {
+  if (panelShown) return { immediate: [...pageNums], deferred: [] };
+  const immediate = [];
+  const deferred = [];
+  for (const pageNum of pageNums) {
+    if (detachedRange && pageNum >= detachedRange.start && pageNum <= detachedRange.end) immediate.push(pageNum);
+    else deferred.push(pageNum);
+  }
+  return { immediate, deferred };
+}
+
 /**
  * A picture has `dataURL`. `waiting` (type not in yet), `cancelled`
  * (the worker was told to stop), and `slow` (the JS deadline passed

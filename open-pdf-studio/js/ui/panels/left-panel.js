@@ -28,6 +28,7 @@ import {
   thumbnailResultKeepsQueue,
   createThumbnailCoordinator,
   raceThumbnailRender,
+  partitionThumbnailInvalidations,
   THUMBNAIL_DEFER_MS,
   THUMBNAIL_RENDER_TIMEOUT_MS,
 } from '../../pdf/thumbnail-schedule.js';
@@ -1072,17 +1073,14 @@ export function invalidateThumbnails(pageNums) {
   // sees cost a full page render after every markup edit (a quarter second
   // on a large drawing). Keep the old thumbnail (still fine as the page
   // transition placeholder) and redo it when the panel comes up.
-  if (!isPanelShown('thumbnails')) {
-    const range = detachedVisibleRange?.docId === activeDoc.id ? detachedVisibleRange : null;
+  const range = detachedVisibleRange?.docId === activeDoc.id ? detachedVisibleRange : null;
+  const { immediate, deferred } = partitionThumbnailInvalidations(pageNums, isPanelShown('thumbnails'), range);
+  if (deferred.length) {
     if (!deferredThumbnailPages.has(activeDoc.id)) deferredThumbnailPages.set(activeDoc.id, new Set());
-    const visible = [];
-    for (const pageNum of pageNums) {
-      if (range && pageNum >= range.start && pageNum <= range.end) visible.push(pageNum);
-      else deferredThumbnailPages.get(activeDoc.id).add(pageNum);
-    }
-    if (!visible.length) return;
-    pageNums = visible;
+    for (const pageNum of deferred) deferredThumbnailPages.get(activeDoc.id).add(pageNum);
   }
+  if (!immediate.length) return;
+  pageNums = immediate;
   const docCache = thumbnailCache.get(activeDoc.id);
   let any = false;
   for (const pageNum of pageNums) {
