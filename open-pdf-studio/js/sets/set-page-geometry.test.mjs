@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PDFDocument, degrees } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFNumber, degrees } from 'pdf-lib';
 import { fingerprintPdfBytes } from './pdf-fingerprint.js';
 import { buildSetPageGeometryAudit } from './set-page-geometry.js';
 
@@ -54,4 +54,18 @@ test('page geometry audit reports unreadable verified source without exposing ge
   const audit = await buildSetPageGeometryAudit(register, () => bytes);
   assert.equal(audit.rows[0].status, 'unreadable');
   assert.equal(audit.rows[0].geometry, undefined);
+});
+
+test('displayed dimensions honor PDF UserUnit while page boxes retain native coordinates', async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([612, 792]);
+  page.node.set(PDFName.of('UserUnit'), PDFNumber.of(2));
+  const bytes = new Uint8Array(await pdf.save());
+  const sha = await fingerprintPdfBytes(bytes);
+  const register = { sheets: [{ id: 'one', label: 'A-101', filePath: 'large.pdf',
+    page: 1, sourceSha256: sha }] };
+  const audit = await buildSetPageGeometryAudit(register, () => bytes);
+  assert.equal(audit.rows[0].status, 'verified');
+  assert.deepEqual([audit.rows[0].geometry.widthInches, audit.rows[0].geometry.heightInches], [17, 22]);
+  assert.deepEqual([audit.rows[0].geometry.boxes.media.width, audit.rows[0].geometry.boxes.media.height], [612, 792]);
 });

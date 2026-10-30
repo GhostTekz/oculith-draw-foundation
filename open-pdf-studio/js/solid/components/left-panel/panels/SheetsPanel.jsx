@@ -521,7 +521,7 @@ export default function SheetsPanel() {
   const geometryStatus = status => ({ verified: 'Verified', changed: 'Changed PDF bytes',
     missing: 'Missing PDF', unreadable: 'Unreadable PDF', unverified: 'No recorded SHA-256',
     'missing-page': 'Recorded page missing' })[status] || 'Unavailable';
-  const boxText = box => `${box.x.toFixed(2)}, ${box.y.toFixed(2)} · ${box.width.toFixed(2)} × ${box.height.toFixed(2)} pt`;
+  const boxText = box => `${box.x.toFixed(2)}, ${box.y.toFixed(2)} · ${box.width.toFixed(2)} × ${box.height.toFixed(2)}`;
 
   async function reviewFromSummary(row) {
     if (revisionSummary()?.register !== sheetRegister() || row.status !== 'ready') return;
@@ -838,7 +838,7 @@ export default function SheetsPanel() {
                 <details class="sheets-summary-hashes"><summary>Page boxes and source SHA-256</summary>
                   <For each={['Media', 'Crop', 'Bleed', 'Trim', 'Art']}>{(name) =>
                     <div>{name}: {boxText(row.geometry.boxes[name.toLowerCase()])}</div>}</For>
-                  <div>Box coordinates: x, y · width × height in PDF points</div>
+                  <div>Box coordinates: x, y · width × height in PDF user-space units</div>
                   <div>Recorded: <code>{row.recordedSha256}</code></div>
                   <div>Observed: <code>{row.observedSha256}</code></div>
                 </details>
