@@ -1,6 +1,28 @@
 function clean(value) { return String(value ?? '').trim(); }
 function key(value) { return clean(value).toLocaleLowerCase(); }
 
+/** Explain final-set conflicts before Apply, including conflicts with untouched rows. */
+export function sheetMetadataReviewIssues(register, rows) {
+  const selected = new Map(rows.filter(row => row.selected).map(row => [row.sheetId, row]));
+  const byLabel = new Map();
+  const issues = new Map();
+  for (const sheet of register.sheets) {
+    const row = selected.get(sheet.id);
+    const label = row ? clean(row.label) : sheet.label;
+    if (row && !label) issues.set(sheet.id, 'Sheet ID is required.');
+    if (!label) continue;
+    if (!byLabel.has(key(label))) byLabel.set(key(label), []);
+    byLabel.get(key(label)).push(sheet.id);
+  }
+  for (const ids of byLabel.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) if (selected.has(id)) {
+      issues.set(id, `Sheet ID “${clean(selected.get(id).label)}” is already in this set.`);
+    }
+  }
+  return issues;
+}
+
 /** Validate every selected edit against the final set before writing anything. */
 export function applySheetMetadataReview(register, rows) {
   if (!Array.isArray(rows)) throw new Error('The sheet review is unavailable.');
@@ -19,6 +41,8 @@ export function applySheetMetadataReview(register, rows) {
     selected.set(row.sheetId, { label, title: clean(row.title) });
   }
   if (!selected.size) throw new Error('Select at least one sheet to apply.');
+  const issues = sheetMetadataReviewIssues(register, rows);
+  if (issues.size) throw new Error(issues.values().next().value);
   const labels = new Set();
   for (const sheet of register.sheets) {
     const label = selected.get(sheet.id)?.label ?? sheet.label;

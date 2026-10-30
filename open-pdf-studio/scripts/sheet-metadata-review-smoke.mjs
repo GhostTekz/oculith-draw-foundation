@@ -46,8 +46,8 @@ try {
   assert.deepEqual(await register(), initial, 'reviewing source text leaves the register unchanged');
 
   await page.getByLabel(`Proposed sheet ID for ${initial.sheets[1].label}`).fill('A-101');
-  await page.getByRole('button', { name: 'Apply selected details' }).click();
-  await page.getByRole('status').filter({ hasText: 'already in this set' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Apply selected details' }).isDisabled(), true);
+  assert.match(await page.getByRole('group', { name: 'Sheet metadata proposals' }).innerText(), /already in this set/u);
   assert.deepEqual(await register(), initial, 'duplicate final IDs reject the whole batch');
 
   await page.getByLabel(`Proposed sheet ID for ${initial.sheets[1].label}`).fill('A-102');

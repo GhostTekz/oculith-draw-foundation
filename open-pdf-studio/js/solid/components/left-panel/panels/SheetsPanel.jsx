@@ -14,7 +14,7 @@ import { useTranslation } from '../../../../i18n/useTranslation.js';
 import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
 import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
 import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
-import { applySheetMetadataReview } from '../../../../sets/sheet-metadata-review.js';
+import { applySheetMetadataReview, sheetMetadataReviewIssues } from '../../../../sets/sheet-metadata-review.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
 
@@ -47,6 +47,8 @@ export default function SheetsPanel() {
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
+  const metadataIssues = createMemo(() => metadataReview()?.register === sheetRegister()
+    ? sheetMetadataReviewIssues(sheetRegister(), metadataReview().rows) : new Map());
   const selectedIndex = () => visibleSheets().findIndex(sheet => sheet.id === selectedId());
   const currentRevisions = createMemo(() => [...new Set(sheetRegister().sheets.map(sheet => sheet.revision).filter(Boolean))]
     .sort((first, second) => first.localeCompare(second)));
@@ -662,14 +664,14 @@ export default function SheetsPanel() {
             <p class="sheets-suggestion-note">Selectable title-block text only. Check each proposed value and source line. The register changes only when you apply selected rows; PDFs stay unchanged.</p>
             <div class="sheets-metadata-count">{metadataReview().rows.filter(row => row.selected).length} selected · {metadataReview().rows.filter(row => row.error).length} unavailable</div>
             <div class="sheets-metadata-list" role="group" aria-label="Sheet metadata proposals">
-              <For each={metadataReview().rows}>{(row) => <div class={`sheets-metadata-row${row.error ? ' invalid' : ''}`}>
+              <For each={metadataReview().rows}>{(row) => <div class={`sheets-metadata-row${row.error || metadataIssues().has(row.sheetId) ? ' invalid' : ''}`}>
                 <label class="sheets-metadata-select"><input type="checkbox" aria-label={`Apply metadata for ${row.originalLabel}`}
                   checked={row.selected} disabled={!!row.error || metadataBusy()}
                   onChange={event => editMetadataRow(row.sheetId, { selected: event.currentTarget.checked })} />
                   <strong>{row.originalLabel}</strong> · {extractFileName(row.filePath)} · Page {row.page}</label>
                 <Show when={row.error} fallback={<>
                   <label class="sheets-field">Proposed sheet ID<input aria-label={`Proposed sheet ID for ${row.originalLabel}`}
-                    value={row.label} disabled={metadataBusy()}
+                    value={row.label} disabled={metadataBusy()} aria-invalid={metadataIssues().has(row.sheetId)}
                     onInput={event => editMetadataRow(row.sheetId, { label: event.currentTarget.value })} /></label>
                   <small class="sheets-suggestion-evidence">{row.evidence.label || 'No labeled sheet number found; current ID retained.'}</small>
                   <label class="sheets-field">Proposed title<input aria-label={`Proposed title for ${row.originalLabel}`}
@@ -677,11 +679,12 @@ export default function SheetsPanel() {
                     onInput={event => editMetadataRow(row.sheetId, { title: event.currentTarget.value })} /></label>
                   <small class="sheets-suggestion-evidence">{row.evidence.title || (row.selectableText
                     ? 'No labeled title found; current title retained.' : 'No selectable title-block text found; enter manually if needed.')}</small>
+                  <Show when={metadataIssues().get(row.sheetId)}><div class="sheets-metadata-error">{metadataIssues().get(row.sheetId)}</div></Show>
                 </>}><div class="sheets-metadata-error">{row.error}</div></Show>
               </div>}</For>
             </div>
             <div class="sheets-actions"><button type="button" onClick={applyMetadataReview}
-              disabled={metadataBusy() || !metadataReview().rows.some(row => row.selected)}>Apply selected details</button>
+              disabled={metadataBusy() || !metadataReview().rows.some(row => row.selected) || metadataIssues().size > 0}>Apply selected details</button>
               <button type="button" onClick={() => setMetadataReview(null)} disabled={metadataBusy()}>Dismiss review</button></div>
           </Show>
         </div>

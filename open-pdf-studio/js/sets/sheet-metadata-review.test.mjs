@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applySheetMetadataReview } from './sheet-metadata-review.js';
+import { applySheetMetadataReview, sheetMetadataReviewIssues } from './sheet-metadata-review.js';
 
 const hash = 'a'.repeat(64);
 const register = { version: 1, name: 'Drawings', sheets: [
@@ -24,6 +24,8 @@ test('batch review permits an ID swap and rejects duplicate final IDs atomically
   assert.throws(() => applySheetMetadataReview(register, [row('one', 'A-02')]), /already in this set/u);
   assert.throws(() => applySheetMetadataReview(register, [row('one', 'A-03'), row('two', 'a-03')]), /already in this set/u);
   assert.deepEqual(register.sheets.map(sheet => sheet.label), ['A-01', 'A-02']);
+  assert.equal(sheetMetadataReviewIssues(register, [row('one', 'A-02')]).get('one'), 'Sheet ID “A-02” is already in this set.');
+  assert.equal(sheetMetadataReviewIssues(register, [row('one', '')]).get('one'), 'Sheet ID is required.');
 });
 
 test('batch review rejects stale or unverified source rows', () => {
