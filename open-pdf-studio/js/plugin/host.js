@@ -55,6 +55,7 @@ const MODULES = {
   'js/pdf/weergave-ruimte.js': () => import('../pdf/weergave-ruimte.js'),
   'js/quantities/schedule-csv.js': () => import('../quantities/schedule-csv.js'),
   'js/quantities/schedule-templates.js': () => import('../quantities/schedule-templates.js'),
+  'js/sets/register-context.js': () => import('../sets/register-context.js'),
   'js/solid/commands/util.js': () => import('../solid/commands/util.js'),
   'js/solid/components/Dialog.jsx': () => import('../solid/components/Dialog.jsx'),
   'js/solid/components/panels/panelActions.js': () => import('../solid/components/panels/panelActions.js'),
