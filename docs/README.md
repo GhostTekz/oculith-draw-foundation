@@ -11,6 +11,7 @@ Oculith Draw Foundation is made by [Oculith](https://oculith.io). The source is 
 3. Save reusable tools in the [Tool Chest](GUIDE.md#tool-chest), and review your work in the [Markups List](GUIDE.md#markups-list).
 4. To build the app yourself, follow [Building from source](BUILDING.md).
 5. To work on the code, read the [architecture](ARCHITECTURE.md), [add-on interface](ADDONS.md), and [file format](FILE-FORMAT.md).
+6. For the current merged source and release-check status, read the [development baseline](DEVELOPMENT-BASELINE.md).
 
 ## Documents
 
