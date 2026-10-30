@@ -67,6 +67,9 @@ test('extracted Foundation package carries exact notices and no private add-on f
     await assert.rejects(verifyFoundationPackage(root), /source route differs from the auditing checkout/);
     await rm(sourceRouteFile);
     await assert.rejects(verifyFoundationPackage(root), /Missing packaged resource/);
+    await symlink('../notices/Oculith-Draw-LICENSE.md', sourceRouteFile);
+    await assert.rejects(verifyFoundationPackage(root), /Symlink in packaged resource path/);
+    await rm(sourceRouteFile);
     await writeFile(sourceRouteFile, JSON.stringify(sourceRoute));
 
     const license = path.join(resources, 'notices', 'Oculith-Draw-LICENSE.md');
