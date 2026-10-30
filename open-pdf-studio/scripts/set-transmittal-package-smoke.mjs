@@ -13,6 +13,7 @@ async function pdf(label) {
   const document = await PDFDocument.create();
   document.addPage([612, 792]).drawText(`${label} first`);
   document.addPage([612, 792]).drawText(`${label} second`);
+  document.addPage([612, 792]).drawText(`${label} third`);
   return new Uint8Array(await document.save());
 }
 const bytes = await pdf('Original');
@@ -23,6 +24,8 @@ const register = { version: 1, name: 'Issue set', sheets: [
     filePath: 'Set.pdf', page: 1, sourceSha256: hash, history: [] },
   { id: 'two', label: 'A-102', title: 'Second', revision: 'B',
     filePath: 'Set.pdf', page: 2, sourceSha256: hash, history: [] },
+  { id: 'three', label: 'M-201', title: 'Third', revision: 'C',
+    filePath: 'Set.pdf', page: 3, sourceSha256: hash, history: [] },
 ] };
 const server = await createServer({ cacheDir: join(directory, 'vite-cache'),
   server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'error' });
@@ -36,15 +39,36 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('download', download => downloads.push(download.suggestedFilename()));
   await page.addInitScript(value => localStorage.setItem('oculithDraw.sheetRegister.v1', JSON.stringify(value)), register);
-  await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
+  await page.goto(server.resolvedUrls.local[0], { waitUntil: 'domcontentloaded' });
   await page.evaluate(async data => {
     (await import('/js/core/platform.js')).cacheWebFile('Set.pdf', Uint8Array.from(data));
   }, Array.from(bytes));
   await page.locator('.ws-host-left .ws-access-tab[data-panel="sheets"]').click();
   await page.getByRole('button', { name: 'Check transmittal readiness' }).click();
-  await page.getByText('Current sheet source readiness · 2 of 2 ready').waitFor();
-  await page.getByLabel('Include A-101 in issue package').check();
+  await page.getByText('Current sheet source readiness · 3 of 3 ready').waitFor();
+  const search = page.getByRole('searchbox', { name: 'Search sheets' });
+  const revision = page.getByLabel('Filter current revision');
+  await search.fill('A-');
+  await page.getByRole('button', { name: 'Select visible ready' }).click();
+  assert.equal(await page.getByLabel('Include A-101 in issue package').isChecked(), true);
+  assert.equal(await page.getByLabel('Include A-102 in issue package').isChecked(), true);
+  assert.equal(await page.getByLabel('Include M-201 in issue package').isChecked(), false);
+  await revision.selectOption('C');
+  assert.equal(await page.getByRole('button', { name: 'Select visible ready' }).isDisabled(), true,
+    'the intersection of search and revision can be empty');
+  await search.fill('M-');
+  await page.getByRole('button', { name: 'Select visible ready' }).click();
+  assert.equal(await page.getByLabel('Include A-101 in issue package').isChecked(), false,
+    'selecting the visible ready view replaces the prior selection');
+  assert.equal(await page.getByLabel('Include M-201 in issue package').isChecked(), true);
+  await page.getByRole('button', { name: 'Select all ready' }).click();
+  assert.equal(await page.getByLabel('Include A-101 in issue package').isChecked(), true,
+    'selecting all ready remains independent of the current filter');
+  await revision.selectOption('B');
+  await search.fill('A-101');
+  await page.getByRole('button', { name: 'Select visible ready' }).click();
   assert.equal(await page.getByLabel('Include A-102 in issue package').isChecked(), false);
+  assert.equal(await page.getByLabel('Include M-201 in issue package').isChecked(), false);
   await page.getByLabel('Issue date').fill('2026-10-30');
   await page.getByLabel('Issue reference').fill('IFC-07');
   await page.getByLabel('Transmittal note').fill('Issued for construction');
@@ -58,6 +82,16 @@ try {
   ]);
   assert.match(await preview.innerText(), /1 selected pages · 1 verified source PDFs/u);
   assert.match(await preview.innerText(), /Issue IFC-07 · 2026-10-30 · Issued for construction/u);
+  await search.fill('A-102');
+  assert.equal(await preview.count(), 1, 'changing the view retains the explicit selected-ID snapshot');
+  await page.getByRole('button', { name: 'Select visible ready' }).click();
+  assert.equal(await preview.count(), 0, 'selecting another visible view invalidates the prepared package');
+  assert.equal(await page.getByLabel('Include A-101 in issue package').isChecked(), false);
+  assert.equal(await page.getByLabel('Include A-102 in issue package').isChecked(), true);
+  await search.fill('A-101');
+  await page.getByRole('button', { name: 'Select visible ready' }).click();
+  await page.getByRole('button', { name: 'Preview issue package' }).click();
+  await preview.waitFor();
   await page.getByLabel('Issue reference').fill('IFC-08');
   assert.equal(await preview.count(), 0, 'editing issue details invalidates the prepared package');
   await page.getByRole('button', { name: 'Preview issue package' }).click();
