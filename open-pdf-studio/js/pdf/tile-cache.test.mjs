@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { BITMAP_BUDGET_BYTES } from './bitmap-budget.js';
 import { tileCacheClearAll, tileCacheClearForFile, tileCacheGet, tileCacheSet } from './tile-cache.js';
 
 function deferred() {
@@ -91,11 +92,13 @@ test('closing a file rejects its pending bitmap without touching another file', 
 test('the shared byte budget evicts an old tile before eight entries are reached', async () => {
   const stub = installDeferredBitmaps();
   try {
-    // Two 7000 x 7000 tiles (196 MB each) exceed the 384 MB bitmap budget.
-    const large = { width: 7000, height: 7000 };
+    // One tile fits; two decoded RGBA tiles exceed the byte budget.
+    const side = Math.floor(Math.sqrt(BITMAP_BUDGET_BYTES / 8)) + 1;
+    const large = { width: side, height: side };
     const first = tileCacheSet('large.pdf', 1, 1, 0, '0,0', large, {});
     const second = tileCacheSet('large.pdf', 2, 1, 0, '0,0', large, {});
-    const old = bitmap(), newer = bitmap();
+    const old = { ...bitmap(), width: side, height: side };
+    const newer = { ...bitmap(), width: side, height: side };
     stub.requests[0].resolve(old);
     stub.requests[1].resolve(newer);
     await Promise.all([first, second]);
