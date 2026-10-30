@@ -61,6 +61,7 @@ jobs:
           npm ci --ignore-scripts
           npm run typecheck
           npm run test:quality
+          python3 scripts/prepare-foundation-release.test.py
           node --test scripts/pdf-extension-preservation.test.mjs scripts/verify-foundation-package.test.mjs js/editions/contract.test.mjs js/core/undo-manager.test.mjs
           npx vite build --logLevel error
           node scripts/community-export-verify.mjs --published --bundle
