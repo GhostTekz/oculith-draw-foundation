@@ -33,9 +33,18 @@ try {
   await page.evaluate(() => {
     window.__setExportDialogs = [];
     window.__setExportWrites = [];
+    window.__setExportExisting = ['alias.json', 'alias.pdf'];
     window.__TAURI__ = {
       dialog: { save: options => new Promise(resolve => window.__setExportDialogs.push({ options, finish: resolve })) },
-      fs: { writeFile: async (path, bytes) => window.__setExportWrites.push({ path, bytes: Array.from(bytes) }) },
+      fs: {
+        stat: async path => {
+          if (!window.__setExportExisting.includes(path)) throw new Error('not found');
+          return { isFile: true };
+        },
+        writeFile: async (path, bytes) => window.__setExportWrites.push({ path, bytes: Array.from(bytes) }),
+      },
+      core: { invoke: async (command, { path } = {}) => command === 'file_exists'
+        ? window.__setExportExisting.includes(path) : null },
     };
   });
   const setName = async name => {
@@ -86,8 +95,23 @@ try {
   await begin('Export set manifest', 7);
   await finish(null);
   assert.equal((await writes()).length, 3, 'cancel does not write');
+
+  await begin('Export drawing log', 8);
+  await finish('drawing.pdf');
+  await page.getByRole('status').filter({ hasText: 'source drawing' }).waitFor();
+  assert.equal((await writes()).length, 3, 'drawing log cannot replace a registered PDF');
+
+  await begin('Export set manifest', 9);
+  await finish('alias.json');
+  await page.getByRole('status').filter({ hasText: 'cannot overwrite an existing file' }).waitFor();
+  assert.equal((await writes()).length, 3, 'manifest cannot replace an existing path alias');
+
+  await begin('Export drawing log PDF', 10);
+  await finish('alias.pdf');
+  await page.getByRole('status').filter({ hasText: 'cannot overwrite an existing file' }).waitFor();
+  assert.equal((await writes()).length, 3, 'drawing log PDF cannot replace an existing path alias');
   assert.deepEqual(errors, []);
-  console.log('Drawing-set export smoke passed: changed CSV, manifest and PDF refused; stable exports and cancel passed.');
+  console.log('Drawing-set export smoke passed: changed and unsafe destinations refused; stable exports and cancel passed.');
 } finally {
   await browser.close();
   await server.close();

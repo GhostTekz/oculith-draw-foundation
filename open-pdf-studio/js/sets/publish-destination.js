@@ -24,12 +24,12 @@ export async function assertSafeSetDestination(path, register, { fileExists } = 
   const sources = recordedSources(register);
   const destination = normalizePath(path);
   if (sources.some(source => normalizePath(source.filePath) === destination)) {
-    throw new Error('Choose a new PDF path. A source drawing in this set cannot be overwritten.');
+    throw new Error('Choose a new output path. A source drawing in this set cannot be overwritten.');
   }
   // Native save dialogs can return aliases such as symlinks or paths through
   // symlinked directories. Refusing every existing destination avoids writing
   // through an alias to a registered drawing and preserves previous exports.
   if (fileExists && await fileExists(path)) {
-    throw new Error('Choose a new PDF path. Publishing cannot overwrite an existing file.');
+    throw new Error('Choose a new output path. Export cannot overwrite an existing file.');
   }
 }

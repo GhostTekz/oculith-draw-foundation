@@ -625,6 +625,18 @@ export default function SheetsPanel() {
     }
   }
 
+  async function assertSafeExportDestination(path, register) {
+    const { assertSafeSetDestination } = await import('../../../../sets/publish-destination.js');
+    await assertSafeSetDestination(path, register, isTauri() ? {
+      fileExists: async destination => {
+        await invoke('allow_fs_scope', { path: destination });
+        // The plugin stat can report false when scope access is denied;
+        // the native check must also confirm that the path is new.
+        return await fileExists(destination) || await invoke('file_exists', { path: destination });
+      },
+    } : {});
+  }
+
   async function exportFile(extension, contentFor, includeFileStatus = false) {
     try {
       const register = sheetRegister();
@@ -633,6 +645,8 @@ export default function SheetsPanel() {
       const path = await saveFileDialog(`${safeName(register.name)}.${extension}`,
         [{ name: extension.toUpperCase(), extensions: [extension] }]);
       if (!path) return;
+      assertCurrentExportSource(register, fileStatus);
+      await assertSafeExportDestination(path, register);
       assertCurrentExportSource(register, fileStatus);
       await writeBinaryFile(path, new TextEncoder().encode(content));
     } catch (error) { setMessage(error.message); }
@@ -655,6 +669,8 @@ export default function SheetsPanel() {
       ]);
       if (!response.ok) throw new Error('Could not load the bundled drawing log font.');
       const bytes = await module.buildDrawingLogPdf(register, fileStatus, new Uint8Array(await response.arrayBuffer()));
+      assertCurrentExportSource(register, fileStatus);
+      await assertSafeExportDestination(path, register);
       assertCurrentExportSource(register, fileStatus);
       await writeBinaryFile(path, bytes);
       setMessage('Drawing log PDF exported.');
@@ -680,16 +696,7 @@ export default function SheetsPanel() {
         [{ name: 'PDF', extensions: ['pdf'] }]);
       if (!path) return;
       if (sheetRegister() !== register) throw new Error('The drawing set changed during publishing. Try again.');
-      const { assertSafeSetDestination } = await import('../../../../sets/publish-destination.js');
-      await assertSafeSetDestination(path, register, isTauri() ? {
-        fileExists: async source => {
-          await invoke('allow_fs_scope', { path: source });
-          // The platform wrapper may return false when plugin stat is denied
-          // by scope; the existing native command checks the same path without
-          // treating that error as proof that the destination is new.
-          return await fileExists(source) || await invoke('file_exists', { path: source });
-        },
-      } : {});
+      await assertSafeExportDestination(path, register);
       if (sheetRegister() !== register) throw new Error('The drawing set changed during publishing. Try again.');
       await writeBinaryFile(path, bytes);
       setMessage(`${register.sheets.length} current sheet${register.sheets.length === 1 ? '' : 's'} published in one PDF.`);
