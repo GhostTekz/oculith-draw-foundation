@@ -59,6 +59,13 @@ export default function SheetsPanel() {
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const [exportingCurrentView, setExportingCurrentView] = createSignal(false);
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
+  const visibleReadyPackageIds = createMemo(() => {
+    const review = transmittalReview();
+    if (review?.register !== sheetRegister()) return [];
+    const visibleIds = new Set(visibleSheets().map(sheet => sheet.id));
+    return review.rows.filter(row => row.status === 'ready' && visibleIds.has(row.sheetId))
+      .map(row => row.sheetId);
+  });
   const metadataIssues = createMemo(() => metadataReview()?.register === sheetRegister()
     ? sheetMetadataReviewIssues(sheetRegister(), metadataReview().rows) : new Map());
   const selectedIndex = () => visibleSheets().findIndex(sheet => sheet.id === selectedId());
@@ -1037,12 +1044,14 @@ export default function SheetsPanel() {
               </details>
             </div>}</For>
             <div class="sheets-actions">
+              <button type="button" disabled={packageBusy() || !visibleReadyPackageIds().length || visibleReadyPackageIds().length > 200}
+                onClick={() => { setPackageSelectedIds(visibleReadyPackageIds()); setPackagePreview(null); }}>Select visible ready</button>
               <button type="button" disabled={packageBusy() || !transmittalReview().readyCount || transmittalReview().readyCount > 200}
                 onClick={() => { setPackageSelectedIds(transmittalReview().rows.filter(row => row.status === 'ready').map(row => row.sheetId)); setPackagePreview(null); }}>Select all ready</button>
               <button type="button" disabled={packageBusy() || !packageSelectedIds().length}
                 onClick={() => { setPackageSelectedIds([]); setPackagePreview(null); }}>Clear selection</button>
             </div>
-            <p class="sheets-suggestion-note">{packageSelectedIds().length} selected · maximum 200 sheets. Source PDFs can contain other pages; the package includes only selected pages.</p>
+            <p class="sheets-suggestion-note">{visibleReadyPackageIds().length} ready in the current search and revision view · {packageSelectedIds().length} selected · maximum 200 sheets. Source PDFs can contain other pages; the package includes only selected pages.</p>
             <div class="sheets-package-details" role="group" aria-label="Issue package details">
               <label>Issue date <input type="date" value={packageIssueDetails().date} disabled={packageBusy()}
                 onInput={event => updatePackageIssueDetail('date', event.currentTarget.value)} /></label>

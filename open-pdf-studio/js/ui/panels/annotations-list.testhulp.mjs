@@ -39,8 +39,9 @@ export const list = await import('data:text/javascript;base64,'
   + Buffer.from(listSource, 'utf8').toString('base64'));
 export { store, leftPanel };
 
-/** Show the Markups List so its rows are built (#491 skips a hidden list). */
+/** Show all sheets in the Markups List so fixtures can assert multi-page rows. */
 export function showList() {
   leftPanel.setActiveTab('annotations');
   if (leftPanel.collapsed()) leftPanel.setCollapsed(false);
+  store.setFilterMode('all');
 }
