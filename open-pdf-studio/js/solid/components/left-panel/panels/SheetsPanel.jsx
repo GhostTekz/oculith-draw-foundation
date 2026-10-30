@@ -885,7 +885,8 @@ export default function SheetsPanel() {
           title={t('slipSheet.buttonHint')}>{slipReading() ? t('slipSheet.reading') : t('slipSheet.button')}</button>
         <Show when={message()}><div class="sheets-message" role="status">{message()}</div></Show>
         <div class="sheets-search">
-          <input type="search" aria-label="Search sheets" placeholder="Search ID, title, revision, PDF name" value={query()}
+          <input type="search" aria-label="Search sheets" placeholder="Search ID, title, revision, PDF name"
+            title="All words must match across sheet IDs, titles, revisions, or PDF names" value={query()}
             onInput={(event) => { setQuery(event.currentTarget.value); setSourceCandidate(null); }} />
           <select aria-label="Filter current revision" value={revisionFilter()}
             onChange={(event) => { setRevisionFilter(event.currentTarget.value); setSourceCandidate(null); }}>

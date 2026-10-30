@@ -175,13 +175,16 @@ export function removeSheet(register, id) {
 }
 
 export function filterSheets(register, query = '', revision = '') {
-  const term = key(query);
+  const terms = key(query).split(/\s+/u).filter(Boolean);
   const currentRevision = key(revision);
-  return register.sheets.filter(sheet =>
-    (!currentRevision || key(sheet.revision) === currentRevision)
-    && (!term || [sheet.label, sheet.title, sheet.revision, fileName(sheet.filePath),
-      ...sheet.history.flatMap(item => [item.revision, fileName(item.filePath)])]
-      .some(value => key(value).includes(term))));
+  return register.sheets.filter(sheet => {
+    if (currentRevision && key(sheet.revision) !== currentRevision) return false;
+    if (!terms.length) return true;
+    const fields = [sheet.label, sheet.title, sheet.revision, fileName(sheet.filePath),
+      ...sheet.history.flatMap(item => [item.revision, fileName(item.filePath)]),
+      ...(sheet.sourceAliases || []).map(item => fileName(item.filePath))].map(key);
+    return terms.every(term => fields.some(field => field.includes(term)));
+  });
 }
 
 const sheetLabelOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });

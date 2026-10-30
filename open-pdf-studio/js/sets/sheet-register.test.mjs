@@ -162,6 +162,26 @@ test('sheet search matches ID, title, revisions, and current or earlier PDF name
   assert.deepEqual(filterSheets(revised, '  '), revised.sheets);
 });
 
+test('sheet search matches every word across fields and remembered PDF names', () => {
+  const first = addSheet(createSheetRegister(), {
+    filePath: '/plans/issued.pdf', label: 'A-101', title: 'Main lobby', revision: 'P0',
+  });
+  const second = addSheet(first.register, {
+    filePath: '/plans/issued.pdf', page: 2, label: 'A-102', title: 'Rear lobby', revision: 'P0',
+  });
+  const moved = relinkSheet(second.register, first.sheet.id, '/new-location/current.pdf');
+  const revised = replaceSheet(moved, first.sheet.id, '/plans/revised.pdf', 'B', 'now');
+
+  assert.deepEqual(filterSheets(revised, 'A-101 lobby').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'LOBBY   REVISED').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'current main').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main', 'P0'), []);
+  assert.deepEqual(filterSheets(revised, 'lobby missing'), []);
+  assert.deepEqual(filterSheets(revised, 'new-location'), []);
+});
+
 test('set navigation uses natural sheet ID order without changing manifest order', () => {
   const ten = addSheet(createSheetRegister(), { filePath: '/plans/ten.pdf', label: 'A-10' });
   const two = addSheet(ten.register, { filePath: '/plans/two.pdf', label: 'A-2', revision: 'B' });
