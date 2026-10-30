@@ -322,6 +322,7 @@ js/compare/batch-report-pdf.test.mjs
 js/sets/drawing-log-pdf.test.mjs
 js/sets/index-sheet-titles.test.mjs
 js/sets/set-page-geometry.test.mjs
+js/sets/set-transmittal-readiness.test.mjs
 js/annotations/markup-csv.test.mjs
 js/annotations/markup-pdf.test.mjs
 js/pdf/markup-text-column.test.mjs

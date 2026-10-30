@@ -15,6 +15,7 @@ import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
 import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
 import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
 import { buildSetPageGeometryAudit } from '../../../../sets/set-page-geometry.js';
+import { buildSetTransmittalReadiness } from '../../../../sets/set-transmittal-readiness.js';
 import { applySheetMetadataReview, sheetMetadataReviewIssues } from '../../../../sets/sheet-metadata-review.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
@@ -45,6 +46,8 @@ export default function SheetsPanel() {
   const [summaryBusy, setSummaryBusy] = createSignal(false);
   const [geometryAudit, setGeometryAudit] = createSignal(null);
   const [geometryBusy, setGeometryBusy] = createSignal(false);
+  const [transmittalReview, setTransmittalReview] = createSignal(null);
+  const [transmittalBusy, setTransmittalBusy] = createSignal(false);
   const [metadataReview, setMetadataReview] = createSignal(null);
   const [metadataBusy, setMetadataBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
@@ -100,6 +103,8 @@ export default function SheetsPanel() {
     setDetailSuggestion(null);
     setCompareCandidate(null);
     setRevisionSummary(null);
+    setGeometryAudit(null);
+    setTransmittalReview(null);
     setMetadataReview(null);
     setMessage('');
     void refreshAvailability();
@@ -518,6 +523,30 @@ export default function SheetsPanel() {
     finally { setGeometryBusy(false); }
   }
 
+  async function checkTransmittalReadiness() {
+    if (transmittalBusy() || !sheetRegister().sheets.length) return;
+    const register = sheetRegister();
+    setTransmittalReview(null);
+    setTransmittalBusy(true);
+    setMessage('');
+    try {
+      const review = await buildSetTransmittalReadiness(register, readCompareSource);
+      if (sheetRegister() === register) setTransmittalReview(review);
+    } catch (error) { setMessage(`Could not check transmittal readiness: ${error.message}`); }
+    finally { setTransmittalBusy(false); }
+  }
+
+  const transmittalStatus = status => ({ ready: 'Source ready', missing: 'Missing or inaccessible PDF',
+    unreadable: 'Unreadable PDF', unverified: 'No recorded SHA-256',
+    changed: 'Changed PDF bytes', 'invalid-page': 'Recorded page missing' })[status] || 'Needs review';
+  const transmittalAction = (issue, row) => ({
+    missing: 'Restore access to the recorded PDF, or Relink to an identical copy.',
+    unreadable: 'Restore a readable PDF at this path, then run the check again.',
+    unverified: 'Use Add PDFs to record this page’s SHA-256 after resolving any changed-source rows for this PDF.',
+    changed: 'Restore the recorded PDF bytes, or use Choose revised PDF to record a new revision.',
+    'invalid-page': `Recorded page ${row.page} is outside this PDF (${row.pageCount} pages). Check the source and relink the correct page.`,
+  })[issue];
+
   const geometryStatus = status => ({ verified: 'Verified', changed: 'Changed PDF bytes',
     missing: 'Missing PDF', unreadable: 'Unreadable PDF', unverified: 'No recorded SHA-256',
     'missing-page': 'Recorded page missing' })[status] || 'Unavailable';
@@ -868,6 +897,26 @@ export default function SheetsPanel() {
                 <div>Recorded: <code>{row.recordedSha256 || 'None'}</code></div>
                 <div>Observed: <code>{row.observedSha256 || 'Unavailable'}</code></div>
               </details></Show>
+            </div>}</For>
+          </Show>
+        </div>
+        <div class="sheets-revision-summary" aria-label="Transmittal readiness review">
+          <button class="sheets-wide-action" type="button" onClick={checkTransmittalReadiness}
+            disabled={transmittalBusy() || !sheetRegister().sheets.length}>
+            {transmittalBusy() ? 'Checking current sheet sources…' : 'Check transmittal readiness'}
+          </button>
+          <Show when={transmittalReview()?.register === sheetRegister()}>
+            <div class="sheets-history-title">Current sheet source readiness · {transmittalReview().readyCount} of {transmittalReview().rows.length} ready</div>
+            <p class="sheets-suggestion-note">This read-only snapshot checks recorded PDF bytes and page numbers. Recheck before sending a set; this review does not create or change a package.</p>
+            <For each={transmittalReview().rows}>{(row) => <div class="sheets-summary-row">
+              <div class="sheets-summary-heading"><strong>{row.label}</strong><span>{transmittalStatus(row.status)}</span></div>
+              <div>{row.title || 'Untitled'} · Revision {row.revision || 'Unnumbered'} · {extractFileName(row.filePath)} · Page {row.page}{row.pageCount ? ` of ${row.pageCount}` : ''}</div>
+              <For each={row.issues}>{(issue) => <div class="sheets-metadata-error">{transmittalAction(issue, row)}</div>}</For>
+              <details class="sheets-summary-hashes"><summary>Source path and SHA-256</summary>
+                <div>Path: {row.filePath}</div>
+                <div>Recorded: <code>{row.recordedSha256 || 'None'}</code></div>
+                <div>Observed: <code>{row.observedSha256 || 'Unavailable'}</code></div>
+              </details>
             </div>}</For>
           </Show>
         </div>
