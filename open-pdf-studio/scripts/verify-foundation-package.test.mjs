@@ -26,6 +26,19 @@ test('extracted Foundation package carries exact notices and no private add-on f
     await mkdir(bin, { recursive: true });
     await writeFile(path.join(bin, 'ocudraw-community'), 'editor');
     await writeFile(path.join(bin, 'ocudraw-community-pdfium-worker'), 'worker');
+    const sourceRouteFile = path.join(resources, 'source', 'foundation-source.json');
+    await mkdir(path.dirname(sourceRouteFile), { recursive: true });
+    const repository = path.resolve(project, '..');
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repository, encoding: 'utf8' }).trim();
+    const version = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8')).version;
+    const sourceRepository = 'https://github.com/GhostTekz/oculith-foundation';
+    const sourceRoute = {
+      schemaVersion: 1, version, repository: sourceRepository, commit, tree,
+      sourceArchive: `${sourceRepository}/archive/${commit}.tar.gz`,
+      buildInstructions: `${sourceRepository}/blob/${commit}/docs/BUILDING.md`,
+    };
+    await writeFile(sourceRouteFile, JSON.stringify(sourceRoute));
     const icons = path.join(root, 'usr', 'share', 'icons', 'hicolor', '32x32', 'apps');
     await mkdir(icons, { recursive: true });
     await writeFile(path.join(icons, 'ocudraw-community.png'), 'public icon');
@@ -45,6 +58,16 @@ test('extracted Foundation package carries exact notices and no private add-on f
     execFileSync(process.execPath, [path.join(project, 'scripts/verify-foundation-package.mjs'),
       '--root', root, '--artifact', artifact, '--output', receipt]);
     assert.deepEqual(JSON.parse(await readFile(receipt, 'utf8')), result);
+
+    await writeFile(sourceRouteFile, JSON.stringify({ ...sourceRoute, commit: '0'.repeat(40),
+      sourceArchive: `${sourceRepository}/archive/${'0'.repeat(40)}.tar.gz`,
+      buildInstructions: `${sourceRepository}/blob/${'0'.repeat(40)}/docs/BUILDING.md` }));
+    await assert.rejects(verifyFoundationPackage(root), /source route differs from the auditing checkout/);
+    await writeFile(sourceRouteFile, JSON.stringify({ ...sourceRoute, version: '0.0.0' }));
+    await assert.rejects(verifyFoundationPackage(root), /source route differs from the auditing checkout/);
+    await rm(sourceRouteFile);
+    await assert.rejects(verifyFoundationPackage(root), /Missing packaged resource/);
+    await writeFile(sourceRouteFile, JSON.stringify(sourceRoute));
 
     const license = path.join(resources, 'notices', 'Oculith-Draw-LICENSE.md');
     await writeFile(license, 'incomplete license');
@@ -102,7 +125,7 @@ test('extracted Foundation package carries exact notices and no private add-on f
     const movedFonts = path.join(libraryDirectory, 'notice-fonts');
     await rename(fonts, movedFonts);
     await symlink(movedFonts, fonts, 'dir');
-    await assert.rejects(verifyFoundationPackage(root), /Suspicious symlink|Symlink in packaged notice path/);
+    await assert.rejects(verifyFoundationPackage(root), /Suspicious symlink|Symlink in packaged resource path/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

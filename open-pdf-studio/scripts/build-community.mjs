@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicRepository = 'https://github.com/GhostTekz/oculith-foundation';
@@ -43,8 +43,10 @@ export function foundationSourceRoute(root = path.resolve(project, '..')) {
 export function writeFoundationSourceRoute(root = path.resolve(project, '..')) {
   const destination = path.join(root, 'open-pdf-studio', 'public', 'foundation-source.json');
   const route = foundationSourceRoute(root);
-  if (route) writeFileSync(destination, `${JSON.stringify(route, null, 2)}\n`);
-  else rmSync(destination, { force: true });
+  // The bundle always needs this resource, including builds from source
+  // archives without Git metadata. An empty object makes About show its
+  // unrecorded-source fallback and cannot pass the installed release audit.
+  writeFileSync(destination, route ? `${JSON.stringify(route, null, 2)}\n` : '{}\n');
   return route;
 }
 

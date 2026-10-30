@@ -23,6 +23,9 @@
   },
   "bundle": {
     "externalBin": ["binaries/ocudraw-community-pdfium-worker"],
+    "resources": {
+      "../public/foundation-source.json": "source/foundation-source.json"
+    },
     "linux": { "deb": { "desktopTemplate": null } },
     "icon": [
       "community-icons/32x32.png",

@@ -6,6 +6,7 @@ import { createReadStream } from 'node:fs';
 import { lstat, readFile, readlink, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseFoundationSourceRoute } from '../js/core/foundation-source.js';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repository = path.resolve(project, '..');
@@ -57,15 +58,15 @@ function privateAddonPath(name) {
     || parts.some((part) => unlistedBinary.test(part) || privateExecutable.test(part));
 }
 
-async function rejectNoticeSymlink(resources, target, packageName) {
+async function rejectResourceSymlink(resources, target, packageName) {
   let current = resources;
   for (const part of path.relative(resources, target).split(path.sep)) {
     current = path.join(current, part);
     const info = await lstat(current).catch((error) => {
-      if (error.code === 'ENOENT') throw new Error(`Missing packaged notice: ${packageName}`);
+      if (error.code === 'ENOENT') throw new Error(`Missing packaged resource: ${packageName}`);
       throw error;
     });
-    if (info.isSymbolicLink()) throw new Error(`Symlink in packaged notice path: ${packageName}`);
+    if (info.isSymbolicLink()) throw new Error(`Symlink in packaged resource path: ${packageName}`);
   }
 }
 
@@ -99,6 +100,19 @@ export async function verifyFoundationPackage(root, { artifact } = {}) {
   requireOne(packageFiles, (file) => /^(?:ocudraw-community-pdfium-worker(?:\.exe)?)$/i.test(path.basename(file)),
     'Foundation PDFium worker');
 
+  const routeName = 'source/foundation-source.json';
+  const routeFile = path.join(resources, ...routeName.split('/'));
+  await rejectResourceSymlink(resources, routeFile, routeName);
+  const route = parseFoundationSourceRoute(JSON.parse(await readFile(routeFile, 'utf8')));
+  if (!route) throw new Error('Installed Foundation source route is invalid.');
+  const version = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8')).version;
+  const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
+  const sourceTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'],
+    { cwd: repository, encoding: 'utf8' }).trim();
+  if (route.version !== version || route.commit !== sourceCommit || route.tree !== sourceTree) {
+    throw new Error('Installed Foundation source route differs from the auditing checkout.');
+  }
+
   const config = JSON.parse(await readFile(path.join(tauri, 'tauri.conf.json'), 'utf8'));
   let notices = 0;
   for (const [source, destination] of Object.entries(config.bundle.resources)) {
@@ -110,7 +124,7 @@ export async function verifyFoundationPackage(root, { artifact } = {}) {
       const relative = sourceInfo.isDirectory() ? relativeUnix(sourcePath, sourceFile) : '';
       const packageName = relative ? `${destination}/${relative}` : destination;
       const target = path.join(resources, ...packageName.split('/'));
-      await rejectNoticeSymlink(resources, target, packageName);
+      await rejectResourceSymlink(resources, target, packageName);
       const targetInfo = await lstat(target).catch((error) => {
         if (error.code === 'ENOENT') throw new Error(`Missing packaged notice: ${packageName}`);
         throw error;
@@ -126,13 +140,9 @@ export async function verifyFoundationPackage(root, { artifact } = {}) {
   }
   if (!notices) throw new Error('No Foundation notice resources were checked.');
 
-  const version = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8')).version;
-  const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
-  const sourceTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'],
-    { cwd: repository, encoding: 'utf8' }).trim();
   return {
     product: 'Oculith Draw Foundation', version, sourceCommit, sourceTree,
-    sourceArchiveUrl: `https://github.com/GhostTekz/oculith-foundation/archive/${sourceCommit}.tar.gz`,
+    sourceArchiveUrl: route.sourceArchive,
     resources: resourcesRelative, noticeFilesChecked: notices,
     ...(artifact ? { artifactSha256: await sha256(path.resolve(artifact)) } : {}),
   };

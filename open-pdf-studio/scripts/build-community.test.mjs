@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -31,6 +31,7 @@ test('Foundation package uses the public executable and worker names', () => {
   const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.community.conf.json', import.meta.url)));
   assert.equal(config.mainBinaryName, 'ocudraw-community');
   assert.deepEqual(config.bundle.externalBin, ['binaries/ocudraw-community-pdfium-worker']);
+  assert.equal(config.bundle.resources['../public/foundation-source.json'], 'source/foundation-source.json');
 });
 
 test('public build embeds the exact clean source route and refuses a dirty revision', () => {
@@ -73,7 +74,8 @@ test('public build embeds the exact clean source route and refuses a dirty revis
     runGit('checkout', '--', 'open-pdf-studio/package.json');
     runGit('remote', 'set-url', 'origin', 'https://github.com/example/another.git');
     assert.equal(writeFoundationSourceRoute(root), null);
-    assert.equal(existsSync(generated), false);
+    assert.deepEqual(JSON.parse(readFileSync(generated, 'utf8')), {});
+    assert.equal(parseFoundationSourceRoute(JSON.parse(readFileSync(generated, 'utf8'))), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -84,6 +86,7 @@ test('a downloaded source archive without Git metadata remains buildable', () =>
   try {
     mkdirSync(path.join(root, 'open-pdf-studio', 'public'), { recursive: true });
     assert.equal(writeFoundationSourceRoute(root), null);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'open-pdf-studio', 'public', 'foundation-source.json'), 'utf8')), {});
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
