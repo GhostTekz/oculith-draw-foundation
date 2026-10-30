@@ -19,6 +19,7 @@ function harness() {
   const writes = [], owners = [];
   const deps = {
     state: { documents: [a, b] }, getActiveDocument: () => active,
+    undoStackOf: doc => doc.undoStack,
     showLoading() {}, hideLoading() {}, updateTabBar() {}, updateWindowTitle() {},
     getCachedPdfBytes: path => new TextEncoder().encode(path), setCachedPdfBytes() {},
     PDFDocument: { load: async bytes => ({ context: { largestObjectNumber: 1 }, getPages: () => [], catalog: { get: () => null, lookup: () => null }, save: async () => bytes, flush: async () => {} }) },
