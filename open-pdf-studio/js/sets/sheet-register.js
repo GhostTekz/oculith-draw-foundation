@@ -8,6 +8,10 @@ function key(value) {
   return clean(value).toLocaleLowerCase();
 }
 
+function fileName(filePath) {
+  return String(filePath ?? '').split(/[\\/]/).at(-1);
+}
+
 function sourceSha256(value) {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
@@ -175,7 +179,8 @@ export function filterSheets(register, query = '', revision = '') {
   const currentRevision = key(revision);
   return register.sheets.filter(sheet =>
     (!currentRevision || key(sheet.revision) === currentRevision)
-    && (!term || [sheet.label, sheet.title, sheet.revision, ...sheet.history.map(item => item.revision)]
+    && (!term || [sheet.label, sheet.title, sheet.revision, fileName(sheet.filePath),
+      ...sheet.history.flatMap(item => [item.revision, fileName(item.filePath)])]
       .some(value => key(value).includes(term))));
 }
 

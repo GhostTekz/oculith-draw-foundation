@@ -22,13 +22,18 @@ try {
     ],
   })));
   await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
+  await page.getByText('Start a drawing review').waitFor();
   await page.locator('.ws-host-left .ws-access-tab[data-panel="sheets"]').click();
   const rows = page.locator('#sheets-panel .sheets-row');
+  await rows.first().waitFor();
   assert.equal(await rows.count(), 3);
   await page.getByLabel('Search sheets').fill('lobby');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /A-101/);
   await page.getByLabel('Search sheets').fill('p0');
+  assert.equal(await rows.count(), 1);
+  assert.match(await rows.first().innerText(), /A-101/);
+  await page.getByLabel('Search sheets').fill('old.pdf');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /A-101/);
   await page.getByLabel('Filter current revision').selectOption('C');
@@ -37,6 +42,10 @@ try {
   await page.getByLabel('Search sheets').fill('');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /M-201/);
+  await page.getByLabel('Search sheets').fill('MECHANICAL.PDF');
+  assert.equal(await rows.count(), 1);
+  assert.match(await rows.first().innerText(), /M-201/);
+  await page.getByLabel('Search sheets').fill('');
 
   const viewCsvDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export current view CSV' }).click();

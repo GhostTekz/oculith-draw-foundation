@@ -144,14 +144,19 @@ test('bad manifests cannot silently replace the current set', () => {
   assert.throws(() => parseSheetRegister({ version: 9, sheets: [], name: 'Future' }), /supported/);
 });
 
-test('sheet search matches ID, title, and current or prior revision while current revision filter is exact', () => {
+test('sheet search matches ID, title, revisions, and current or earlier PDF names while current revision filter is exact', () => {
   const first = addSheet(createSheetRegister(), { filePath: '/plans/first.pdf', label: 'A-101', title: 'Lobby', revision: 'P0' });
-  const second = addSheet(first.register, { filePath: '/plans/second.pdf', label: 'M-201', title: 'Mechanical room', revision: 'C' });
+  const second = addSheet(first.register, { filePath: 'C:\\Drawings\\second.pdf', label: 'M-201', title: 'Mechanical room', revision: 'C' });
   const revised = replaceSheet(second.register, first.sheet.id, '/plans/revised.pdf', 'B', 'now', 3);
   assert.deepEqual(filterSheets(revised, 'a-101').map(sheet => sheet.id), [first.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'MECHANICAL').map(sheet => sheet.id), [second.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'b').map(sheet => sheet.id), [first.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'p0', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'REVISED.PDF').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'first.pdf', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'SECOND.PDF').map(sheet => sheet.id), [second.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'drawings'), []);
+  assert.deepEqual(filterSheets(revised, 'second.pdf', 'B'), []);
   assert.deepEqual(filterSheets(revised, 'lobby', 'C'), []);
   assert.deepEqual(filterSheets(revised, '', 'p0'), []);
   assert.deepEqual(filterSheets(revised, '  '), revised.sheets);
