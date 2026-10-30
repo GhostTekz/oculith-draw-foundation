@@ -213,7 +213,7 @@ The **Drawing Set** panel (Alt+2) is a register of sheets.
 - **Check set revision summary** reads the saved PDFs for every current sheet and its latest earlier revision. It shows the recorded page, revision and SHA-256 state for each source, including missing, changed or unverified files. A ready row can enter the same two-step **Compare** review. The summary does not change the register or any PDF.
 - The app records a fingerprint of each PDF. **Check files** reports each source as Present, Missing or Unavailable. When a file has moved, **Relink** points the sheet to an identical PDF after checking its fingerprint again at confirmation. Use **Record revision** for changed contents. Older manifests without a recorded fingerprint show a warning because the original PDF cannot be verified.
 - **Export drawing log** writes the list of sheets and revisions as CSV or PDF.
-- **Publish current sheets PDF** writes one PDF with the current revision of every sheet, in sheet order. It refuses a signed PDF, a PDF with form fields, and an overwrite of an existing file.
+- **Publish current sheets PDF** writes one PDF with the current revision of every sheet, in sheet order. The PDF includes sheet-number page labels and a bookmark for each sheet, with its title when present. It refuses a signed PDF, a PDF with form fields, and an overwrite of an existing file.
 - **Export set manifest** and **Import set manifest** save and load the register as a file.
 - **Slip sheet…** replaces sheets with a new revision and carries their markups. See [Slip sheets](#slip-sheets).
 
