@@ -97,10 +97,12 @@ export async function buildDrawingLogPdf(register, availability = {}, fontBytes,
     line(`Stable sheet ID: ${sheet.id}`, { size: 9, color: muted, indent: 12 });
     line(`Current | Revision ${sheet.revision || 'Unnumbered'} | Page ${sheet.page} | File status: ${availability[sheet.id] || 'Unknown'}`, { size: 9, indent: 12 });
     line(`PDF: ${sheet.filePath}`, { size: 9, indent: 12, gap: 7 });
+    line(`Recorded PDF SHA-256: ${sheet.sourceSha256 || 'Not recorded'}`, { size: 8, color: muted, indent: 12 });
     for (const prior of [...(sheet.history || [])].reverse()) {
       ensure(56);
       line(`Earlier | Revision ${prior.revision || 'Unnumbered'} | Page ${prior.page}`, { size: 9, color: muted, indent: 12 });
       line(`PDF: ${prior.filePath}`, { size: 9, indent: 12 });
+      line(`Recorded PDF SHA-256: ${prior.sourceSha256 || 'Not recorded'}`, { size: 8, color: muted, indent: 12 });
       line(`Replaced at: ${prior.replacedAt || 'Unknown'} | Historical file status: not checked`, { size: 9, color: muted, indent: 12, gap: 7 });
     }
     separator();

@@ -177,16 +177,20 @@ test('set navigation uses natural sheet ID order without changing manifest order
 });
 
 test('drawing log lists current and prior source records with the same stable sheet ID', () => {
-  const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', title: 'Lobby', revision: 'A', page: 1 });
-  const revised = replaceSheet(initial.register, initial.sheet.id, '/plans/revised.pdf', 'B', '2026-10-13T10:00:00Z', 3);
-  const moved = relinkSheet(revised, initial.sheet.id, '/plans/moved.pdf', 2);
-  const latest = replaceSheet(moved, initial.sheet.id, '/plans/final.pdf', 'C', '2026-10-14T10:00:00Z', 4);
+  const oldHash = 'a'.repeat(64);
+  const recentHash = 'b'.repeat(64);
+  const currentHash = 'c'.repeat(64);
+  const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', title: 'Lobby', revision: 'A', page: 1, sourceSha256: oldHash });
+  const revised = replaceSheet(initial.register, initial.sheet.id, '/plans/revised.pdf', 'B', '2026-10-13T10:00:00Z', 3, recentHash);
+  const moved = relinkSheet(revised, initial.sheet.id, '/plans/moved.pdf', 2, recentHash);
+  const latest = replaceSheet(moved, initial.sheet.id, '/plans/final.pdf', 'C', '2026-10-14T10:00:00Z', 4, currentHash);
   const csv = drawingLogCsv(latest, { [initial.sheet.id]: 'Present' });
   const [header, current, recentPrior, oldestPrior] = csv.slice(1).trimEnd().split('\r\n');
   assert.match(header, /"Stable sheet ID","Sheet ID","Title","Source"/);
-  assert.equal(current, `"${initial.sheet.id}","A-101","Lobby","Current","C","4","/plans/final.pdf","Present",""`);
-  assert.equal(recentPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","B","2","/plans/moved.pdf","","2026-10-14T10:00:00Z"`);
-  assert.equal(oldestPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","A","1","/plans/old.pdf","","2026-10-13T10:00:00Z"`);
+  assert.match(header, /"Recorded PDF SHA-256"/);
+  assert.equal(current, `"${initial.sheet.id}","A-101","Lobby","Current","C","4","/plans/final.pdf","Present","","${currentHash}"`);
+  assert.equal(recentPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","B","2","/plans/moved.pdf","","2026-10-14T10:00:00Z","${recentHash}"`);
+  assert.equal(oldestPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","A","1","/plans/old.pdf","","2026-10-13T10:00:00Z","${oldHash}"`);
   assert.equal(csv.includes('/plans/revised.pdf'), false);
   assert.deepEqual(parseSheetRegister(JSON.stringify(latest)), latest);
 });

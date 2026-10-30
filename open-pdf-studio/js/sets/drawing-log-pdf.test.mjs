@@ -22,8 +22,8 @@ async function reopen(bytes) {
 test('drawing log PDF reopens with stable IDs, current and historical sources, and honest status', async () => {
   const register = { name: 'Étage 旧 drawings', sheets: [{
     id: 'stable-a101', label: 'A-101', title: 'Lobby', revision: 'B', page: 3,
-    filePath: '/plans/revised.pdf', history: [{
-      revision: 'A', page: 1, filePath: '/plans/old.pdf', replacedAt: '2026-10-13T10:00:00Z',
+    filePath: '/plans/revised.pdf', sourceSha256: 'b'.repeat(64), history: [{
+      revision: 'A', page: 1, filePath: '/plans/old.pdf', replacedAt: '2026-10-13T10:00:00Z', sourceSha256: 'a'.repeat(64),
     }],
   }] };
   const bytes = await buildDrawingLogPdf(register, { 'stable-a101': 'Present' }, font, new Date('2026-10-13T20:00:00Z'));
@@ -35,6 +35,9 @@ test('drawing log PDF reopens with stable IDs, current and historical sources, a
   assert.match(report.text, /PDF: \/plans\/revised\.pdf/u);
   assert.match(report.text, /Earlier \| Revision A \| Page 1/u);
   assert.match(report.text, /PDF: \/plans\/old\.pdf/u);
+  assert.match(report.text, /Recorded PDF SHA-256:/u);
+  assert.match(report.text.replace(/\s/gu, ''), /b{64}/u);
+  assert.match(report.text.replace(/\s/gu, ''), /a{64}/u);
   assert.match(report.text, /Historical file status: not checked/u);
   assert.match(report.text, /CSV log retains the original text/u);
 });

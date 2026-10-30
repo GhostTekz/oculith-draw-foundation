@@ -246,12 +246,12 @@ function csvCell(value) {
 }
 
 export function drawingLogCsv(register, availability = {}) {
-  const columns = ['Stable sheet ID', 'Sheet ID', 'Title', 'Source', 'Revision', 'Page', 'PDF file', 'File status', 'Replaced at'];
+  const columns = ['Stable sheet ID', 'Sheet ID', 'Title', 'Source', 'Revision', 'Page', 'PDF file', 'File status', 'Replaced at', 'Recorded PDF SHA-256'];
   const rows = register.sheets.flatMap(sheet => [
     [sheet.id, sheet.label, sheet.title, 'Current', sheet.revision, sheet.page,
-      sheet.filePath, availability[sheet.id] || 'Unknown', ''],
+      sheet.filePath, availability[sheet.id] || 'Unknown', '', sheet.sourceSha256 || ''],
     ...[...sheet.history].reverse().map(item => [sheet.id, sheet.label, sheet.title, 'Prior',
-      item.revision, item.page, item.filePath, '', item.replacedAt]),
+      item.revision, item.page, item.filePath, '', item.replacedAt, item.sourceSha256 || '']),
   ]);
   return '\uFEFF' + [columns, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
