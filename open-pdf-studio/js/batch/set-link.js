@@ -182,13 +182,13 @@ export function planRegisteredSetLinks(scans, files, register, options = {}) {
     if (!registered.has(key)) candidates.set(value.label, { kind: 'unregistered', ...value });
   }
   const matcher = referenceMatcher(candidates, opts);
-  const sourceIds = new Map();
+  const sourceSheets = new Map();
   for (const sheet of sheets) {
     const file = byPath.get(keyOf(sheet.filePath));
     if (file === undefined) continue;
     const key = `${file}:${sheet.page}`;
-    if (!sourceIds.has(key)) sourceIds.set(key, []);
-    sourceIds.get(key).push(sheet.id);
+    if (!sourceSheets.has(key)) sourceSheets.set(key, []);
+    sourceSheets.get(key).push(sheet);
   }
   const links = [];
   const review = [];
@@ -205,11 +205,12 @@ export function planRegisteredSetLinks(scans, files, register, options = {}) {
       for (const item of items) {
         for (const hit of matcher.find(item.str)) {
           const candidate = hit.page;
-          const ids = sourceIds.get(`${file}:${page}`) || [];
-          const row = { file, page, sourceSheetId: ids.length === 1 ? ids[0] : null,
+          const sources = sourceSheets.get(`${file}:${page}`) || [];
+          const row = { file, page, sourceSheetId: sources.length === 1 ? sources[0].id : null,
             text: hit.text, label: hit.label, status: '', targetSheetId: null, target: null };
-          const sourceProblem = ids.length > 1 ? 'ambiguous-source'
-            : !ids.length ? 'unregistered-source' : changedFiles.has(file) ? 'changed-source' : '';
+          const sourceProblem = sources.length > 1 ? 'ambiguous-source'
+            : !sources.length ? 'unregistered-source' : changedFiles.has(file) ? 'changed-source'
+              : !sources[0].sourceSha256 ? 'unverified-source' : '';
           if (candidate.kind === 'unregistered') {
             row.status = candidate.places.length > 1 ? 'ambiguous-target' : 'unregistered-target';
             row.places = candidate.places;
@@ -225,6 +226,7 @@ export function planRegisteredSetLinks(scans, files, register, options = {}) {
             if (targetFile === undefined || !scans[targetFile]) row.status = 'missing-target';
             else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
               || targetSheet.page > scans[targetFile].pageCount) row.status = 'missing-page';
+            else if (!targetSheet.sourceSha256) row.status = 'unverified-target';
             else if (targetSheet.sourceSha256 && targetSheet.sourceSha256 !== scans[targetFile].fingerprint) row.status = 'changed-target';
             else row.target = { file: targetFile, page: targetSheet.page };
           }
