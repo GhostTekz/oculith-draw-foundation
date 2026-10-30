@@ -31,6 +31,8 @@ export default function SheetsPanel() {
   const [publishingSet, setPublishingSet] = createSignal(false);
   const [openingSheet, setOpeningSheet] = createSignal(false);
   const [slipReading, setSlipReading] = createSignal(false);
+  const [suggestingDetails, setSuggestingDetails] = createSignal(false);
+  const [detailSuggestion, setDetailSuggestion] = createSignal(null);
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
@@ -79,8 +81,43 @@ export default function SheetsPanel() {
 
   function commit(register) {
     saveSheetRegister(register);
+    setDetailSuggestion(null);
     setMessage('');
     void refreshAvailability();
+  }
+
+  async function suggestDetails() {
+    const register = sheetRegister();
+    const sheet = selected();
+    if (!sheet || suggestingDetails()) return;
+    setSuggestingDetails(true);
+    setDetailSuggestion(null);
+    setMessage('');
+    try {
+      const { suggestDetailsForSheet } = await import('../../../../sets/sheet-title-suggest-app.js');
+      const suggestion = await suggestDetailsForSheet(sheet);
+      if (sheetRegister() !== register || selectedId() !== sheet.id) return;
+      setDetailSuggestion({ ...suggestion, register, sheetId: sheet.id,
+        label: suggestion.label || sheet.label, title: suggestion.title || sheet.title,
+        found: !!(suggestion.label || suggestion.title) });
+      if (!suggestion.label && !suggestion.title) {
+        setMessage(suggestion.selectableText
+          ? 'No clearly labeled sheet number or title was found in the lower or right title-block area. Enter details manually.'
+          : 'No selectable PDF text was found in the lower or right title-block area. Enter details manually for image-only sheets.');
+      }
+    } catch (error) { setMessage(`Could not read title-block text: ${error.message}`); }
+    finally { setSuggestingDetails(false); }
+  }
+
+  function applyDetailSuggestion() {
+    const candidate = detailSuggestion();
+    const sheet = selected();
+    if (!candidate?.found || !sheet || candidate.sheetId !== sheet.id
+      || candidate.register !== sheetRegister()) return;
+    try {
+      commit(updateSheet(sheetRegister(), sheet.id, { label: candidate.label, title: candidate.title }));
+      setMessage('Sheet details updated from the reviewed suggestion.');
+    } catch (error) { setMessage(error.message); }
   }
 
   async function addPdfs() {
@@ -448,6 +485,30 @@ export default function SheetsPanel() {
             <div class="sheets-detail-title">Sheet details</div>
             <label class="sheets-field">Sheet ID<input aria-label="Sheet ID" value={sheet().label} onChange={(event) => edit(sheet().id, { label: event.currentTarget.value })} /></label>
             <label class="sheets-field">Title<input aria-label="Sheet title" value={sheet().title} onChange={(event) => edit(sheet().id, { title: event.currentTarget.value })} /></label>
+            <button class="sheets-wide-action" onClick={suggestDetails} disabled={suggestingDetails()}
+              title="Read selectable PDF text in the lower or right title-block area">
+              {suggestingDetails() ? 'Reading title-block text…' : 'Suggest from selectable PDF text'}
+            </button>
+            <Show when={detailSuggestion()?.sheetId === sheet().id && detailSuggestion()?.register === sheetRegister() ? detailSuggestion() : null}>
+              {(candidate) => <div class="sheets-candidate" aria-label="Review title-block suggestions">
+                <div class="sheets-history-title">Review PDF text suggestions</div>
+                <p class="sheets-suggestion-note">Only selectable text in the lower or right title-block area was read. A value needs a labeled field with no conflicting match. Check both fields before applying; image-only pages need manual entry.</p>
+                <label class="sheets-field">Suggested sheet ID<input aria-label="Suggested sheet ID" value={candidate().label}
+                  onInput={(event) => setDetailSuggestion(current => ({ ...current, label: event.currentTarget.value }))} /></label>
+                <small class="sheets-suggestion-evidence">{candidate().evidence.label || 'No labeled sheet number found; current ID retained.'}</small>
+                <label class="sheets-field">Suggested title<input aria-label="Suggested sheet title" value={candidate().title}
+                  onInput={(event) => setDetailSuggestion(current => ({ ...current, title: event.currentTarget.value }))} /></label>
+                <small class="sheets-suggestion-evidence">{candidate().evidence.title || 'No labeled title found; current title retained.'}</small>
+                <Show when={candidate().snippets.length}>
+                  <details class="sheets-suggestion-source"><summary>Source text snippets</summary>
+                    <For each={candidate().snippets}>{(line) => <div>{line}</div>}</For>
+                  </details>
+                </Show>
+                <div class="sheets-actions"><button onClick={applyDetailSuggestion}
+                  disabled={!candidate().found || (candidate().label === sheet().label && candidate().title === sheet().title)}>Apply suggestions</button>
+                  <button onClick={() => setDetailSuggestion(null)}>Dismiss</button></div>
+              </div>}
+            </Show>
             <label class="sheets-field">Revision<input aria-label="Revision" value={sheet().revision} onChange={(event) => edit(sheet().id, { revision: event.currentTarget.value })} /></label>
             <div class="sheets-history-title">Current source</div>
             <div class="sheets-source">{extractFileName(sheet().filePath)} · Page {sheet().page} · Revision {sheet().revision || 'Unnumbered'}</div>
