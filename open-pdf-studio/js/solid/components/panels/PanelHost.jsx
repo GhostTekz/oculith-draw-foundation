@@ -88,7 +88,15 @@ function HostEdge(props) {
 
 // Panel-specific header buttons (the ▾ menu holds the rest).
 // The Tool Chest and Markups List draw their own header (ownHeader).
-function headerActions() {
+function headerActions(panelId, t) {
+  if (panelId === 'thumbnails' && window.__TAURI__?.webviewWindow?.WebviewWindow) {
+    return [{
+      title: t('panelHost.detachThumbnails'), icon: lucide('external-link'),
+      run: () => import('../../../ui/panels/detached-thumbnails.js')
+        .then(({ openDetachedThumbnails }) => openDetachedThumbnails())
+        .catch((error) => console.warn('[thumbnails] could not open separate view:', error)),
+    }];
+  }
   return [];
 }
 

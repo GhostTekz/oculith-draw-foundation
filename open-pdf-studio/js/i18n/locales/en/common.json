@@ -465,6 +465,8 @@
     "markupsList": "Markups List",
     "quantities": "Quantities",
     "toolChestSettings": "Tool Chest settings…",
+    "detachThumbnails": "Open thumbnails in a separate window",
+    "dragThumbnails": "Drag thumbnails outside the app to open a separate window",
     "float": "Float",
     "floating": "The Tool Chest is floating.",
     "dock": "Dock here",

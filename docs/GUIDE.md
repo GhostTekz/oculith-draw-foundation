@@ -103,6 +103,7 @@ Panels live in three hosts: left, right and bottom. Each host has an access bar 
 - **Window ▸ Hide Panels** (Shift+F4) hides all hosts. **Auto-Hide Panel Access** hides the access bars while their panels are closed.
 - The header of each panel shows its title and a ▾ panel menu with panel-specific items.
 - Thumbnails and Tool Chest have a size slider in the footer.
+- On desktop, drag the Thumbnails header outside the application window, or use its separate-window button, to open a live thumbnail view beside the drawing. Clicking a page there navigates the drawing window; the view follows the active document and closes independently.
 
 The panels are:
 

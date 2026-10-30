@@ -7,7 +7,8 @@ import { composeAddons, resolvePluginEntries } from './editions/compose-addons.j
 
 // The edition's word under the monolith: the last word of its product name.
 const editionWord = (edition) => edition.launchWord || String(edition.productName || '').split(' ').pop();
-const secondaryWindow = new URLSearchParams(location.search).get('view') === 'printqueue';
+const view = new URLSearchParams(location.search).get('view');
+const secondaryWindow = view === 'printqueue';
 
 async function findPlugins() {
   const tauri = window.__TAURI__?.core;
@@ -97,6 +98,18 @@ async function installEdition(found) {
 }
 
 (async () => {
+  if (view === 'thumbnails') {
+    document.getElementById('launch-screen')?.remove();
+    // A thumbnail view only receives images and navigation from its drawing
+    // window; loading the editor here would start unused PDF and UI modules.
+    const [, { render }, { default: DetachedThumbnailsWindow }] = await Promise.all([
+      import('./i18n/config.js'),
+      import('solid-js/web'),
+      import('./solid/components/DetachedThumbnailsWindow.jsx'),
+    ]);
+    render(() => DetachedThumbnailsWindow(), document.getElementById('app-root'));
+    return;
+  }
   if (secondaryWindow) document.getElementById('launch-screen')?.remove();
   else startLaunchScreen();
   const ready = new Promise((resolve) => {
