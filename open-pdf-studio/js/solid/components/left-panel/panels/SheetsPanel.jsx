@@ -12,6 +12,9 @@ import { state } from '../../../../core/state.js';
 import { openDialog } from '../../../stores/dialogStore.js';
 import { useTranslation } from '../../../../i18n/useTranslation.js';
 import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
+import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
+import { startCompare } from '../../../../compare/compare-store.js';
+import { getPdfBytes } from '../../../../pdf/loader.js';
 
 function safeName(name) {
   return (name || 'drawing-set').replace(/[\\/:*?"<>|]/g, '_');
@@ -33,6 +36,8 @@ export default function SheetsPanel() {
   const [slipReading, setSlipReading] = createSignal(false);
   const [suggestingDetails, setSuggestingDetails] = createSignal(false);
   const [detailSuggestion, setDetailSuggestion] = createSignal(null);
+  const [compareCandidate, setCompareCandidate] = createSignal(null);
+  const [compareBusy, setCompareBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
@@ -82,6 +87,7 @@ export default function SheetsPanel() {
   function commit(register) {
     saveSheetRegister(register);
     setDetailSuggestion(null);
+    setCompareCandidate(null);
     setMessage('');
     void refreshAvailability();
   }
@@ -354,6 +360,72 @@ export default function SheetsPanel() {
 
   function openSheet(sheet) { return openSource(sheet, sheet); }
 
+  async function readCompareSource(path) {
+    if (isTauri()) await invoke('allow_fs_scope', { path });
+    return readBinaryFile(path);
+  }
+
+  async function reviewRevisionCompare(sheetId, historyIndex) {
+    if (compareBusy()) return;
+    const register = sheetRegister();
+    setCompareCandidate(null);
+    setCompareBusy(true);
+    setMessage('');
+    try {
+      const verified = await verifySheetRevisionCompare(register, sheetId, historyIndex, readCompareSource);
+      if (sheetRegister() !== register || selectedId() !== sheetId) return;
+      setCompareCandidate({ register, sheetId, historyIndex,
+        old: { filePath: verified.old.filePath, page: verified.old.page, revision: verified.old.revision },
+        current: { filePath: verified.current.filePath, page: verified.current.page, revision: verified.current.revision } });
+    } catch (error) { setMessage(`Could not compare revisions: ${error.message}`); }
+    finally { setCompareBusy(false); }
+  }
+
+  async function openReviewedComparison() {
+    const candidate = compareCandidate();
+    if (!candidate || compareBusy() || sheetRegister() !== candidate.register || selectedId() !== candidate.sheetId) return;
+    setCompareBusy(true);
+    setMessage('');
+    try {
+      // Read again at confirmation; the preview never authorizes stale bytes.
+      const verified = await verifySheetRevisionCompare(candidate.register, candidate.sheetId,
+        candidate.historyIndex, readCompareSource, { checkPages: false });
+      if (sheetRegister() !== candidate.register || selectedId() !== candidate.sheetId
+        || compareCandidate() !== candidate) return;
+      const sources = [verified.old, verified.current];
+      for (const source of sources) {
+        const open = state.documents.find(doc => doc?.filePath === source.filePath);
+        if (open?.modified) throw new Error(`${extractFileName(source.filePath)} has unsaved edits. Save or close that tab before comparing saved revisions.`);
+        if (open?._isLoading) throw new Error(`${extractFileName(source.filePath)} is still opening. Try again when its tab is ready.`);
+        if (open?.pdfDoc) {
+          const loaded = await getPdfBytes(source.filePath);
+          if (!loaded || await fingerprintPdfBytes(loaded) !== source.sourceSha256) {
+            throw new Error(`${extractFileName(source.filePath)} is open with different bytes. Close and reopen that tab before comparing.`);
+          }
+        }
+      }
+      if (sheetRegister() !== candidate.register || compareCandidate() !== candidate) return;
+      for (const source of sources) {
+        const { index } = createTab(source.filePath, false);
+        await loadPDFIfNeeded(source.filePath, index, isTauri() ? null : source.bytes);
+        const open = state.documents[index];
+        const loaded = await getPdfBytes(source.filePath);
+        if (!open?.pdfDoc || !loaded || await fingerprintPdfBytes(loaded) !== source.sourceSha256) {
+          throw new Error(`${extractFileName(source.filePath)} could not be opened from its verified saved bytes.`);
+        }
+      }
+      if (sources.some(source => state.documents.find(doc => doc?.filePath === source.filePath)?.modified)) {
+        throw new Error('A compared PDF gained unsaved edits. Save or close that tab before comparing saved revisions.');
+      }
+      if (sheetRegister() !== candidate.register || compareCandidate() !== candidate
+        || selectedId() !== candidate.sheetId) return;
+      startCompare({ oldFilePath: verified.old.filePath, newFilePath: verified.current.filePath,
+        oldPage: verified.old.page, newPage: verified.current.page, mode: 'side' });
+      setCompareCandidate(null);
+    } catch (error) { setMessage(`Could not compare revisions: ${error.message}`); }
+    finally { setCompareBusy(false); }
+  }
+
   function navigateSheet(direction) {
     if (openingSheet()) return;
     const target = adjacentSheet(visibleSheets(), selectedId(), direction);
@@ -361,6 +433,7 @@ export default function SheetsPanel() {
     setSelectedId(target.id);
     setNextRevision('');
     setSourceCandidate(null);
+    setCompareCandidate(null);
     void openSheet(target);
   }
 
@@ -483,7 +556,7 @@ export default function SheetsPanel() {
             : 'Add PDFs to register every page in the drawing set. Edit sheet IDs and revisions below.'}</p>}>
             {(sheet) => <button type="button" class={`sheets-row${selectedId() === sheet.id ? ' selected' : ''}`}
               aria-pressed={selectedId() === sheet.id}
-              onClick={() => { setSelectedId(sheet.id); setNextRevision(''); setSourceCandidate(null); }}
+              onClick={() => { setSelectedId(sheet.id); setNextRevision(''); setSourceCandidate(null); setCompareCandidate(null); }}
               onDblClick={() => openSheet(sheet)} title={sheet.filePath}>
               <strong>{sheet.label}</strong><span>{sheet.revision || '—'}</span>
               <small>{sheet.title || `${extractFileName(sheet.filePath)} · Page ${sheet.page}`}{availability()[sheet.id] === 'Missing' ? ' · Missing file' : availability()[sheet.id] === 'Unavailable' ? ' · Access unavailable' : ''}</small>
@@ -502,6 +575,7 @@ export default function SheetsPanel() {
             <Show when={detailSuggestion()?.sheetId === sheet().id && detailSuggestion()?.register === sheetRegister() ? detailSuggestion() : null}>
               {(candidate) => <div class="sheets-candidate" aria-label="Review title-block suggestions">
                 <div class="sheets-history-title">Review PDF text suggestions</div>
+                <div class="sheets-source">Source: {extractFileName(sheet().filePath)} · Page {sheet().page}</div>
                 <p class="sheets-suggestion-note">Only selectable text in the lower or right title-block area was read. A value needs a labeled field with no conflicting match. Check both fields before applying; image-only pages need manual entry.</p>
                 <label class="sheets-field">Suggested sheet ID<input aria-label="Suggested sheet ID" value={candidate().label}
                   onInput={(event) => setDetailSuggestion(current => ({ ...current, label: event.currentTarget.value }))} /></label>
@@ -560,7 +634,20 @@ export default function SheetsPanel() {
                   onClick={() => openSource(sheet(), item, true)} disabled={openingSheet()}>Open</button>
                 <button type="button" aria-label={`Relink ${sheet().label} earlier revision ${item.revision || 'Unnumbered'}`}
                   onClick={() => chooseHistoricalSource(sheet().id, sheet().history.length - reverseIndex() - 1)}>Relink</button>
+                <button type="button" aria-label={`Compare ${sheet().label} earlier revision ${item.revision || 'Unnumbered'} to current`}
+                  onClick={() => reviewRevisionCompare(sheet().id, sheet().history.length - reverseIndex() - 1)}
+                  disabled={compareBusy()}>Compare</button>
               </div>}</For>
+            </Show>
+            <Show when={compareCandidate()?.sheetId === sheet().id && compareCandidate()?.register === sheetRegister()}>
+              <div class="sheets-candidate" aria-label="Review sheet revision comparison">
+                <div class="sheets-history-title">Compare {sheet().label} revisions</div>
+                <div class="sheets-source">Earlier revision {compareCandidate().old.revision || 'Unnumbered'} · {extractFileName(compareCandidate().old.filePath)} · Page {compareCandidate().old.page}</div>
+                <div class="sheets-source">Current revision {compareCandidate().current.revision || 'Unnumbered'} · {extractFileName(compareCandidate().current.filePath)} · Page {compareCandidate().current.page}</div>
+                <p class="sheets-suggestion-note">Both saved PDFs matched their recorded fingerprints. Confirm to open this page pair in Compare. The drawing set will not change.</p>
+                <div class="sheets-actions"><button onClick={openReviewedComparison} disabled={compareBusy()}>{compareBusy() ? 'Checking PDFs…' : 'Open comparison'}</button>
+                  <button onClick={() => setCompareCandidate(null)} disabled={compareBusy()}>Cancel</button></div>
+              </div>
             </Show>
           </div>}
         </Show>

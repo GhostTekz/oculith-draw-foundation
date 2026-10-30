@@ -39,6 +39,7 @@ try {
   await rows.first().click();
   await page.getByRole('button', { name: 'Suggest from selectable PDF text' }).click();
   await page.getByLabel('Review title-block suggestions').waitFor();
+  assert.match(await page.getByLabel('Review title-block suggestions').innerText(), /Source: title-block\.pdf · Page 1/u);
   assert.equal(await page.getByLabel('Suggested sheet ID').inputValue(), 'A-101');
   assert.equal(await page.getByLabel('Suggested sheet title').inputValue(), 'FIRST FLOOR PLAN');
   assert.match(await page.getByText('SHEET NO. / A-101').textContent(), /A-101/u);
@@ -57,6 +58,7 @@ try {
   await rows.last().click();
   await page.getByRole('button', { name: 'Suggest from selectable PDF text' }).click();
   await page.getByRole('status').filter({ hasText: 'No selectable PDF text was found' }).waitFor();
+  assert.match(await page.getByLabel('Review title-block suggestions').innerText(), /Source: title-block\.pdf · Page 2/u);
   assert.equal(await page.getByRole('button', { name: 'Apply suggestions' }).isDisabled(), true);
   assert.deepEqual(await register(), applied, 'blank page cannot change the drawing set automatically');
   assert.deepEqual(errors, []);
