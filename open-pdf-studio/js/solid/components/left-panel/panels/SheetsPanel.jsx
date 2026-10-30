@@ -14,6 +14,7 @@ import { useTranslation } from '../../../../i18n/useTranslation.js';
 import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
 import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
 import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
+import { buildSetPageGeometryAudit } from '../../../../sets/set-page-geometry.js';
 import { applySheetMetadataReview, sheetMetadataReviewIssues } from '../../../../sets/sheet-metadata-review.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
@@ -42,6 +43,8 @@ export default function SheetsPanel() {
   const [compareBusy, setCompareBusy] = createSignal(false);
   const [revisionSummary, setRevisionSummary] = createSignal(null);
   const [summaryBusy, setSummaryBusy] = createSignal(false);
+  const [geometryAudit, setGeometryAudit] = createSignal(null);
+  const [geometryBusy, setGeometryBusy] = createSignal(false);
   const [metadataReview, setMetadataReview] = createSignal(null);
   const [metadataBusy, setMetadataBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
@@ -502,6 +505,24 @@ export default function SheetsPanel() {
     finally { setSummaryBusy(false); }
   }
 
+  async function checkPageGeometry() {
+    if (geometryBusy()) return;
+    const register = sheetRegister();
+    setGeometryAudit(null);
+    setGeometryBusy(true);
+    setMessage('');
+    try {
+      const audit = await buildSetPageGeometryAudit(register, readCompareSource);
+      if (sheetRegister() === register) setGeometryAudit(audit);
+    } catch (error) { setMessage(`Could not check page geometry: ${error.message}`); }
+    finally { setGeometryBusy(false); }
+  }
+
+  const geometryStatus = status => ({ verified: 'Verified', changed: 'Changed PDF bytes',
+    missing: 'Missing PDF', unreadable: 'Unreadable PDF', unverified: 'No recorded SHA-256',
+    'missing-page': 'Recorded page missing' })[status] || 'Unavailable';
+  const boxText = box => `${box.x.toFixed(2)}, ${box.y.toFixed(2)} · ${box.width.toFixed(2)} × ${box.height.toFixed(2)} pt`;
+
   async function reviewFromSummary(row) {
     if (revisionSummary()?.register !== sheetRegister() || row.status !== 'ready') return;
     setQuery('');
@@ -795,6 +816,38 @@ export default function SheetsPanel() {
                 <button type="button" aria-label={`Review ${row.label} latest revision comparison`}
                   disabled={compareBusy()} onClick={() => reviewFromSummary(row)}>Review comparison</button>
               </Show>
+            </div>}</For>
+          </Show>
+        </div>
+        <div class="sheets-revision-summary">
+          <button class="sheets-wide-action" type="button" onClick={checkPageGeometry}
+            disabled={geometryBusy() || !sheetRegister().sheets.length}>
+            {geometryBusy() ? 'Checking page geometry…' : 'Check page geometry'}
+          </button>
+          <Show when={geometryAudit()?.register === sheetRegister()}>
+            <div class="sheets-history-title">Current registered pages</div>
+            <p class="sheets-suggestion-note">Read-only measurements from saved PDFs. Dimensions appear only when the full PDF matches its recorded SHA-256. Page-box differences describe PDF geometry; they are not automatic errors.</p>
+            <For each={geometryAudit().rows}>{(row) => <div class="sheets-summary-row">
+              <div class="sheets-summary-heading"><strong>{row.label}</strong><span>{geometryStatus(row.status)}</span></div>
+              <div>{extractFileName(row.filePath)} · Page {row.page}</div>
+              <Show when={row.geometry}>
+                <div>Displayed {row.geometry.widthInches.toFixed(2)} × {row.geometry.heightInches.toFixed(2)} in · Rotation {row.geometry.rotation}°</div>
+                <div>{row.geometry.differingBoxes.length
+                  ? `Boxes differing from Media: ${row.geometry.differingBoxes.join(', ')}`
+                  : 'Media, Crop, Bleed, Trim and Art boxes coincide'}</div>
+                <details class="sheets-summary-hashes"><summary>Page boxes and source SHA-256</summary>
+                  <For each={['Media', 'Crop', 'Bleed', 'Trim', 'Art']}>{(name) =>
+                    <div>{name}: {boxText(row.geometry.boxes[name.toLowerCase()])}</div>}</For>
+                  <div>Box coordinates: x, y · width × height in PDF points</div>
+                  <div>Recorded: <code>{row.recordedSha256}</code></div>
+                  <div>Observed: <code>{row.observedSha256}</code></div>
+                </details>
+              </Show>
+              <Show when={!row.geometry}><details class="sheets-summary-hashes"><summary>Source evidence</summary>
+                <div>Path: {row.filePath}</div>
+                <div>Recorded: <code>{row.recordedSha256 || 'None'}</code></div>
+                <div>Observed: <code>{row.observedSha256 || 'Unavailable'}</code></div>
+              </details></Show>
             </div>}</For>
           </Show>
         </div>
