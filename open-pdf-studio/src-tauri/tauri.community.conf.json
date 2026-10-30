@@ -41,6 +41,12 @@
         "name": "OcuDrawCommunity.pdf",
         "description": "Portable Document Format",
         "role": "Editor"
+      },
+      {
+        "ext": ["ocaddon"],
+        "name": "OcuDrawCommunity.addon",
+        "description": "Oculith Draw add-on file",
+        "role": "Viewer"
       }
     ]
   },

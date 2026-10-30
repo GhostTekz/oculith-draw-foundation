@@ -94,8 +94,9 @@ import App from './solid/App.jsx';
 import { addRecentFile } from './mobile/recent-files.js';
 
 // Tauri API
-import { isTauri, isMobile, isDevMode, getOpenedFiles, loadSession, saveSession, fileExists, isDefaultPdfApp, openDefaultAppsSettings, extractFileName } from './core/platform.js';
+import { setWindowTitle, isTauri, isMobile, isDevMode, getOpenedFiles, loadSession, saveSession, fileExists, isDefaultPdfApp, openDefaultAppsSettings, extractFileName } from './core/platform.js';
 import { sessieHerstelBeleid } from './core/sessie-herstel.js';
+import { setupAddonFileOpen } from './core/addon-file-install.js';
 
 assertEditionContract(edition);
 for (const template of edition.symbolTemplates) registerTemplate(template);
@@ -184,6 +185,8 @@ function disableBrowserShortcuts() {
 // Initialize application
 async function init() {
   document.title = edition.productName;
+  // The main window's system title; other windows keep their own.
+  if (!new URLSearchParams(location.search).get('view')) setWindowTitle(edition.productName);
   document.querySelector('link[rel="icon"]')?.setAttribute('href', edition.faviconPath);
   document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute('href', edition.appleIconPath);
   // Dev: versienummer live uit package.json zodat de titelbalk na een
@@ -357,6 +360,9 @@ async function init() {
   }
   pendingOpenFiles = [];
   appReady = true;
+
+  // Add-on files opened with the app: ask, install, then offer a restart.
+  setupAddonFileOpen();
 
   // Detached-window mode: a detached document window is its OWN app process,
   // launched by `spawn_window_with_pdf` with the PDF path as a command-line

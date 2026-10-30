@@ -186,6 +186,19 @@
     </div>
     <div class="ls-side" id="lsSide"></div>
   </div>
+  <script>
+    // The word and name of the composition that last started (boot.js keeps
+    // them), shown before the modules load so the screen opens as it finishes.
+    try {
+      var launchIdentity = JSON.parse(localStorage.getItem('ocudraw.launchIdentity') || 'null');
+      if (launchIdentity && typeof launchIdentity.word === 'string' && launchIdentity.word) {
+        var launchWord = document.getElementById('lsWord');
+        launchWord.textContent = launchIdentity.word;
+        launchWord.classList.add('ls-shown');
+      }
+      if (launchIdentity && typeof launchIdentity.title === 'string' && launchIdentity.title) document.title = launchIdentity.title;
+    } catch (_) {}
+  </script>
 
   <script>
     // Boot diagnostics — installed BEFORE the module graph loads so even

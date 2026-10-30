@@ -167,7 +167,9 @@ The add-on can expose its tool with a toolbar item or file command whose `run` c
 
 ## Build and manage a package
 
-In the desktop editor, open **Extensions → Local add-ons** and choose **Install package folder…**. Select the folder containing `manifest.json` and the files named in it. The editor verifies the package, copies it into its per-user data directory, and enables it. The same panel lists installed packages and lets you enable, disable, or remove them. It shows when a package is invalid or incompatible with this editor version. Changes take effect after restarting the editor. A package receives the editor's access to local files, so install only packages from a source you trust.
+In the desktop editor, open **Extensions → Local add-ons** and choose **Install package folder…**. Select the folder containing `manifest.json` and the files named in it. The editor verifies the package, copies it into its per-user data directory, and enables it. The same button also accepts a full edition package folder (schema version 1); see [Add-ons](ADDONS.md). The same panel lists installed packages and lets you enable, disable, or remove them. It shows when a package is invalid or incompatible with this editor version. Changes take effect after restarting the editor; the panel offers **Restart now** after a change. A package receives the editor's access to local files, so install only packages from a source you trust.
+
+To install from a single download, choose **Install add-on file…** and select an `.ocaddon` (or `.zip`) file, or open the file with the desktop app and confirm. An add-on file can carry several packages; the editor extracts and verifies all of them before it installs any. Build one from verified package folders with `node scripts/pack-addon-file.mjs --package <folder> [--package <folder> ...] --output <file>.ocaddon`. [Add-ons](ADDONS.md#add-on-files) describes the file layout and the checks.
 
 The command line manager is also available for development or scripted installation. Close the editor before using it to change packages. From `open-pdf-studio/`, make a directory containing `plugin.js` and optional `plugin.css`, then run:
 

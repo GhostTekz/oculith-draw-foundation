@@ -14,9 +14,33 @@ An add-on may request `js/sets/register-context.js` from the host when that modu
 
 ## Install, update, and remove
 
-The full edition package belongs under `addons/active/` in the app's effective per-user data directory, with `manifest.json` and all files named by its `files` map inside that directory. An add-on distributor can provide an installer that stages and verifies these files. To remove it, close Foundation and remove `addons/active/`; the editor then starts with its built-in defaults and any enabled independent packages. To update it, replace the whole active package while the app is closed. Installation, replacement, and removal take effect after restarting the app because selection is fixed for each process. See [Independent add-on packages](ADDON-PACKAGES.md) for their separate builder and installer.
+The full edition package belongs under `addons/active/` in the app's effective per-user data directory, with `manifest.json` and all files named by its `files` map inside that directory.
+
+The editor installs it for you. Open **Extensions → Local add-ons** and choose **Install add-on file…** for an add-on file (see below), or **Install package folder…** for an unpacked package folder; the editor recognises schema version 1 and installs it as the edition package. It checks the package with the same rules the loader uses at startup, copies the manifest and every listed file (including subfolders such as `bin/`, and keeping executable permissions on Unix) into a staging folder inside `addons/`, checks the copy again, and then swaps it into `addons/active/`. The previous package is kept as `addons/.previous-active/` until the new one is in place and is restored if the swap is interrupted. The panel shows the installed edition package with its ID and version and a **Remove** action. Removal returns the editor to its built-in defaults and any enabled independent packages. Installation, replacement, and removal take effect after restarting the app because selection is fixed for each process; the panel offers **Restart now** after a change.
+
+You can still remove `addons/active/` by hand while the app is closed. See [Independent add-on packages](ADDON-PACKAGES.md) for their builder and installer.
+
+## Add-on files
+
+An add-on file (`.ocaddon`; `.zip` is accepted too) is a zip archive that carries one or more verified packages, so a distributor can ship an add-on as a single download. It holds either one package at its root (a `manifest.json` next to the package files) or one folder per package at the top level, each with its own `manifest.json`. A schema version 1 package is installed as the edition package; schema versions 2–4 are installed as independent packages. An add-on file can carry at most one edition package and 16 packages.
+
+Opening an add-on file with the desktop app (for example by double-clicking it once the app is associated with `.ocaddon`) asks for confirmation, installs it, and offers a restart. The editor extracts the whole file into a staging folder and verifies every package before it installs any of them. It rejects absolute paths, `..` components, drive names, links and other special files, encrypted or repeated entries (including names that differ only in case), more than 512 entries, files a manifest does not list, a manifest over 1 MiB, `plugin.js` over 64 MiB, `plugin.css` over 16 MiB, any other file over 128 MiB, and more than 512 MiB in total. If writing to disk fails after verification, the error names the packages that were already installed.
+
+To build an add-on file from package folders, run from `open-pdf-studio/`:
+
+```sh
+node scripts/pack-addon-file.mjs --package ./my-edition-package --package ./my-addon-package --output ./my-addon.ocaddon
+```
+
+The builder verifies each folder first, refuses unlisted files and duplicate IDs, and writes a deterministic archive: sorted entries, a fixed timestamp, and Unix permissions that keep native files executable. One package goes at the archive root; several go into one folder per package ID.
 
 The native helper, when supplied, is part of the same selected package and is hash checked before use. Foundation itself ships no add-on implementation or helper.
+
+## A package included with an installation
+
+A distributor may build the unchanged Foundation source into its own installer with one full edition package already inside. The package goes in the installer's resources as `edition-package/` (the same files as `addons/active/`), for example with a Tauri configuration overlay that adds the resource and sets the distributor's product name, identifier and icons. At start-up the editor checks that package exactly like an installed one (versions, target, and the SHA-256 of every file) and loads it in place; its native helper runs from the same verified directory. Nothing is copied into the user's profile.
+
+A package the user installs in `addons/active/` takes precedence over the included one. **Local add-ons** lists the included package as *Included with this installation*; it is removed by uninstalling that installer, not from the app. The public Foundation installers include no package.
 
 ## Documents and licence
 

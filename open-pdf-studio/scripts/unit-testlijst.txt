@@ -492,3 +492,4 @@ js/sets/set-revision-summary.test.mjs
 js/sets/sheet-metadata-review.test.mjs
 js/sets/sheet-revision-compare.test.mjs
 js/sets/sheet-title-suggest.test.mjs
+scripts/pack-addon-file.test.mjs

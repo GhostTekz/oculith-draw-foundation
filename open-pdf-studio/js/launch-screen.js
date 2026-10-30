@@ -19,6 +19,12 @@ export function setEdition(word) {
   el.classList.add('ls-shown');
 }
 
+/** Keep the started composition's word and name for the next launch's first paint (index.html). */
+export function rememberIdentity(word, title) {
+  try { localStorage.setItem('ocudraw.launchIdentity', JSON.stringify({ word, title })); }
+  catch { /* the next launch shows the word once the composition loads */ }
+}
+
 /** What is loading, under the edition. */
 export function setStatus(text) {
   const el = document.getElementById('lsStatus');

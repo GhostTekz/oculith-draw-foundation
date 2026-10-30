@@ -146,6 +146,10 @@ export default function AboutDialog() {
             </div>
           )}
         </Show>
+        {/* An installed edition's own note on what the editor licence covers. */}
+        <Show when={foundationSource() && edition.id !== 'foundation' && edition.about.sourceNote}>
+          <p class="bs-about-source-note">{edition.about.sourceNote}</p>
+        </Show>
 
         <div class="bs-about-footer">
           <p class="bs-about-copyright">{edition.about.copyright || t('aboutPanel.copyright')}</p>

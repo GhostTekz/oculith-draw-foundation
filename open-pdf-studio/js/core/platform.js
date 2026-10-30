@@ -79,6 +79,16 @@ function getTauriCore() {
 }
 
 // Window controls
+let windowTitle = '';
+
+/** The system window title (the native title set at build time names Foundation). */
+export async function setWindowTitle(title) {
+  const win = getTauriWindow();
+  if (!win || !title || title === windowTitle) return;
+  windowTitle = title;
+  try { await win.getCurrentWindow().setTitle(title); } catch { windowTitle = ''; }
+}
+
 export async function minimizeWindow() {
   if (!isTauri()) return;
   const win = getTauriWindow();
