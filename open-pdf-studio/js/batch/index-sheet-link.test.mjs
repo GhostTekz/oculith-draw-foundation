@@ -63,6 +63,10 @@ test('index links cover only exact row IDs, and create guarded local and relativ
     files, register, source), /index PDF is missing or changed/u);
   assert.throws(() => planIndexSheetLinks(scans, [files[0], { ...files[0], path: '/set/index.pdf' }, files[1]],
     register, source), /paths that differ only by case/u);
+  assert.throws(() => planIndexSheetLinks(scans, [{ ...files[0], path: '/set/index.pdf' }, files[1]],
+    register, source), /index PDF is missing or changed/u);
+  assert.equal(planIndexSheetLinks(scans, [files[0], { ...files[1], path: '/set/s.pdf' }],
+    register, source).review.find(row => row.label === 'S-201').status, 'missing-target');
   assert.throws(() => planIndexSheetLinks(scans, files,
     { ...register, sheets: [...register.sheets, { ...register.sheets[2], id: 'case', filePath: '/set/s.pdf' }] },
     source), /Registered PDF paths differ only by case/u);

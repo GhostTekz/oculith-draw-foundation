@@ -287,7 +287,8 @@ export function planIndexSheetLinks(scans, files, register, indexSource, options
   });
   const file = byPath.get(keyOf(source.filePath));
   const scan = scans?.[file];
-  if (file === undefined || !scan || scan.fingerprint !== source.sourceSha256
+  if (file === undefined || files[file].path !== source.filePath
+    || !scan || scan.fingerprint !== source.sourceSha256
     || source.page < 1 || source.page > scan.pageCount) {
     throw new Error('The selected index PDF is missing or changed. Review its source first.');
   }
@@ -324,7 +325,8 @@ export function planIndexSheetLinks(scans, files, register, indexSource, options
     const row = { file, page: source.page, sourceSheetId: source.id,
       text: match.evidence, label: targetSheet.label, lineY: match.y, targetSheetId: targetSheet.id,
       targetPath: targetSheet.filePath, targetPage: targetSheet.page, status: '' };
-    if (targetFile === undefined || !targetScan) row.status = 'missing-target';
+    if (targetFile === undefined || files[targetFile].path !== targetSheet.filePath
+      || !targetScan) row.status = 'missing-target';
     else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
       || targetSheet.page > targetScan.pageCount) row.status = 'missing-page';
     else if (!targetSheet.sourceSha256) row.status = 'unverified-target';
