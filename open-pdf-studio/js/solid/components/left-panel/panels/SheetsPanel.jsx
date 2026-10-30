@@ -384,6 +384,8 @@ export default function SheetsPanel() {
 
   async function reviewFromSummary(row) {
     if (revisionSummary()?.register !== sheetRegister() || row.status !== 'ready') return;
+    setQuery('');
+    setRevisionFilter('');
     setSelectedId(row.sheetId);
     setSourceCandidate(null);
     await reviewRevisionCompare(row.sheetId, row.historyIndex);

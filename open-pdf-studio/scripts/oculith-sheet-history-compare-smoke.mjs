@@ -79,6 +79,8 @@ try {
   assert.match(await summaryRow.innerText(), new RegExp(old.fingerprint));
   assert.match(await summaryRow.innerText(), new RegExp(current.fingerprint));
   assert.deepEqual(await register(), manifest, 'the summary never changes the drawing set');
+  await page.getByRole('searchbox', { name: 'Search sheets' }).fill('no matching sheet');
+  assert.equal(await page.locator('#sheets-panel .sheets-row').count(), 0);
   await cache('old.pdf', wrong.bytes);
   await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).click();
   await status('Earlier revision PDF has changed');
@@ -86,6 +88,7 @@ try {
   await cache('old.pdf', old.bytes);
   await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).click();
   await preview.waitFor();
+  assert.equal(await page.getByRole('searchbox', { name: 'Search sheets' }).inputValue(), '');
   assert.match(await preview.innerText(), /Earlier revision A · old\.pdf · Page 2/);
   assert.match(await preview.innerText(), /Current revision B · current\.pdf · Page 3/);
   assert.equal(await active(), false, 'review does not start a comparison');
