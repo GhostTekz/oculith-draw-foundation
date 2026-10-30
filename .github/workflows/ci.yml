@@ -36,6 +36,7 @@ jobs:
                 case "$path" in
                   README.md|CONTRIBUTING.md|CLAUDE.md|LICENSE.md|SBOM.cdx.json|docs/*|\
                   open-pdf-studio/js/*|open-pdf-studio/styles/*|open-pdf-studio/public/*|\
+                  open-pdf-studio/scripts/*-smoke.mjs|\
                   open-pdf-studio/index.html|open-pdf-studio/tsconfig.json|\
                   open-pdf-studio/vite.config.js|open-pdf-studio/vite.web-unit.config.js)
                     ;;
