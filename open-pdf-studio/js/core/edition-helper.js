@@ -119,3 +119,8 @@ export function fromBase64(text) {
 export function shareFile(path) {
   return invoke('edition_helper_share_file', { path });
 }
+
+/** Share a PDF with one package helper; resolves with the canonical shared path. */
+export function shareAddonFile(packageId, path) {
+  return invoke('addon_helper_share_file', { packageId, path });
+}

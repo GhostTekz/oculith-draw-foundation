@@ -577,9 +577,10 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
     doc.fileName = filePath ? filePath.split(/[\\/]/).pop() : 'Untitled';
     // An add-on may supply a display name for a locally opened document.
     if (filePath && edition.documentTitle) {
-      void edition.documentTitle(filePath).then(name => {
-        if (name && doc.filePath === filePath) {
-          doc.fileName = name;
+      void Promise.resolve().then(() => edition.documentTitle(filePath)).then(name => {
+        const title = typeof name === 'string' ? name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 180) : '';
+        if (title && doc.filePath === filePath) {
+          doc.fileName = title;
           updateWindowTitle();
         }
       }).catch(() => {});
@@ -1818,8 +1819,7 @@ export function annotationsRead(doc, pageNum) {
 // between, so stamps and the Markups List are complete without visiting
 // every sheet. A sheet the user opens meanwhile loads at once (its load is
 // shared, ensureAnnotationsForPage).
-// Sheets read and in the document (the large-open path reads a sheet's
-// markups when it is shown, like Bluebeam, not all of them after opening).
+// Report the number of sheets whose markups are ready in large-open mode.
 export function annotationSheetsLoaded(doc = getActiveDocument()) {
   const total = doc?.pdfDoc?.numPages || 0;
   if (!doc?._largeOpen) return { loaded: total, total };

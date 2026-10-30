@@ -82,6 +82,8 @@ PROMPTS.md
 /open-pdf-studio/test pdf-bestanden/render-regression-runs/
 scripts/.venv-test/
 open-pdf-studio/dev-build-nr.json
+# Generated from the public checkout immediately before a Foundation build.
+open-pdf-studio/public/foundation-source.json
 /testdata/
 
 # Python-bytecode van de verificatiescripts

@@ -8,6 +8,10 @@ function key(value) {
   return clean(value).toLocaleLowerCase();
 }
 
+function fileName(filePath) {
+  return String(filePath ?? '').split(/[\\/]/).at(-1);
+}
+
 function sourceSha256(value) {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
@@ -96,7 +100,12 @@ export function replaceSheet(register, id, filePath, revision, changedAt = new D
   if (!target) throw new Error('Sheet is no longer in this set.');
   const nextPage = page === undefined ? target.page : validPage(page);
   const nextFingerprint = sourceSha256(fingerprint);
-  if (key(target.filePath) === key(path) && target.page === nextPage && target.revision === nextRevision) return register;
+  if (key(target.filePath) === key(path) && target.page === nextPage && target.revision === nextRevision) {
+    if (target.sourceSha256 && nextFingerprint && target.sourceSha256 !== nextFingerprint) {
+      throw new Error('The PDF changed at this path. Enter a new revision before recording it.');
+    }
+    return register;
+  }
   if (sourceOwner(register, path, nextPage, id)) {
     throw new Error('That PDF page is already registered as another sheet.');
   }
@@ -119,6 +128,9 @@ export function relinkSheet(register, id, filePath, page, fingerprint) {
   if (!target) throw new Error('Sheet is no longer in this set.');
   const nextPage = page === undefined ? target.page : validPage(page);
   const nextFingerprint = sourceSha256(fingerprint);
+  if (target.sourceSha256 && nextFingerprint !== target.sourceSha256) {
+    throw new Error('Selected PDF does not match the recorded sheet. Use Record revision for changed contents.');
+  }
   if (key(target.filePath) === key(path) && target.page === nextPage) return register;
   if (sourceOwner(register, path, nextPage, id)) {
     throw new Error('That PDF page is already registered as another sheet.');
@@ -163,12 +175,16 @@ export function removeSheet(register, id) {
 }
 
 export function filterSheets(register, query = '', revision = '') {
-  const term = key(query);
+  const terms = key(query).split(/\s+/u).filter(Boolean);
   const currentRevision = key(revision);
-  return register.sheets.filter(sheet =>
-    (!currentRevision || key(sheet.revision) === currentRevision)
-    && (!term || [sheet.label, sheet.title, sheet.revision, ...sheet.history.map(item => item.revision)]
-      .some(value => key(value).includes(term))));
+  return register.sheets.filter(sheet => {
+    if (currentRevision && key(sheet.revision) !== currentRevision) return false;
+    if (!terms.length) return true;
+    const fields = [sheet.label, sheet.title, sheet.revision, fileName(sheet.filePath),
+      ...sheet.history.flatMap(item => [item.revision, fileName(item.filePath)]),
+      ...(sheet.sourceAliases || []).map(item => fileName(item.filePath))].map(key);
+    return terms.every(term => fields.some(field => field.includes(term)));
+  });
 }
 
 const sheetLabelOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
@@ -238,12 +254,12 @@ function csvCell(value) {
 }
 
 export function drawingLogCsv(register, availability = {}) {
-  const columns = ['Stable sheet ID', 'Sheet ID', 'Title', 'Source', 'Revision', 'Page', 'PDF file', 'File status', 'Replaced at'];
+  const columns = ['Stable sheet ID', 'Sheet ID', 'Title', 'Source', 'Revision', 'Page', 'PDF file', 'File status', 'Replaced at', 'Recorded PDF SHA-256'];
   const rows = register.sheets.flatMap(sheet => [
     [sheet.id, sheet.label, sheet.title, 'Current', sheet.revision, sheet.page,
-      sheet.filePath, availability[sheet.id] || 'Unknown', ''],
+      sheet.filePath, availability[sheet.id] || 'Unknown', '', sheet.sourceSha256 || ''],
     ...[...sheet.history].reverse().map(item => [sheet.id, sheet.label, sheet.title, 'Prior',
-      item.revision, item.page, item.filePath, '', item.replacedAt]),
+      item.revision, item.page, item.filePath, '', item.replacedAt, item.sourceSha256 || '']),
   ]);
   return '\uFEFF' + [columns, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

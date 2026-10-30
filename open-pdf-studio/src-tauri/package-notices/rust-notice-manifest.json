@@ -25,6 +25,7 @@
           "sha256": "9e83d639d5f01d42bd019923d48cc485155f10d20c81f6294902976fe2715fca"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -46,6 +47,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -63,6 +65,7 @@
           "sha256": "f7e8ab639afef15573680c97f796166835cbeb3865175882fea41c60d106b733"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -80,6 +83,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -97,6 +101,7 @@
           "sha256": "0444c6991eead6822f7b9102e654448d51624431119546492e8b231db42c48bb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -114,6 +119,7 @@
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -127,6 +133,7 @@
           "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -135,6 +142,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "BSD-3-Clause",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/dropbox/rust-alloc-no-stdlib/blob/6032b6a9b20e03737135c55a0270ccffcc1438ef/LICENSE",
+          "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+        }
+      ],
       "standardTextIds": [
         "BSD-3-Clause"
       ]
@@ -154,6 +167,7 @@
           "sha256": "bb3c0c388d2e5efc777ee1a7bc4671188447d5fbbad130aecac9fd52e0010b76"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -171,6 +185,7 @@
           "sha256": "35043211d1b7be8f7e3f9cad27d981f2189ba9a39d9527b275b3c9740298dfe2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -188,6 +203,7 @@
           "sha256": "80f275e90d799911ed3830a7f242a2ef5a4ade2092fe0aa07bfb2d2cf2f2b95e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -205,6 +221,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -222,6 +239,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -239,6 +257,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -256,6 +275,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -273,6 +293,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -290,6 +311,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -307,6 +329,7 @@
           "sha256": "15656cc11a8331f28c0986b8ab97220d3e76f98e60ed388b5ffad37dfac4710c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -324,6 +347,7 @@
           "sha256": "f35468024534e0f4f16bb94cd0e88c87fbd1314f919c2645a07d350fb77b40c0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -337,6 +361,7 @@
           "sha256": "1bc7e6f475b3ec99b7e2643411950ae2368c250dd4c5c325f80f9811362a94a1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -354,6 +379,7 @@
           "sha256": "4da95ec4ecb65b738d470b7d762894ad9c97da93e6cbfb18b570fc2c96f4b871"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -371,6 +397,7 @@
           "sha256": "24e5860bf589d8501643e6ea51ffb3df66db2867492b09033d486183efbfa970"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -388,6 +415,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -405,6 +433,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -422,6 +451,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -439,6 +469,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -456,6 +487,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -473,6 +505,7 @@
           "sha256": "30fefc3a7d6a0041541858293bcbea2dde4caa4c0a5802f996a7f7e8c0085652"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -490,6 +523,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -507,6 +541,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -524,6 +559,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -537,6 +573,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -550,6 +587,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -571,6 +609,7 @@
           "sha256": "6226d0632e2e1a80c23597e964da9812ae193c535fe058154afb034e94167aa5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -588,6 +627,7 @@
           "sha256": "27995d58ad5c1145c1a8cd86244ce844886958a35eb2b78c6b772748669999ac"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -601,6 +641,7 @@
           "sha256": "b50b376e7d24a0598488b730c3034ffcd0b58dd36c0913a24b9903a3cfd04bf7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -614,6 +655,7 @@
           "sha256": "728536b4160e051f86d7c9c388f704866b3d512cd7df97ac3516c65279523c4e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -627,6 +669,7 @@
           "sha256": "6a13bc24a100a6812f053879ec51b126b103af7cda6dbf48c4188722da44da9f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -640,6 +683,7 @@
           "sha256": "008c87afcd2e626eaf564093250bed06dd7efb5732113264bba3dda8f1c556a1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -657,6 +701,7 @@
           "sha256": "0aa8963e105e8b6e02f634484145d4e5b0f42d0a6dd05c16f8148f033383adef"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -674,6 +719,7 @@
           "sha256": "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -691,6 +737,7 @@
           "sha256": "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -708,6 +755,7 @@
           "sha256": "ab499c75a0f0da8e0fe83bf9ba3a27e5c39705310f07107c6c66b69958d2401c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -725,6 +773,7 @@
           "sha256": "2d1c57bff28344b9e698f51063bc8509799cc4c99a4e0cf2aa3f7e7c3e1f9a9d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -742,6 +791,7 @@
           "sha256": "f51ac2c59a222f7476ce507ca879960e2b64ea64bb2786eefdbeb7b0b538d1b7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -759,6 +809,7 @@
           "sha256": "f51ac2c59a222f7476ce507ca879960e2b64ea64bb2786eefdbeb7b0b538d1b7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -776,6 +827,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -793,6 +845,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -806,6 +859,7 @@
           "sha256": "411781fd38700f2357a14126d0ab048164ab881f1dcb335c1bb932e232c9a2f5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -823,6 +877,7 @@
           "sha256": "d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -840,6 +895,7 @@
           "sha256": "d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -848,6 +904,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -867,6 +929,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -884,6 +947,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -901,6 +965,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -914,6 +979,7 @@
           "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -927,6 +993,7 @@
           "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -944,6 +1011,7 @@
           "sha256": "42d3bf7e7d4d49d72c0555d14ed99c3ee7ce9ce3cbffbc38bbafe8c103f50969"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -961,6 +1029,7 @@
           "sha256": "65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -974,6 +1043,7 @@
           "sha256": "dd0741aba702705d02da3e18fca5d3a27538fe6c983e9f09946e82ecfc59acab"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -987,6 +1057,7 @@
           "sha256": "fd8fd6dd623c97a311881bac2621022a29d2bdf31caa784f029d965dfa9491b6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1000,6 +1071,7 @@
           "sha256": "fd8fd6dd623c97a311881bac2621022a29d2bdf31caa784f029d965dfa9491b6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1021,6 +1093,7 @@
           "sha256": "84b34dd7608f7fb9b17bd588a6bf392bf7de504e2716f024a77d89f1b145a151"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1038,6 +1111,7 @@
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1051,6 +1125,7 @@
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1064,6 +1139,7 @@
           "sha256": "45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1081,6 +1157,7 @@
           "sha256": "c8c6324cf2f0f076e3ed5dea4a21f00bd4dd6fce44f72b110bc52e7fe06f6e1e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1098,6 +1175,7 @@
           "sha256": "c8c6324cf2f0f076e3ed5dea4a21f00bd4dd6fce44f72b110bc52e7fe06f6e1e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1111,6 +1189,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1124,6 +1203,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1141,6 +1221,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1158,6 +1239,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1171,6 +1253,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1184,6 +1267,7 @@
           "sha256": "ee874098519e956c23a3c5c7e20581f8e9b1d70aa05eb178f983be9775090a2f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1201,6 +1285,7 @@
           "sha256": "63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1218,6 +1303,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1226,6 +1312,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0/MIT",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -1242,6 +1329,7 @@
           "sha256": "ebaac853b53fec0ed475796f533ce676912a4df9ad9d8a621fa76d5060591e10"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1259,6 +1347,7 @@
           "sha256": "090a294a492ab2f41388252312a65cf2f0e423330b721a68c6665ac64766753b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1276,6 +1365,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1289,6 +1379,7 @@
           "sha256": "31b94860253d8ec7b4529f51901044d3b459d6292d996504a36b1bae3a36a812"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1302,6 +1393,7 @@
           "sha256": "946c9835d8034d24404f8cfec5f4654cee5dad17e944afc3d06d742cf2882831"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1319,6 +1411,7 @@
           "sha256": "5c7bd92d1f096f12203dc1b601e3cb17484fa1b023e30b6b8edcc80e416237ec"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1336,6 +1429,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1353,6 +1447,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1370,6 +1465,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1387,6 +1483,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1395,6 +1492,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "BSL-1.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/DoumanAsh/clipboard-win/blob/3b27cf2bfd1adcfa6e0264eb51c1025ddaf0f342/LICENSE",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        }
+      ],
       "standardTextIds": [
         "BSL-1.0"
       ]
@@ -1414,6 +1517,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1422,6 +1526,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -1442,6 +1547,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1455,6 +1561,7 @@
           "sha256": "9bbc1b3dc4674a9ebb12c2a62f54fe3c08672539717f8d05828f684b6cc419a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1472,6 +1579,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1489,6 +1597,7 @@
           "sha256": "77674336af8ded214dc3ae07da631c7dd35cc8205f39298474ba98a889e57272"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1506,6 +1615,7 @@
           "sha256": "0315568149476c50fa16ce5f7f735267a24e10a582254a7656f6c3daacaa37b7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1523,6 +1633,7 @@
           "sha256": "bada9e7ed8dc00d63502053c455d7c8d7575dfb7e8277a2a832531844d900682"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1540,6 +1651,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1557,6 +1669,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1578,6 +1691,7 @@
           "sha256": "9a3aeb3f63659c4c6302d315e1d98784d1e8559858a47ff9562e091bb922d28d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1595,6 +1709,7 @@
           "sha256": "f28420c1906af38be726cd7842798f0194b27c41d6051c0d1e9ee348b8a4a0ea"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1612,6 +1727,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1629,6 +1745,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1646,6 +1763,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1663,6 +1781,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1680,6 +1799,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1697,6 +1817,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1714,6 +1835,7 @@
           "sha256": "ae9baa7beea910273c2f384c2a6b721fb7bd02bda3436074a1072e4ee689f985"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1731,6 +1853,7 @@
           "sha256": "3488679340a49ecc34d342c4009d2dabf76f4a21f12aec2ca99b15805d656544"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1739,6 +1862,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -1759,6 +1883,7 @@
           "sha256": "61d383b05b87d78f94d2937e2580cce47226d17823c0430fbcad09596537efcf"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1780,6 +1905,7 @@
           "sha256": "b16db96b93b1d7cf7bea533f572091ec6bca3234fbe0a83038be772ff391a44c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1797,6 +1923,7 @@
           "sha256": "5734ed989dfca1f625b40281ee9f4530f91b2411ec01cb748223e7eb87e201ab"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1814,6 +1941,7 @@
           "sha256": "5734ed989dfca1f625b40281ee9f4530f91b2411ec01cb748223e7eb87e201ab"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1831,6 +1959,7 @@
           "sha256": "5734ed989dfca1f625b40281ee9f4530f91b2411ec01cb748223e7eb87e201ab"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1844,6 +1973,7 @@
           "sha256": "3eab77734a181b2a2e8418af9004f960f715f04aac4d76a26cf774f63a7b13d1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1861,6 +1991,7 @@
           "sha256": "90c503b61dee04e1449c323ec34c229dfb68d7adcb96c7e140ee55f70fce2d8e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1878,6 +2009,7 @@
           "sha256": "3521672491a3479422d5fe1aca6645dd2984090f85da6e5205abfb18fb7a6897"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1891,6 +2023,7 @@
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1904,6 +2037,7 @@
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1921,6 +2055,7 @@
           "sha256": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1938,6 +2073,7 @@
           "sha256": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1951,6 +2087,7 @@
           "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1964,6 +2101,7 @@
           "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1977,6 +2115,7 @@
           "sha256": "8ea93490d74a5a1b1af3ff71d786271b3f1e5f0bea79ac16e02ec533cef040d6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -1994,6 +2133,7 @@
           "sha256": "de3911c2d98c8bd2d701ee721347053d9b55995a11f9a8c955e44d3ca1b376bf"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2007,6 +2147,7 @@
           "sha256": "86b5aedec040ac6eab419af61a8f0aea48ab0037c4b764e5cff5df15bee40df2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2024,6 +2165,7 @@
           "sha256": "ad64fcb9589f162720f3cc5010ad76ca6ad3764e11861f9192c489df176bb71d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2041,6 +2183,7 @@
           "sha256": "bada9e7ed8dc00d63502053c455d7c8d7575dfb7e8277a2a832531844d900682"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2058,6 +2201,7 @@
           "sha256": "231c837c45eb53f108fb48929e488965bc4fcc14e9ea21d35f50e6b99d98685b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2075,6 +2219,7 @@
           "sha256": "15656cc11a8331f28c0986b8ab97220d3e76f98e60ed388b5ffad37dfac4710c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2088,6 +2233,7 @@
           "sha256": "8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2101,6 +2247,7 @@
           "sha256": "8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2118,6 +2265,7 @@
           "sha256": "f0b2a49442d6a8d61245111da5c21ba50c1b7dc2a0b75053c8358162ddcc3453"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2135,6 +2283,7 @@
           "sha256": "9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2152,6 +2301,7 @@
           "sha256": "6a2e0ade09a7d5f816f11566fee2b151b32235a7fad52b41d49cce96f833c1a9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2169,6 +2319,7 @@
           "sha256": "6a2e0ade09a7d5f816f11566fee2b151b32235a7fad52b41d49cce96f833c1a9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2186,6 +2337,7 @@
           "sha256": "6a2e0ade09a7d5f816f11566fee2b151b32235a7fad52b41d49cce96f833c1a9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2203,6 +2355,7 @@
           "sha256": "6a2e0ade09a7d5f816f11566fee2b151b32235a7fad52b41d49cce96f833c1a9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2211,6 +2364,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -2232,6 +2391,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2240,6 +2400,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/OpenByteDev/dlopen2/blob/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -2250,6 +2416,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/OpenByteDev/dlopen2/blob/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -2269,6 +2441,7 @@
           "sha256": "77adcddfe9e50acd2df63ddbb8e566bb8d34b4d02a9d92e7a5c1b9c2225eda9f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2282,6 +2455,7 @@
           "sha256": "7554701d1e74fc434f68c522b1dd743c8c16d816a4b761b5213f367b898884c8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2299,6 +2473,7 @@
           "sha256": "fb252fecf98d9af8f1d9201c5860319a514f5a8a24700dc84fc6ea287a7a4958"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2316,6 +2491,7 @@
           "sha256": "9eff396a99bafd208e7126602420d6864f6066c08b84485a5b032320a9c01997"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2333,6 +2509,7 @@
           "sha256": "9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2350,6 +2527,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2363,6 +2541,7 @@
           "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2380,6 +2559,7 @@
           "sha256": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2397,6 +2577,7 @@
           "sha256": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2410,6 +2591,7 @@
           "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2427,6 +2609,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2444,6 +2627,7 @@
           "sha256": "bdebaf9156a298f8fdab56dd26cb5144673de522d80f4c0d88e0039145f147f9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2461,6 +2645,7 @@
           "sha256": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2478,6 +2663,7 @@
           "sha256": "d27687b51f2874822c1530976b7e837eac4f308d94bf3dd42047011b7d437b47"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2491,6 +2677,7 @@
           "sha256": "1abdbbd4e3f95e56c79d4a8af190254c23ddb14db34aadadfafef9c3af041113"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2508,6 +2695,7 @@
           "sha256": "daacc37f680c7dd0a758ac99a109f2f57d9f21d3683df9e9245055922842a695"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2529,6 +2717,7 @@
           "sha256": "838118388fe5c2e7f1dbbaeed13e1c7f3ebf88be91319c7c1d77c18e987d1a50"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2542,6 +2731,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2559,6 +2749,7 @@
           "sha256": "2e3edd2716fb15616e867bd53f724f0906732242e9ae76bb1faad1d88f7eeebd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2576,6 +2767,7 @@
           "sha256": "d13669f0eaff9b7015bff0d8637297213b53d9f239826636c07a15633acf7052"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2593,6 +2785,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2610,6 +2803,7 @@
           "sha256": "7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2627,6 +2821,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2644,6 +2839,7 @@
           "sha256": "8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2657,6 +2853,7 @@
           "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2674,6 +2871,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2691,6 +2889,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2708,6 +2907,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2721,6 +2921,7 @@
           "sha256": "7101390b4c8edd752f4c0de47f35d61b44d9cf0ee8dd032115e25644e277cfff"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2738,6 +2939,7 @@
           "sha256": "c77a4cf9da729987d0fe7ccd811e3bd27393914ddf3d23467c18cc22954513b3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2751,6 +2953,7 @@
           "sha256": "618bcda011fe31b4710082efc2785b51da642e236ed99fc1b5e34229836c915e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2768,6 +2971,7 @@
           "sha256": "8d0c1d1d4b2bebf5b9211f0e883d5a482b7808f3ed31320da14ddee95811f4ef"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2785,6 +2989,7 @@
           "sha256": "9dd44491b4cf95dcfa2963943b3ae91bff9a78d13049a9e0b53e0d0b0a9c8f4e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2802,6 +3007,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2819,6 +3025,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2836,6 +3043,7 @@
           "sha256": "ce592787ff2321feab698a4c612237f4378cc658ebb1d472913e5802cc47afb4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2849,6 +3057,7 @@
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2866,6 +3075,7 @@
           "sha256": "025436edff4cfcdde17a5811fdea78892d8482efd1abdec5a17872d07a4f2112"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2883,6 +3093,7 @@
           "sha256": "65fdb6c76cd61612070c066eec9ecdb30ee74fb27859d0d9af58b9f499fd0c3e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2896,6 +3107,7 @@
           "sha256": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2909,6 +3121,7 @@
           "sha256": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2926,6 +3139,7 @@
           "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2943,6 +3157,7 @@
           "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2960,6 +3175,7 @@
           "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2977,6 +3193,7 @@
           "sha256": "20c7855c364d57ea4c97889a5e8d98470a9952dade37bd9248b9a54431670e5e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -2990,6 +3207,7 @@
           "sha256": "251ea8ccb1205ce5fa847d6e264d6b6753af62de2cecf2fd9abc0eb02c7c83fc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3003,6 +3221,7 @@
           "sha256": "f790cc576999f5998c766d3d26d7d64dc368e805a98461484f65e8d961ec6d9f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3020,6 +3239,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3037,6 +3257,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3054,6 +3275,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3071,6 +3293,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3092,6 +3315,7 @@
           "sha256": "6226d0632e2e1a80c23597e964da9812ae193c535fe058154afb034e94167aa5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3109,6 +3333,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3126,6 +3351,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3143,6 +3369,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3160,6 +3387,7 @@
           "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3177,6 +3405,7 @@
           "sha256": "4c9222d8d8ec233ffc1b317729878430f2db2a49cb2324c856a02e9848a3c185"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3190,6 +3419,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3203,6 +3433,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3216,6 +3447,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3229,6 +3461,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3242,6 +3475,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3255,6 +3489,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3268,6 +3503,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3281,6 +3517,7 @@
           "sha256": "c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3294,6 +3531,7 @@
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3311,6 +3549,7 @@
           "sha256": "42fa16951ce7f24b5a467a40e5b449a1d41e662f97ca779864f053f39e097737"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3328,6 +3567,7 @@
           "sha256": "29e9fe5074bd27e0e5d5d110394fbbcd841baee2651a3c4b4560a632702cede4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3345,6 +3585,7 @@
           "sha256": "523a42c25d245dde9c015f882cec7f4555aad883382a6cf19b4b7d9b2cd5419b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3358,6 +3599,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3371,6 +3613,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3384,6 +3627,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3397,6 +3641,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3410,6 +3655,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3427,6 +3673,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3448,6 +3695,7 @@
           "sha256": "3b3a242fa1704327a51563c614c1043deab014f58ebbbdd173262c990104497e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3461,6 +3709,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3478,6 +3727,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3491,6 +3741,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3504,6 +3755,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3517,6 +3769,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3530,6 +3783,7 @@
           "sha256": "b21623012e6c453d944b0342c515b631cfcbf30704c2621b291526b69c10724d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3547,6 +3801,7 @@
           "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3564,6 +3819,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3581,6 +3837,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3598,6 +3855,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3615,6 +3873,7 @@
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3623,6 +3882,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/LaurenzV/hayro/blob/916f0d69d4dbb16e62b82754a42fa8b9de837f55/LICENSE-MIT",
+          "sha256": "ecdb501c87ec79fd92f3db9601cbe1a023a736d50fcf433c527a5b1950c60027"
+        },
+        {
+          "url": "https://github.com/LaurenzV/hayro/blob/916f0d69d4dbb16e62b82754a42fa8b9de837f55/LICENSE-APACHE",
+          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -3643,6 +3912,7 @@
           "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3660,6 +3930,7 @@
           "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3677,6 +3948,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3694,6 +3966,7 @@
           "sha256": "f7bdb3426d045cd50efd4953026e3eb5a83d0199f458a075602611b9344da5b9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3711,6 +3984,7 @@
           "sha256": "9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3728,6 +4002,7 @@
           "sha256": "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3745,6 +4020,7 @@
           "sha256": "dc91f8200e4b2a1f9261035d4c18c33c246911a6c0f7b543d75347e61b249cff"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3758,6 +4034,7 @@
           "sha256": "cddabf8adc6ccd6c3e68f5d71eac9fae3094116623cf23a46af0a5fd6b8ee813"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3771,6 +4048,7 @@
           "sha256": "b843fb7430efdf9732c834b6814beda44fccf3f0ddf7c9e030b39da17f6b159c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3788,6 +4066,7 @@
           "sha256": "391a5396cec6230bfabd4ef4eb2350eb895bc5efce377a2218f5702ed020d3e3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3805,6 +4084,7 @@
           "sha256": "934887691e05d69d7c86ad3f2c360980fa30c15b035e351f3c9865e99da4debc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3818,6 +4098,7 @@
           "sha256": "2d01890414494742ba4a509fcec8efa40f6d8be22cbd72be7cff08d6fda4ec89"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3839,6 +4120,7 @@
           "sha256": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3852,6 +4134,7 @@
           "sha256": "9e0a97848ea543aef745c98e84fde696a9a3e0735538f6daefdd3cb1942effc1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3869,6 +4152,7 @@
           "sha256": "da28ccc6b158fc2d8cccc74e99794b1cff1d29bd7bbeb019442fcf0c04c6cad9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3886,6 +4170,7 @@
           "sha256": "da28ccc6b158fc2d8cccc74e99794b1cff1d29bd7bbeb019442fcf0c04c6cad9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3899,6 +4184,7 @@
           "sha256": "41ca90213441b294e7517d5858f0cc85bc12e19ec044001b45bc213de461d33b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3912,6 +4198,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3925,6 +4212,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3938,6 +4226,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3951,6 +4240,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3964,6 +4254,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3977,6 +4268,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -3990,6 +4282,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4007,6 +4300,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4020,6 +4314,7 @@
           "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4037,6 +4332,7 @@
           "sha256": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4054,6 +4350,7 @@
           "sha256": "8b43ce8accd61e9d370b5ca9e9c4f953279b5c239926c62315b40e24df51b726"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4071,6 +4368,7 @@
           "sha256": "c77a4cf9da729987d0fe7ccd811e3bd27393914ddf3d23467c18cc22954513b3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4088,6 +4386,7 @@
           "sha256": "ecc269ef87fd38a1d98e30bfac9ba964a9dbd9315c3770fed98d4d7cb5882055"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4105,6 +4404,7 @@
           "sha256": "ecc269ef87fd38a1d98e30bfac9ba964a9dbd9315c3770fed98d4d7cb5882055"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4118,6 +4418,7 @@
           "sha256": "270b0d81891aa44c7e8726cf9432dade9556a01c848bacd2f3ef839c9c1a1859"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4135,6 +4436,7 @@
           "sha256": "304b898acad7f02e03d6d8832d682a3b43ee729ab5d3a069af5a36979083b6b4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4152,6 +4454,7 @@
           "sha256": "47dc9ff29128ddfb4d6a0435383c9f89120bc374dbcc1dd00b933a0b28aa7865"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4165,6 +4468,7 @@
           "sha256": "7377e48a67377f0baa9ccee6425e125eb7b96d5b8e706f4c99479ca4ffa21b77"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4178,6 +4482,7 @@
           "sha256": "7377e48a67377f0baa9ccee6425e125eb7b96d5b8e706f4c99479ca4ffa21b77"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4195,6 +4500,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4212,6 +4518,7 @@
           "sha256": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4229,6 +4536,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4242,6 +4550,7 @@
           "sha256": "5444779e62a6f136892955bab2727694509b2cc1c0cd0f394d5edc7ff9203cd1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4255,6 +4564,7 @@
           "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4272,6 +4582,7 @@
           "sha256": "fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4280,6 +4591,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/jni-rs/jni-rs/blob/5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7/LICENSE-MIT",
+          "sha256": "fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960"
+        },
+        {
+          "url": "https://github.com/jni-rs/jni-rs/blob/5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -4291,6 +4612,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/jni-rs/jni-rs/blob/33045a124105c939d1e2cbdcb5a39e5d868ffa03/LICENSE-MIT",
+          "sha256": "fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960"
+        },
+        {
+          "url": "https://github.com/jni-rs/jni-rs/blob/33045a124105c939d1e2cbdcb5a39e5d868ffa03/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -4311,6 +4642,7 @@
           "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4328,6 +4660,7 @@
           "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4336,6 +4669,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/jni-rs/jni-sys/blob/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-MIT",
+          "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1"
+        },
+        {
+          "url": "https://github.com/jni-rs/jni-sys/blob/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-APACHE",
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -4356,6 +4699,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4373,6 +4717,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4390,6 +4735,7 @@
           "sha256": "87f7527b1066337751f7f4d717089bf514ff8f7ee7d66c4c5b891b09e744ec11"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4407,6 +4753,7 @@
           "sha256": "2bc107bdc18a74263d20bdefdb8073e17bc1a01b6b374dc5835683a33ee5ba7d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4424,6 +4771,7 @@
           "sha256": "31dbbab009f1b2e59a1622d5955dfafc38ebe834000215b49d954c6f85fe927c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4441,6 +4789,7 @@
           "sha256": "0621878e61f0d0fda054bcbe02df75192c28bde1ecc8289cbd86aeba2dd72720"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4458,6 +4807,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4475,6 +4825,7 @@
           "sha256": "eb227437252b2a7a9c1fc342c93ade1f3d7ce38cc6dd754f613db07d53ceff0b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4483,6 +4834,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -4503,6 +4855,7 @@
           "sha256": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4520,6 +4873,7 @@
           "sha256": "de3911c2d98c8bd2d701ee721347053d9b55995a11f9a8c955e44d3ca1b376bf"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4533,6 +4887,7 @@
           "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4546,6 +4901,7 @@
           "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4559,6 +4915,7 @@
           "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4572,6 +4929,7 @@
           "sha256": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4585,6 +4943,7 @@
           "sha256": "a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4598,6 +4957,7 @@
           "sha256": "8d073a6a80d1ef2d2fc2bc6c809aa221161bf1906c76d4aeef55fd2b999d9413"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4619,6 +4979,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4632,6 +4993,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4649,6 +5011,7 @@
           "sha256": "c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4666,6 +5029,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4679,6 +5043,7 @@
           "sha256": "2fb01e6708ea9d53e8b7e74bd82af23bce5256f19f4de93915027a53173c50d8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4700,6 +5065,7 @@
           "sha256": "09785877275ffada6c371b652a30e95c26b435126fc0fc62f1bc2d72171f80a4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4713,6 +5079,7 @@
           "sha256": "ad9f07faa5f6f671df93523293cf8c1ce24f14886fa101013c21536c7890c59b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4730,6 +5097,7 @@
           "sha256": "69036b033e4bb951821964dbc3d9b1efe6913a6e36d9c1f206de4035a1a85cc4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4747,6 +5115,7 @@
           "sha256": "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4764,6 +5133,7 @@
           "sha256": "162ce11ad71338d0a0c6ebaf5c48af72c6ae237b468859d3656fe2d9ed3f3a85"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4781,6 +5151,7 @@
           "sha256": "ef2b3bbd7b718a7881253226313f103e89b379e1279681a3c1ebcb65a27d209d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4798,6 +5169,7 @@
           "sha256": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4815,6 +5187,7 @@
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4832,6 +5205,7 @@
           "sha256": "0d25d03b5ab49576178ad0cae7a2648d12c17ad0452fe49c07e55e4b59aa5257"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4845,6 +5219,7 @@
           "sha256": "3234ac55816264ee7b6c7ee27efd61cf0a1fe775806870e3d9b4c41ea73c5cb1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4858,6 +5233,7 @@
           "sha256": "a08554fab028af3af047e8588d32d019662c1b1bf07959a195a2f75fe340726b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4875,6 +5251,7 @@
           "sha256": "df9cfd06d8a44d9a671eadd39ffd97f166481da015a30f45dfd27886209c5922"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4896,6 +5273,7 @@
           "sha256": "dbe1fff0fb1314b6af94f161511406275cf01c5a32441fbf24528a57a051d599"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4909,6 +5287,7 @@
           "sha256": "42c8695fbc468866d9756be99af0ba4e37d733f8daa3c8827c8d80b8bec1b2f9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4934,6 +5313,7 @@
           "sha256": "0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4947,6 +5327,7 @@
           "sha256": "07919255c7e04793d8ea760d6c2ce32d19f9ff02bdbdde3ce90b1e1880929a9b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4964,6 +5345,7 @@
           "sha256": "2aa92cada6431e75615e3fe6cb1a9082c98f777d48ae1c087c0da0e37f7b8bff"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4985,6 +5367,7 @@
           "sha256": "b99f9d43803f2ac979c50949df630bd8eeaf2fcd1b9fdb9093710d70f5dfb63d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -4993,6 +5376,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/rust-mobile/ndk/blob/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        },
+        {
+          "url": "https://github.com/rust-mobile/ndk/blob/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -5004,6 +5397,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/rust-mobile/ndk/blob/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        },
+        {
+          "url": "https://github.com/rust-mobile/ndk/blob/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -5020,6 +5423,7 @@
           "sha256": "f7715d38a3fa1b4ac97c5729740752505a39cb92ee83ab5b102aeb5eaa7cdea4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5033,6 +5437,7 @@
           "sha256": "66e3ee1fa7f909ad3c612d556f2a0cdabcd809ad6e66f3b0605015ac64841b70"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5046,6 +5451,7 @@
           "sha256": "4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5059,6 +5465,7 @@
           "sha256": "4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5076,6 +5483,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5093,6 +5501,7 @@
           "sha256": "e2e245f2b566d0bfafb0f6a04c16b82d710c4e6e7d799e39bb4ef6e541b85b98"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5110,6 +5519,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5127,6 +5537,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5144,6 +5555,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5165,6 +5577,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5186,6 +5599,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5203,6 +5617,7 @@
           "sha256": "b4bf94a9fceb8846320fda938ee53fc16b506572609da5cf1d2d289a5597a8f8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5211,6 +5626,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -5221,6 +5642,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5233,6 +5660,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5245,6 +5678,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5257,6 +5696,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5269,6 +5714,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5281,6 +5732,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5293,6 +5750,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5305,6 +5768,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5317,6 +5786,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5329,6 +5804,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -5339,6 +5820,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5351,6 +5838,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -5361,6 +5854,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5373,6 +5872,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5385,6 +5890,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5397,6 +5908,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5409,6 +5926,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5421,6 +5944,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT",
@@ -5442,6 +5971,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5459,6 +5989,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5472,6 +6003,7 @@
           "sha256": "e63690624d604aa626c3c62b6ead1a9f4a916d2260ac8132022acbafe2556045"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5489,6 +6021,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5502,6 +6035,7 @@
           "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5515,6 +6049,7 @@
           "sha256": "047c1d2f1c28c30ced89bd0740ff251d8f51512e81b142711f958a0551729ec4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5532,6 +6067,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5545,6 +6081,7 @@
           "sha256": "44b62aa8f8a212f36d120a4f719438765020731207fd78bf28768032291df836"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5558,6 +6095,7 @@
           "sha256": "8f71659370c5268d9a1dc962a46232540e8fca63462586d8efaa95aab492a208"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5575,6 +6113,7 @@
           "sha256": "5fb3573f6e7198ff6c203dbbd58d1da4bec9e8c5a828edefd9e98587d0443471"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5592,6 +6131,7 @@
           "sha256": "233b95ccbf90dc67e32f3e8995c489f6312d9191ebd141a931c3b684f1e3be6d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5609,6 +6149,7 @@
           "sha256": "02168781a5b59970e3da1784d2eb69f432598a3757f283dbffdafd9d483a9113"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5622,6 +6163,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5635,6 +6177,7 @@
           "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5656,6 +6199,7 @@
           "sha256": "9a6d7a3c1b8edcc706c4b6c37f8dae9a77f02c7f9051df603f975db136b55419"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5673,6 +6217,7 @@
           "sha256": "c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5690,6 +6235,7 @@
           "sha256": "c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5707,6 +6253,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5724,6 +6271,7 @@
           "sha256": "8ea5cea8ddecc46a64a004406414d25529fca7eb71cfd8c0cfe49c343bff79c5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5737,6 +6285,7 @@
           "sha256": "819dfb7c49a24bec7511f29304478d67f272bfd1f976b728095f2eb2c522791c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5754,6 +6303,7 @@
           "sha256": "90c503b61dee04e1449c323ec34c229dfb68d7adcb96c7e140ee55f70fce2d8e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5771,6 +6321,7 @@
           "sha256": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5788,6 +6339,7 @@
           "sha256": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5801,6 +6353,7 @@
           "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5814,6 +6367,7 @@
           "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5827,6 +6381,7 @@
           "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5840,6 +6395,7 @@
           "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5853,6 +6409,7 @@
           "sha256": "0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5870,6 +6427,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5887,6 +6445,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5900,6 +6459,7 @@
           "sha256": "97d06daf5f54a5a5e12776d7f30613b30538c6c7ce4d326731084c27233c6b9b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5917,6 +6477,7 @@
           "sha256": "c995204cc6bad2ed67dd41f7d89bb9f1a9d48e0edd745732b30640d7912089a4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5934,6 +6495,7 @@
           "sha256": "d0ecd11d389ec949eeea36b59f2164ded631f7bee8be809eece3805a6cfe71ec"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5951,6 +6513,7 @@
           "sha256": "c995204cc6bad2ed67dd41f7d89bb9f1a9d48e0edd745732b30640d7912089a4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5968,6 +6531,7 @@
           "sha256": "ad64fcb9589f162720f3cc5010ad76ca6ad3764e11861f9192c489df176bb71d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -5985,6 +6549,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6002,6 +6567,7 @@
           "sha256": "bc12b75fd81829814d843a03fa52aad0e53355b1f13665e309ff7fa33c66e5b5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6015,6 +6581,7 @@
           "sha256": "5b0ae40d1a35f7ae6591a28e44771240e6a88cb03a66c9189a45b9681639b466"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6032,6 +6599,7 @@
           "sha256": "eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6049,6 +6617,7 @@
           "sha256": "eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6066,6 +6635,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6079,6 +6649,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6096,6 +6667,7 @@
           "sha256": "070dbc7dda03a29296f2d58bdb9b7331af90f2abc9f31df22875d1eabaf29852"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6113,6 +6685,7 @@
           "sha256": "4cada0bd02ea3692eee6f16400d86c6508bbd3bafb2b65fed0419f36d4f83e8f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6126,6 +6699,7 @@
           "sha256": "7ca6700600dfa9c9497bf5556365067daa802c871ea78239f129309c7a2048f7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6143,6 +6717,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6160,6 +6735,7 @@
           "sha256": "233b95ccbf90dc67e32f3e8995c489f6312d9191ebd141a931c3b684f1e3be6d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6177,6 +6753,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6194,6 +6771,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6211,6 +6789,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6228,6 +6807,7 @@
           "sha256": "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6245,6 +6825,7 @@
           "sha256": "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6262,6 +6843,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6275,6 +6857,7 @@
           "sha256": "635111a955495b5d8d34b8052f69656e8e45f6437f9266329077b9aad5fbe8d3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6288,6 +6871,7 @@
           "sha256": "635111a955495b5d8d34b8052f69656e8e45f6437f9266329077b9aad5fbe8d3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6305,6 +6889,7 @@
           "sha256": "2aa92cada6431e75615e3fe6cb1a9082c98f777d48ae1c087c0da0e37f7b8bff"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6322,6 +6907,7 @@
           "sha256": "058f01fe181608d027fcde7e528fc03ea3cf90f30903c407644b0a9bbc54f500"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6335,6 +6921,7 @@
           "sha256": "5b2c207dcf571267ebe0bbdd5bf321f561ddc22ff597e7b363e96f4539507a29"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6352,6 +6939,7 @@
           "sha256": "4b2d0aca6789fa39e03d6738e869ea0988cceba210ca34ebb59c15c463e93a04"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6369,6 +6957,7 @@
           "sha256": "4b2d0aca6789fa39e03d6738e869ea0988cceba210ca34ebb59c15c463e93a04"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6386,6 +6975,7 @@
           "sha256": "4b2d0aca6789fa39e03d6738e869ea0988cceba210ca34ebb59c15c463e93a04"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6403,6 +6993,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6416,6 +7007,7 @@
           "sha256": "ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "LGPL-2.1+",
@@ -6433,6 +7025,7 @@
           "sha256": "d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "LGPL-2.1+",
@@ -6450,6 +7043,7 @@
           "sha256": "13f4cc9fbc8d4a447b28aa84019c10ad4abf4b5f6919db061bf6690ccc23bc02"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6467,6 +7061,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6484,6 +7079,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6501,6 +7097,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6518,6 +7115,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6535,6 +7133,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6552,6 +7151,7 @@
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6569,6 +7169,7 @@
           "sha256": "29a4c3823ee29ee5a97c145574a1bac20629fd5e6708be1df0d25bab563e093c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6590,6 +7191,7 @@
           "sha256": "ae895c8576e682f310fb70d93d9f99b1dd82872094c54a8f6cdfe2ca5c2d6ecb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6607,6 +7209,7 @@
           "sha256": "0621878e61f0d0fda054bcbe02df75192c28bde1ecc8289cbd86aeba2dd72720"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6624,6 +7227,7 @@
           "sha256": "0621878e61f0d0fda054bcbe02df75192c28bde1ecc8289cbd86aeba2dd72720"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6641,6 +7245,7 @@
           "sha256": "252a9dfeacad4dea5af055d5dee725318e3cc04db9c07d852a7c3566e11df912"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6654,6 +7259,7 @@
           "sha256": "efcfee7981ff72431fffb06925cad00a23dce079ed4354f61030ad5abdb78829"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6667,6 +7273,7 @@
           "sha256": "efcfee7981ff72431fffb06925cad00a23dce079ed4354f61030ad5abdb78829"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6680,6 +7287,7 @@
           "sha256": "e6a8ae2d796083783efc94b1e66271aa2929dc4dfb231d34239aa9c7db8396db"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6693,6 +7301,7 @@
           "sha256": "e6a8ae2d796083783efc94b1e66271aa2929dc4dfb231d34239aa9c7db8396db"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6710,6 +7319,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6727,6 +7337,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6744,6 +7355,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6761,6 +7373,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6778,6 +7391,7 @@
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6791,6 +7405,7 @@
           "sha256": "635111a955495b5d8d34b8052f69656e8e45f6437f9266329077b9aad5fbe8d3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6808,6 +7423,7 @@
           "sha256": "47d4e1803702728e03d30f8a848ae2249ba274bbd9f8443e803f7924d83cd371"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6825,6 +7441,7 @@
           "sha256": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6842,6 +7459,7 @@
           "sha256": "bdebaf9156a298f8fdab56dd26cb5144673de522d80f4c0d88e0039145f147f9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6855,6 +7473,7 @@
           "sha256": "65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6876,6 +7495,7 @@
           "sha256": "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6889,6 +7509,7 @@
           "sha256": "635111a955495b5d8d34b8052f69656e8e45f6437f9266329077b9aad5fbe8d3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6902,6 +7523,7 @@
           "sha256": "635111a955495b5d8d34b8052f69656e8e45f6437f9266329077b9aad5fbe8d3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6919,6 +7541,7 @@
           "sha256": "30fefc3a7d6a0041541858293bcbea2dde4caa4c0a5802f996a7f7e8c0085652"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6932,6 +7555,7 @@
           "sha256": "ccf6244964385d34fef3799aa7792e9f8d35517de026f39a4f43f0e89b2079eb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6945,6 +7569,7 @@
           "sha256": "f8218253704e32441cafea1b9b3bcb2c6a3c51c5553cd8513d179290202bccb2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6962,6 +7587,7 @@
           "sha256": "30fefc3a7d6a0041541858293bcbea2dde4caa4c0a5802f996a7f7e8c0085652"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -6979,6 +7605,7 @@
           "sha256": "c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7000,6 +7627,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7021,6 +7649,7 @@
           "sha256": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7046,6 +7675,7 @@
           "sha256": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7063,6 +7693,7 @@
           "sha256": "9117d922e667125508dde62b02c1f57ed22f5ad21eb536aa2e2d99e1c796e639"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7080,6 +7711,7 @@
           "sha256": "1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7088,6 +7720,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -7104,6 +7737,7 @@
           "sha256": "5b698ca13897be3afdb7174256fa1574f8c6892b8bea1a66dd6469d3fe27885a"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7121,6 +7755,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7138,6 +7773,7 @@
           "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7155,6 +7791,7 @@
           "sha256": "5f48cbaa21c857be3080d8e7bca0f55633a09c5fb7ba1ab3aa1360345a2bf525"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7172,6 +7809,7 @@
           "sha256": "cb3c929a05e6cbc9de9ab06a4c57eeb60ca8c724bef6c138c87d3a577e27aa14"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7185,6 +7823,7 @@
           "sha256": "aa72991ac35b4de0034da0afe943e62b48c4092fc2ba13ae47806d8e9a4ad551"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7198,6 +7837,7 @@
           "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7211,6 +7851,7 @@
           "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7224,6 +7865,7 @@
           "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7237,6 +7879,7 @@
           "sha256": "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7254,6 +7897,7 @@
           "sha256": "fb77f0a9c53e473abe5103c8632ef9f0f2874d4fb3f17cb2d8c661aab9cee9d7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7271,6 +7915,7 @@
           "sha256": "c995204cc6bad2ed67dd41f7d89bb9f1a9d48e0edd745732b30640d7912089a4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7279,6 +7924,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "MIT"
       ]
@@ -7298,6 +7944,7 @@
           "sha256": "4a883ecc3bb1010faed542bf63d53e530fea5e5e12cf676aed588784298ba929"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7315,6 +7962,7 @@
           "sha256": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7332,6 +7980,7 @@
           "sha256": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7340,6 +7989,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MPL-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "MPL-2.0"
       ]
@@ -7359,6 +8009,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7376,6 +8027,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7393,6 +8045,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7410,6 +8063,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7427,6 +8081,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7444,6 +8099,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7461,6 +8117,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7478,6 +8135,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7495,6 +8153,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7512,6 +8171,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7529,6 +8189,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7546,6 +8207,7 @@
           "sha256": "b9eb266294324f672cbe945fe8f2e32f85024f0d61a1a7d14382cdde0ac44769"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7563,6 +8225,7 @@
           "sha256": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7580,6 +8243,7 @@
           "sha256": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7597,6 +8261,7 @@
           "sha256": "e53a7165e8bc3ced5e5628404b3d2d28ecc14ad720f1c09ba28385d5151ecf93"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7614,6 +8279,7 @@
           "sha256": "e53a7165e8bc3ced5e5628404b3d2d28ecc14ad720f1c09ba28385d5151ecf93"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7631,6 +8297,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7648,6 +8315,7 @@
           "sha256": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7665,6 +8333,7 @@
           "sha256": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7678,6 +8347,7 @@
           "sha256": "8f71659370c5268d9a1dc962a46232540e8fca63462586d8efaa95aab492a208"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7695,6 +8365,7 @@
           "sha256": "4455bf75a91154108304cb283e0fea9948c14f13e20d60887cf2552449dea3b1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7703,6 +8374,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "MIT"
       ]
@@ -7722,6 +8394,7 @@
           "sha256": "503558bfefe66ca15e4e3f7955b3cb0ec87fd52f29bf24b336af7bd00e946d5c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7739,6 +8412,7 @@
           "sha256": "503558bfefe66ca15e4e3f7955b3cb0ec87fd52f29bf24b336af7bd00e946d5c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7756,6 +8430,7 @@
           "sha256": "b3470648aff02beb36d7a53240fc9260ed80ed93bd43bace6b67d7ef7336ee33"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7769,6 +8444,7 @@
           "sha256": "42a35170233e83e18856792e748de4c1ce4a63b2afce9a370c89ef3fe23f9f2d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7786,6 +8462,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7803,6 +8480,7 @@
           "sha256": "1847e0e0698142ed4347c1441a9fa81c8fbddd44b1d8bbcd5e3647f991759d7f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7816,6 +8494,7 @@
           "sha256": "c962ee4d1d05ddc138b202b2540219ebc57893fcf97b364852094a9a94ce1365"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7829,6 +8508,7 @@
           "sha256": "8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7846,6 +8526,7 @@
           "sha256": "0b28172679e0009b655da42797c03fd163a3379d5cfa67ba1f1655e974a2a1a9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7863,6 +8544,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7880,6 +8562,7 @@
           "sha256": "0463bfa47d6d763d8c824333efb0e6d6df3946c13c3b077c78ed9f23ca50d0f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7893,6 +8576,7 @@
           "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7906,6 +8590,7 @@
           "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7919,6 +8604,7 @@
           "sha256": "6ac8711fb340c62ce0a4ecd463342d3fa0e8e70de697c863a2e1c0c53006003c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7936,6 +8622,7 @@
           "sha256": "c995204cc6bad2ed67dd41f7d89bb9f1a9d48e0edd745732b30640d7912089a4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7953,6 +8640,7 @@
           "sha256": "5e05b024f653a5ce199e77cbbbd42fb5553562ec714b819421ed0c3e552a75d7"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7966,6 +8654,7 @@
           "sha256": "3085885678bb161f6c472bbd331f66a2550b555eb76128f7f8247779128199c0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -7983,6 +8672,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8000,6 +8690,7 @@
           "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8013,6 +8704,7 @@
           "sha256": "1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8026,6 +8718,7 @@
           "sha256": "d1fc1bc0d155df60b2e7705b6b2ae02a05c96f948e1cec6e2fb86360b09f346b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8043,6 +8736,7 @@
           "sha256": "f3c3e9f4febe81ff14ccc233c344e6e60051290d1c1e5a2c670d63cc3608a5bb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8060,6 +8754,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8077,6 +8772,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8090,6 +8786,7 @@
           "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8103,6 +8800,7 @@
           "sha256": "219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8120,6 +8818,7 @@
           "sha256": "5cc390ab5e5e6507f467368cbab1297552d64bfd863f4b496c7928508bcfefd8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8137,6 +8836,7 @@
           "sha256": "000cbb5bea6f21829c8f0d9e1fe87410bd5ef0453412ffc017845982a3e19824"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8154,6 +8854,7 @@
           "sha256": "000cbb5bea6f21829c8f0d9e1fe87410bd5ef0453412ffc017845982a3e19824"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8171,6 +8872,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8188,6 +8890,7 @@
           "sha256": "02b6448337b757772d90e5f31caaa0f9e6afaad2221c01771d0a3deaa4d4196c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8196,6 +8899,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -8212,6 +8916,7 @@
           "sha256": "8b4e95f5cf0dc40269c99f7b787203ffe04ded245ca2427422c196efa2b2f42a"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8229,6 +8934,7 @@
           "sha256": "8ca6b96cea9e67c6c5c63f452c31bd396db8bd2406231fdea5d48ef462b48077"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8242,6 +8948,7 @@
           "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8259,6 +8966,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8276,6 +8984,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8293,6 +9002,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8310,6 +9020,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8318,6 +9029,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/tauri-apps/tauri/blob/499df79be65ef8c0670abc0207cd9e37b55d8491/LICENSE.spdx",
+          "sha256": "5e834fe9788c524210deda859c46a550ffa5aa0cba9ea0572f0d81120e97c008"
+        },
+        {
+          "url": "https://github.com/tauri-apps/tauri/blob/499df79be65ef8c0670abc0207cd9e37b55d8491/LICENSE_MIT",
+          "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+        },
+        {
+          "url": "https://github.com/tauri-apps/tauri/blob/499df79be65ef8c0670abc0207cd9e37b55d8491/LICENSE_APACHE-2.0",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -8342,6 +9067,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8363,6 +9089,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8384,6 +9111,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8401,6 +9129,7 @@
           "sha256": "9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8422,6 +9151,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8443,6 +9173,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8464,6 +9195,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8485,6 +9217,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8506,6 +9239,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8527,6 +9261,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8548,6 +9283,7 @@
           "sha256": "b7f455413bfe5f9d7da501a4468d4c5f866a432c325947e98cc9535e8b26cd6d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8569,6 +9305,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8590,6 +9327,7 @@
           "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8607,6 +9345,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8624,6 +9363,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8641,6 +9381,7 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8654,6 +9395,7 @@
           "sha256": "d9fa6b0e6fed50d4961b9c931587af6bd127df13e9473418d3e324f427db4f06"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8671,6 +9413,7 @@
           "sha256": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8688,6 +9431,7 @@
           "sha256": "60a7062291b01ba068f300612cdbdc20382ac1d4934f07bcdd7167c15299f309"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8701,6 +9445,7 @@
           "sha256": "175f2a204844c70c6778f2e47ba105d1fb3dc35a2172ecc9a7ae54c8701d03ab"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8718,6 +9463,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8735,6 +9481,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8752,6 +9499,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8769,6 +9517,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8782,6 +9531,7 @@
           "sha256": "20c097d0de27e2adc179140a3d542091951a030699c7e1c78655f2a2d08d4e3e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8799,6 +9549,7 @@
           "sha256": "2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8816,6 +9567,7 @@
           "sha256": "2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8833,6 +9585,7 @@
           "sha256": "2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8846,6 +9599,7 @@
           "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8859,6 +9613,7 @@
           "sha256": "6d41e05f1d54fe726997cb0334ec539f1dff50600b1d5d90462ec2b392770ced"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8872,6 +9627,7 @@
           "sha256": "6d41e05f1d54fe726997cb0334ec539f1dff50600b1d5d90462ec2b392770ced"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8885,6 +9641,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8906,6 +9663,7 @@
           "sha256": "84b34dd7608f7fb9b17bd588a6bf392bf7de504e2716f024a77d89f1b145a151"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8927,6 +9685,7 @@
           "sha256": "41ace205715d9f19a3214218cc1c01d57c533e02cd0fef7c8e51a49a7fce5ac5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8944,6 +9703,7 @@
           "sha256": "904801faf3f1850328af8e1aa1047b9190cc22ed40df5c87f2d93d17f847ef67"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8961,6 +9721,7 @@
           "sha256": "904801faf3f1850328af8e1aa1047b9190cc22ed40df5c87f2d93d17f847ef67"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8974,6 +9735,7 @@
           "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -8987,6 +9749,7 @@
           "sha256": "0b83dc40cba89b9922bb84b0a9c7d2768ce37c1d7e138b7424fd4549915778c9"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9004,6 +9767,7 @@
           "sha256": "e20fa2b8e0a2565f24a792b94b4bf4b6c2b9d36f781d8a9516e218a036e6677a"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9017,6 +9781,7 @@
           "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9034,6 +9799,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9051,6 +9817,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9068,6 +9835,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9085,6 +9853,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9102,6 +9871,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9119,6 +9889,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9136,6 +9907,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9153,6 +9925,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9170,6 +9943,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9187,6 +9961,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9204,6 +9979,7 @@
           "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9217,6 +9993,7 @@
           "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9230,6 +10007,7 @@
           "sha256": "5049cf464977eff4b4fcfa7988d84e74116956a3eb9d5f1d451b3f828f945233"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9243,6 +10021,7 @@
           "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9256,6 +10035,7 @@
           "sha256": "4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9269,6 +10049,7 @@
           "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9282,6 +10063,7 @@
           "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9295,6 +10077,7 @@
           "sha256": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9316,6 +10099,7 @@
           "sha256": "6c1e5d0ccf5e8951401cb964036ae664d52fc8d1148173b53bc54fc534f5d404"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9329,6 +10113,7 @@
           "sha256": "a7cea8a5a56ba02950d098a7c56eed312fc745ceecd437e4aad2f7f8d38661b8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9342,6 +10127,7 @@
           "sha256": "c816a0749cdc6bf062a5111c159723de51b2bfac66a1dac2655abd9e6b1583eb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9359,6 +10145,7 @@
           "sha256": "f3c9fe731c701ed77fd5fbaac573872af04dc5869385eb9bd5e3c73c42713814"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9372,6 +10159,7 @@
           "sha256": "1c99d306def307c6e570615a484c65e6eafdd7717913f42118b65847830c5123"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9379,7 +10167,13 @@
       "version": "1.1.1",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Unlicense OR MIT",
-      "sourceFiles": [],
+      "sourceFiles": [
+        {
+          "path": "libjpeg-turbo/LICENSE.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        }
+      ],
+      "upstreamFiles": [],
       "standardTextIds": [
         "MIT",
         "Unlicense"
@@ -9400,6 +10194,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9417,6 +10212,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9438,6 +10234,7 @@
           "sha256": "a825bd853ab71619a4923d7b4311221427848070ff44d990da39b0b274c1683f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9451,6 +10248,7 @@
           "sha256": "27ebda9d51f0a56b7e281ccd8230a27236dcb51c05f64b07869ecf6e965d68b0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9459,6 +10257,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+          "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -9470,6 +10282,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+          "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -9481,6 +10307,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+          "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -9492,6 +10332,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/AUTHORS",
+          "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -9503,6 +10357,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+          "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -9527,6 +10395,7 @@
           "sha256": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9544,6 +10413,7 @@
           "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9561,6 +10431,7 @@
           "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9574,6 +10445,7 @@
           "sha256": "7abd9b6960dcf7d4d0a48606a5b71bfe37d472db68d70637f3a58a56785f1621"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9591,6 +10463,7 @@
           "sha256": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9604,6 +10477,7 @@
           "sha256": "5a952e4a62a3022a7f39e9f0eb8d0638addd3efffb3f4092890923668152296e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9617,6 +10491,7 @@
           "sha256": "5cf1c9dc617e4cad7fa03181ff893601ad5243aa3be527ef39034e1cd6377676"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9634,6 +10509,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9651,6 +10527,7 @@
           "sha256": "b5dd5bfd08ec04894af18caa0028257b3d868ef223393e5155eb6de140565286"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9664,6 +10541,7 @@
           "sha256": "b65c9ac375b3b6c538efe6253131c44a73b50c5ee0c48a34319e766633bfee02"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9681,6 +10559,7 @@
           "sha256": "3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9698,6 +10577,7 @@
           "sha256": "e4c9b06fa850cb9b540a5e400e9f6394cf15efcf4098144de477d1d3dae10150"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9715,6 +10595,7 @@
           "sha256": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9732,6 +10613,7 @@
           "sha256": "5d1bf69a3993489f96efc2ec5af6252cc4f5ff524b023ab6a43a08414f23ddb0"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9745,6 +10627,7 @@
           "sha256": "c7766d2e29f88a4be81b6ac6216c62d2d0918c7d3f2fc98be6fecac8f6595e60"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9758,6 +10641,7 @@
           "sha256": "cedfcc7ace1639adb054bd4a19b6f8585ccb2429a60b4bf51bfeb0601058c22c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9775,6 +10659,7 @@
           "sha256": "b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9788,6 +10673,7 @@
           "sha256": "b9b7e5d4bf8857061fbecab39ef1923644eba639337af22d7ad0bb9b3ce59c49"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9801,6 +10687,7 @@
           "sha256": "b9b7e5d4bf8857061fbecab39ef1923644eba639337af22d7ad0bb9b3ce59c49"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9818,6 +10705,7 @@
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9831,6 +10719,7 @@
           "sha256": "a65f5d0a945d267751344c95665945b90c030ea107faf5c85d518929886187da"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9852,6 +10741,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9873,6 +10763,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9881,6 +10772,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasi-rs/blob/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasi-rs/blob/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -9893,6 +10794,20 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR BSL-1.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/ardaku/wasite/blob/0c72934ad329ab4670eb017581640c2d6eceb289/LICENSE_APACHE_2_0.txt",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "url": "https://github.com/ardaku/wasite/blob/0c72934ad329ab4670eb017581640c2d6eceb289/LICENSE_BOOST_1_0.txt",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        },
+        {
+          "url": "https://github.com/ardaku/wasite/blob/0c72934ad329ab4670eb017581640c2d6eceb289/LICENSE_MIT.txt",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "BSL-1.0",
@@ -9914,6 +10829,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9931,6 +10847,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9948,6 +10865,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9965,6 +10883,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9982,6 +10901,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -9990,6 +10910,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -10002,6 +10932,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -10023,6 +10963,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10031,6 +10972,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -10048,6 +10999,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10061,6 +11013,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10074,6 +11027,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10087,6 +11041,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10100,6 +11055,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10113,6 +11069,7 @@
           "sha256": "1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10130,6 +11087,7 @@
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10147,6 +11105,7 @@
           "sha256": "f428305bbf2e70fbd807af0f3c7ac1b7acfb95311640f451e9d2e48db6d7e96b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10164,6 +11123,7 @@
           "sha256": "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10177,6 +11137,7 @@
           "sha256": "3f39c032be4639be635da96d77c4d0f4393c3595a164450ffd86f3d17701ec10"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10190,6 +11151,7 @@
           "sha256": "281b72cb008466810da31680e72005b9899c7e9d7705b909c86098260e12aa7d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10203,6 +11165,7 @@
           "sha256": "e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10216,6 +11179,7 @@
           "sha256": "e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10224,6 +11188,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/wravery/webview2-rs/blob/b74dc5e2b394044bea5191052868ce7a106c202c/LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -10234,6 +11204,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/wravery/webview2-rs/blob/dffa41a8a46d3f5565eefbff2de57d38d399f158/LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -10244,6 +11220,12 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/wravery/webview2-rs/blob/b74dc5e2b394044bea5191052868ce7a106c202c/LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+        }
+      ],
       "standardTextIds": [
         "MIT"
       ]
@@ -10263,6 +11245,7 @@
           "sha256": "573f5227db835cd30bbdd3aed3f82615f80119a4d5c82b4daf642dbfe2b6afde"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10284,6 +11267,7 @@
           "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10301,6 +11285,7 @@
           "sha256": "ce7bc3499fee93d5022ef430d5e4201e79a6d9154f3974e42f41349f0569e09b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10309,6 +11294,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -10329,6 +11315,7 @@
           "sha256": "cb3c929a05e6cbc9de9ab06a4c57eeb60ca8c724bef6c138c87d3a577e27aa14"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10337,6 +11324,7 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT/Apache-2.0",
       "sourceFiles": [],
+      "upstreamFiles": [],
       "standardTextIds": [
         "Apache-2.0",
         "MIT"
@@ -10361,6 +11349,7 @@
           "sha256": "7ccef0d35e8507fa02d7e904a5277d62723f9ec576d52f6a865cab7b4dbf12ad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10378,6 +11367,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10395,6 +11385,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10412,6 +11403,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10429,6 +11421,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10446,6 +11439,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10463,6 +11457,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10480,6 +11475,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10497,6 +11493,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10514,6 +11511,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10531,6 +11529,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10548,6 +11547,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10565,6 +11565,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10582,6 +11583,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10599,6 +11601,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10616,6 +11619,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10633,6 +11637,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10650,6 +11655,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10667,6 +11673,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10684,6 +11691,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10701,6 +11709,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10718,6 +11727,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10735,6 +11745,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10752,6 +11763,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10769,6 +11781,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10786,6 +11799,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10803,6 +11817,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10820,6 +11835,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10837,6 +11853,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10854,6 +11871,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10871,6 +11889,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10888,6 +11907,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10905,6 +11925,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10922,6 +11943,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10939,6 +11961,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10956,6 +11979,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10973,6 +11997,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -10990,6 +12015,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11007,6 +12033,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11024,6 +12051,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11041,6 +12069,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11058,6 +12087,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11075,6 +12105,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11092,6 +12123,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11109,6 +12141,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11126,6 +12159,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11143,6 +12177,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11160,6 +12195,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11177,6 +12213,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11194,6 +12231,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11211,6 +12249,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11228,6 +12267,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11245,6 +12285,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11262,6 +12303,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11279,6 +12321,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11296,6 +12339,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11313,6 +12357,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11330,6 +12375,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11347,6 +12393,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11364,6 +12411,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11381,6 +12429,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11398,6 +12447,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11415,6 +12465,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11432,6 +12483,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11449,6 +12501,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11466,6 +12519,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11483,6 +12537,7 @@
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11496,6 +12551,7 @@
           "sha256": "cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11509,6 +12565,7 @@
           "sha256": "cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11522,6 +12579,7 @@
           "sha256": "cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11535,6 +12593,7 @@
           "sha256": "ea021d8c6383c84d19c15ce90d3b1602cf448fdcc0bf3772c98e43c7bf1bf1d1"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11556,6 +12615,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11577,6 +12637,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11598,6 +12659,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11619,6 +12681,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11640,6 +12703,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11648,6 +12712,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -11660,6 +12734,16 @@
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "sourceFiles": [],
+      "upstreamFiles": [
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "url": "https://github.com/bytecodealliance/wasm-tools/blob/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
       "standardTextIds": [
         "Apache-2.0",
         "LLVM-exception",
@@ -11681,6 +12765,7 @@
           "sha256": "d0235d2a1f657b6fd18fd4ce98988348969a9284d94281b6d117830aa259a07a"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11694,6 +12779,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11715,6 +12801,7 @@
           "sha256": "26235c41e314fb0da35b33b2bb5bcbc4dd523839f8eeca52efcd43586f441fb5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11728,6 +12815,7 @@
           "sha256": "411781fd38700f2357a14126d0ab048164ab881f1dcb335c1bb932e232c9a2f5"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11741,6 +12829,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11754,6 +12843,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11771,6 +12861,7 @@
           "sha256": "a72561f47c1f665535930f606739d9098a6186802d5e2e8ec491faf00f4add5b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11788,6 +12879,7 @@
           "sha256": "a72561f47c1f665535930f606739d9098a6186802d5e2e8ec491faf00f4add5b"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11805,6 +12897,7 @@
           "sha256": "90c503b61dee04e1449c323ec34c229dfb68d7adcb96c7e140ee55f70fce2d8e"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11822,6 +12915,7 @@
           "sha256": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11843,6 +12937,7 @@
           "sha256": "319736510aa7dbd6f49546f6ee57c787dbe2c7dfa0507dfbd543375f86a4416d"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11860,6 +12955,7 @@
           "sha256": "69036b033e4bb951821964dbc3d9b1efe6913a6e36d9c1f206de4035a1a85cc4"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11873,6 +12969,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11886,6 +12983,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11899,6 +12997,7 @@
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11912,6 +13011,7 @@
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11925,6 +13025,7 @@
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11946,6 +13047,7 @@
           "sha256": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11967,6 +13069,7 @@
           "sha256": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11980,6 +13083,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -11993,6 +13097,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12010,6 +13115,7 @@
           "sha256": "0b04ee3ce0021a922f43f37a17fee09a5a1ee6d1f4e149d5bf75b72395a49c72"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12027,6 +13133,7 @@
           "sha256": "90a8b6622d5e3faa3055007a9ab99c4e99a51e6ebdccbada7530cb16dc2bd4fb"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12040,6 +13147,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12053,6 +13161,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12066,6 +13175,7 @@
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12079,6 +13189,7 @@
           "sha256": "04dc52136d82400b11df5f474949863a70a5d05d2278dec45b99c479494450a6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12092,6 +13203,7 @@
           "sha256": "04dc52136d82400b11df5f474949863a70a5d05d2278dec45b99c479494450a6"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12105,6 +13217,7 @@
           "sha256": "58545fed1565e42d687aecec6897d35c6d37ccb71479a137c0deb2203e125c79"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12118,6 +13231,7 @@
           "sha256": "e72111c52b7d96ebe25348dee19f0744f444d3c95ae6b1ecb6ccaecc5bce05ba"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12131,6 +13245,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12144,6 +13259,7 @@
           "sha256": "018b1cb87efdf7a04c2fcc13d57ed63f62149113fb207b27ea13430d64f13513"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12157,6 +13273,7 @@
           "sha256": "129e8edef29e9abcd2ebabe252f4ef1b1289cdca356bf0040284a2fbccfb96c8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12178,6 +13295,7 @@
           "sha256": "129e8edef29e9abcd2ebabe252f4ef1b1289cdca356bf0040284a2fbccfb96c8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12203,6 +13321,7 @@
           "sha256": "129e8edef29e9abcd2ebabe252f4ef1b1289cdca356bf0040284a2fbccfb96c8"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12224,6 +13343,7 @@
           "sha256": "d201d14804d3bcd3b944147173175e4abfbd838b7c8069b6bd3452496bf13e6c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12245,6 +13365,7 @@
           "sha256": "d201d14804d3bcd3b944147173175e4abfbd838b7c8069b6bd3452496bf13e6c"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12258,6 +13379,7 @@
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12271,6 +13393,7 @@
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     },
     {
@@ -12284,6 +13407,7 @@
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
+      "upstreamFiles": [],
       "standardTextIds": []
     }
   ]

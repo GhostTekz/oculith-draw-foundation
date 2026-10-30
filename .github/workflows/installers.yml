@@ -37,10 +37,20 @@ jobs:
       # Keep the host display stack outside the Linux AppImage.
       LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libwayland-client.so*;libwayland-cursor.so*;libwayland-egl.so*;libwayland-server.so*;libxkbcommon.so*;libxcb-randr.so*;libxcb-render.so*;libxcb-shm.so*;libXau.so*;libXdmcp.so*'
     steps:
+      - name: Preserve generated source bytes (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v6
+        with:
+          # Audit receipts must name the commit that built the installer, not
+          # GitHub's temporary pull-request merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: 26
+      - name: Verify public source boundary
+        working-directory: open-pdf-studio
+        run: node scripts/community-export-verify.mjs --published
       - uses: dtolnay/rust-toolchain@stable
       - name: Native dependencies (Linux)
         if: runner.os == 'Linux'
@@ -69,6 +79,23 @@ jobs:
       - name: Build installer
         working-directory: open-pdf-studio
         run: npm run tauri:community -- --bundles ${{ matrix.bundle }}
+      - name: Install and start Foundation DEB (Ubuntu 22.04)
+        if: matrix.bundle == 'deb'
+        working-directory: open-pdf-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$(find ../target/community/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)"
+          test -n "$package"
+          package="$(realpath "$package")"
+          docker run --rm \
+            -v "$package:/input/foundation.deb:ro" \
+            -v "$PWD/scripts/linux-deb-smoke.sh:/input/linux-deb-smoke.sh:ro" \
+            ubuntu:22.04 \
+            bash /input/linux-deb-smoke.sh /input/foundation.deb 10
+      - name: Verify public editor bundle
+        working-directory: open-pdf-studio
+        run: node scripts/community-export-verify.mjs --published --bundle
       - name: Provide pinned linuxdeploy (Linux)
         if: matrix.bundle == 'deb'
         shell: bash
@@ -127,6 +154,52 @@ jobs:
             nsis) test -n "$(find "$bundle/nsis" -maxdepth 1 -name '*-setup.exe' -print -quit)" ;;
             app) test -n "$(find "$bundle/macos" -maxdepth 1 -name '*.app' -print -quit)" ;;
           esac
+      - name: Package macOS app for review
+        if: matrix.bundle == 'app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="target/community/release/bundle/macos"
+          shopt -s nullglob
+          apps=("$bundle"/*.app)
+          test "${#apps[@]}" -eq 1
+          app="${apps[0]}"
+          test -d "$app"
+          archive="$bundle/$(basename "$app" .app).zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+          test -s "$archive"
+          unzip -tq "$archive"
+      - name: Verify installed notices and public-only contents (Linux and macOS)
+        if: matrix.bundle == 'deb' || matrix.bundle == 'app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.bundle }}" == 'deb' ]]; then
+            package="$(find target/community/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)"
+            extracted="$(mktemp -d)"
+            trap 'rm -rf "$extracted"' EXIT
+            dpkg-deb --extract "$package" "$extracted"
+            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$extracted" --artifact "$package" \
+              --output target/community/release/bundle/foundation-package-audit-deb.json
+            appimage="$(find target/community/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
+            test -n "$appimage"
+            appimage="$(realpath "$appimage")"
+            extracted_appimage="$(mktemp -d)"
+            trap 'rm -rf "$extracted" "$extracted_appimage"' EXIT
+            (cd "$extracted_appimage" && "$appimage" --appimage-extract >/dev/null)
+            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$extracted_appimage/squashfs-root" --artifact "$appimage" \
+              --output target/community/release/bundle/foundation-package-audit-appimage.json
+          else
+            app="$(find target/community/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+            archive="${app%.app}.zip"
+            test -s "$archive"
+            extracted_app="$(mktemp -d)"
+            trap 'rm -rf "$extracted_app"' EXIT
+            ditto -x -k "$archive" "$extracted_app"
+            test -d "$extracted_app/$(basename "$app")"
+            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$extracted_app/$(basename "$app")" --artifact "$archive" \
+              --output target/community/release/bundle/foundation-package-audit-app.json
+          fi
       - name: Install and remove Foundation (Windows)
         if: matrix.bundle == 'nsis'
         shell: pwsh
@@ -157,6 +230,8 @@ jobs:
           if (-not (Test-Path (Join-Path $installed 'ocudraw-community-pdfium-worker.exe'))) {
             throw 'Installed PDFium worker is missing'
           }
+          & node "$env:GITHUB_WORKSPACE/open-pdf-studio/scripts/verify-foundation-package.mjs" --root "$installed" --artifact "$($setup.FullName)" --output "$env:GITHUB_WORKSPACE/target/community/release/bundle/foundation-package-audit-nsis.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Foundation notice or source-boundary audit failed' }
           $uninstaller = Join-Path $installed 'uninstall.exe'
           if (-not (Test-Path $uninstaller)) { throw 'Foundation uninstaller is missing' }
           $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait

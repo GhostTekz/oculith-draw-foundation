@@ -34,6 +34,7 @@ export const ICONS = [
   'arrow-down-up', 'arrow-left-right', 'arrow-right-to-line', 'arrow-up-down', 'arrow-up-right',
   'arrow-up-to-line', 'blend', 'book-open', 'book-open-text', 'bookmark', 'box', 'bring-to-front',
   'chevron-down', 'chevron-up', 'chevron-first', 'chevron-last', 'chevron-left', 'chevron-right',
+  'chevrons-left',
   'circle', 'circle-check', 'clipboard', 'clipboard-copy', 'clipboard-paste', 'columns-2',
   'combine', 'contrast', 'copy', 'crop', 'diameter', 'download', 'drafting-compass', 'droplet',
   'droplets', 'eraser', 'expand', 'eye', 'eye-off', 'file', 'file-archive', 'file-cog', 'file-down',

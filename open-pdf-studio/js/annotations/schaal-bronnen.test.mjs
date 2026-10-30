@@ -20,13 +20,13 @@ const { schaalOpPuntUitBronnen } = await import('./schaal-op-punt.js');
 const PPU = (n) => 72 / (25.4 * n);
 const schaal = (doc, pagina, x, y) => schaalOpPuntUitBronnen(schaalBronnen(doc), doc, pagina, x, y);
 
-/** Een document waarvan de annotatielijst telt hoe vaak hij doorlopen wordt. */
+/** Count collection passes at the indexed walk's length read. */
 function geteldDocument(annotaties) {
   const doc = { annotations: annotaties, doorlopen: 0 };
   const lijst = annotaties;
   doc.annotations = new Proxy(lijst, {
     get(doel, sleutel, ontvanger) {
-      if (sleutel === Symbol.iterator) doc.doorlopen++;
+      if (sleutel === 'length') doc.doorlopen++;
       return Reflect.get(doel, sleutel, ontvanger);
     },
   });

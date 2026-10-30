@@ -34,6 +34,7 @@ const MODULES = {
   'js/core/platform.js': () => import('../core/platform.js'),
   'js/core/edition-helper.js': () => import('../core/edition-helper.js'),
   'js/core/perf.js': () => import('../core/perf.js'),
+  'js/core/default-author.js': () => import('../core/default-author.js'),
   'js/core/state.js': () => import('../core/state.js'),
   'js/core/stores/selection-helpers.js': () => import('../core/stores/selection-helpers.js'),
   'js/core/undo-manager.js': () => import('../core/undo-manager.js'),
@@ -54,6 +55,7 @@ const MODULES = {
   'js/pdf/weergave-ruimte.js': () => import('../pdf/weergave-ruimte.js'),
   'js/quantities/schedule-csv.js': () => import('../quantities/schedule-csv.js'),
   'js/quantities/schedule-templates.js': () => import('../quantities/schedule-templates.js'),
+  'js/sets/register-context.js': () => import('../sets/register-context.js'),
   'js/solid/commands/util.js': () => import('../solid/commands/util.js'),
   'js/solid/components/Dialog.jsx': () => import('../solid/components/Dialog.jsx'),
   'js/solid/components/panels/panelActions.js': () => import('../solid/components/panels/panelActions.js'),
@@ -75,6 +77,18 @@ export const EARLY = Object.freeze(['solid-js', 'solid-js/web', 'solid-js/store'
 
 const loaded = new Map();
 const loaders = { ...PACKAGES, ...MODULES };
+const capabilities = new Map();
+
+/** Named, versioned functions that installed plug-ins intentionally share. */
+export function publishCapability(id, provider) {
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9.-]*\/[1-9][0-9]*$/.test(id) ||
+      typeof provider !== 'function' || capabilities.has(id)) {
+    throw new Error(`Invalid or duplicate plug-in capability: ${String(id)}`);
+  }
+  capabilities.set(id, provider);
+}
+
+export function capability(id) { return capabilities.get(id) || null; }
 
 /** Whether `id` is part of the interface. */
 export function provides(id) { return Object.hasOwn(loaders, id); }
@@ -126,5 +140,7 @@ export function hostModule(id) {
 
 /** The interface object a plug-in finds at globalThis.__ocudrawHost. */
 export function installHost() {
-  globalThis.__ocudrawHost = Object.freeze({ apiVersion: HOST_API_VERSION, module: hostModule, provides });
+  globalThis.__ocudrawHost = Object.freeze({
+    apiVersion: HOST_API_VERSION, module: hostModule, provides, publishCapability, capability,
+  });
 }

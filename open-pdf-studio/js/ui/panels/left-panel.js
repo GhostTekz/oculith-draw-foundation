@@ -28,6 +28,7 @@ import {
   thumbnailResultKeepsQueue,
   createThumbnailCoordinator,
   raceThumbnailRender,
+  partitionThumbnailInvalidations,
   THUMBNAIL_DEFER_MS,
   THUMBNAIL_RENDER_TIMEOUT_MS,
 } from '../../pdf/thumbnail-schedule.js';
@@ -41,6 +42,37 @@ const THUMBNAIL_SCALE = 0.14;
 
 // Cache for thumbnail data per document: Map<docId, Map<pageNum, imageDataURL>>
 const thumbnailCache = new Map();
+let detachedVisibleRange = null;
+let detachedThumbnailChanged = null;
+
+/** The separate view subscribes only while its drawing window owns it. */
+export function onDetachedThumbnailChange(handler) {
+  detachedThumbnailChanged = handler;
+}
+
+function notifyDetachedThumbnailChange() {
+  detachedThumbnailChanged?.();
+}
+
+/** Share only the active document's cached thumbnail with its view window. */
+export function cachedThumbnailForDocument(docId, pageNum) {
+  return thumbnailCache.get(docId)?.get(pageNum) || null;
+}
+
+/** Prioritize the bounded range visible in the separate thumbnail window. */
+export function setDetachedThumbnailRange(docId, start, end) {
+  detachedVisibleRange = docId && Number.isSafeInteger(start) && Number.isSafeInteger(end)
+    ? { docId, start: Math.max(1, start), end: Math.min(start + 23, end) } : null;
+  const deferred = deferredThumbnailPages.get(docId);
+  if (deferred && detachedVisibleRange) {
+    const visible = [...deferred].filter((page) => page >= detachedVisibleRange.start
+      && page <= detachedVisibleRange.end);
+    for (const page of visible) deferred.delete(page);
+    if (!deferred.size) deferredThumbnailPages.delete(docId);
+    if (visible.length) invalidateThumbnails(visible);
+  }
+  updateVisiblePriorities();
+}
 
 // Per-doc per-page generation counter. Bumped on invalidateThumbnail() so a
 // stale render-completion (annotations changed mid-flight, rapid re-invalidate)
@@ -135,8 +167,6 @@ function handleThumbnailScroll() {
 // Find visible thumbnails and add them to priority queue
 function updateVisiblePriorities() {
   const thumbnailsContainer = getContainerRef();
-  if (!thumbnailsContainer) return;
-
   const activeDoc = getActiveDocument();
   if (!activeDoc) return;
 
@@ -145,8 +175,10 @@ function updateVisiblePriorities() {
 
   const docState = documentState.get(activeDoc.id);
 
-  const containerRect = thumbnailsContainer.getBoundingClientRect();
-  const thumbnails = thumbnailsContainer.querySelectorAll('.thumbnail-item');
+  // The original sidebar may be unmounted while its separate view still needs
+  // pages. Its requested range can drive rendering without a DOM container.
+  const containerRect = thumbnailsContainer?.getBoundingClientRect();
+  const thumbnails = thumbnailsContainer?.querySelectorAll('.thumbnail-item') || [];
 
   priorityPages.clear();
 
@@ -173,6 +205,13 @@ function updateVisiblePriorities() {
       }
     }
   });
+
+  if (detachedVisibleRange?.docId === activeDoc.id && docState) {
+    for (let pageNum = detachedVisibleRange.start;
+      pageNum <= Math.min(detachedVisibleRange.end, docState.numPages); pageNum++) {
+      if (!docCache.has(pageNum)) priorityPages.add(pageNum);
+    }
+  }
 
   if (firstVisiblePage !== null && docState) {
     lastVisiblePage = firstVisiblePage;
@@ -441,6 +480,7 @@ function rememberThumbnail(docId, pageNum, gen, imageData) {
     thumbnailQueue.forget(pageNum);
     priorityPages.delete(pageNum);
     setThumbnailImage(pageNum, imageData);
+    notifyDetachedThumbnailChange();
   }
   return true;
 }
@@ -1020,6 +1060,7 @@ export function invalidateThumbnail(pageNum) {
   thumbnailQueue.forget(pageNum);
   priorityPages.add(pageNum);
   startProcessor();
+  notifyDetachedThumbnailChange();
 }
 
 // Invalidate several pages' thumbnails at once (e.g. after "Clear All" or a
@@ -1032,11 +1073,14 @@ export function invalidateThumbnails(pageNums) {
   // sees cost a full page render after every markup edit (a quarter second
   // on a large drawing). Keep the old thumbnail (still fine as the page
   // transition placeholder) and redo it when the panel comes up.
-  if (!isPanelShown('thumbnails')) {
+  const range = detachedVisibleRange?.docId === activeDoc.id ? detachedVisibleRange : null;
+  const { immediate, deferred } = partitionThumbnailInvalidations(pageNums, isPanelShown('thumbnails'), range);
+  if (deferred.length) {
     if (!deferredThumbnailPages.has(activeDoc.id)) deferredThumbnailPages.set(activeDoc.id, new Set());
-    for (const pageNum of pageNums) deferredThumbnailPages.get(activeDoc.id).add(pageNum);
-    return;
+    for (const pageNum of deferred) deferredThumbnailPages.get(activeDoc.id).add(pageNum);
   }
+  if (!immediate.length) return;
+  pageNums = immediate;
   const docCache = thumbnailCache.get(activeDoc.id);
   let any = false;
   for (const pageNum of pageNums) {
@@ -1048,7 +1092,10 @@ export function invalidateThumbnails(pageNums) {
     priorityPages.add(pageNum);
     any = true;
   }
-  if (any) startProcessor();
+  if (any) {
+    startProcessor();
+    notifyDetachedThumbnailChange();
+  }
 }
 
 // Pages whose thumbnail an edit made stale while the panel was hidden, per
@@ -1078,6 +1125,7 @@ export function invalidateDocumentThumbnails(doc) {
     docState.wrapped = false;
   }
   if (getActiveDocument() === doc) {
+    notifyDetachedThumbnailChange();
     clearAllThumbnails();
     setPageCount(doc.pdfDoc.numPages);
     thumbnailQueue.reset();
@@ -1097,6 +1145,7 @@ export function clearThumbnailCache(docId) {
   if (docId) {
     thumbnailCache.delete(docId);
     documentState.delete(docId);
+    notifyDetachedThumbnailChange();
   }
 }
 
@@ -1115,6 +1164,7 @@ export function updateActiveThumbnail(restoreScroll = false) {
   const doc = getActiveDocument();
   const newPage = doc ? doc.currentPage : 1;
   setActivePage(newPage);
+  notifyDetachedThumbnailChange();
 
   // Keep the thumbnail selection in sync with the active page when the user
   // has a single-page selection (which is the default after a normal click).
@@ -1147,4 +1197,5 @@ export function clearThumbnails() {
   docNotBefore.clear();
   docInFlight.clear();
   clearDeferRetry();
+  notifyDetachedThumbnailChange();
 }

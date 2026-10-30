@@ -43,6 +43,22 @@ The inventory includes platform-specific optional packages that may not be
 present in every desktop bundle. Changes to the dependency lockfile require
 review and regeneration of this inventory and its copied notices.
 
+The `@crabnebula/tauri-plugin-drag` 2.1.0 npm archive has no license field or
+license file. Its `npm/@crabnebula/tauri-plugin-drag/` directory contains the
+upstream repository's `LICENSE.spdx`, `LICENSE_MIT`, and `LICENSE_APACHE-2.0`
+from the [`tauri-plugin-drag-v2.1.0` tag](https://github.com/crabnebula-dev/drag-rs/tree/8a0be885a087c076b8127743b217b795e8b4fe9d)
+at commit `8a0be885a087c076b8127743b217b795e8b4fe9d`. The npm archive's
+`guest-js/index.ts` matches that tag's JavaScript source byte for byte
+(SHA-256 `bc2521c0c7b19cd503c69efc108102c58aab02349f1b8409a306c070b5c0dc0a`).
+The copied upstream texts have SHA-256 hashes
+`6326d64033572a9b5f627ec7a39fd468dcbc6e01ee12fa71a600c66e12e0e411`,
+`9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9`,
+and `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`,
+respectively. The upstream README describes the repository's licenses as
+"MIT or MIT/Apache 2.0 where applicable." The inventory retains null
+`licenseFromLockfile` and `noticeFile` values because these texts came from
+the tagged upstream source, rather than from the npm archive.
+
 `rust-inventory.json` is a reproducible snapshot of the locked workspace graph's
 raw Cargo `license` and `license-file` fields. Regenerate it from the repository
 root with `python scripts/rust-license-inventory.py`; verify it with
@@ -53,16 +69,25 @@ platform-specific dependencies; it does **not** identify which crates or
 native libraries are linked into a particular release binary.
 
 `rust-third-party-notices.txt` bundles root license, notice, and authors texts
-from all 778 external crate archives in the locked graph. Identical source
+from all 780 external crate archives in the locked graph. Identical source
 texts are stored once and referenced by SHA-256 from each package; line endings
 and trailing whitespace are normalized in the bundle. For 61 archives
 without a root license file, it includes the license's standard SPDX text in
-an appendix and marks the package section as a fallback. Those standard texts
+an appendix and marks the package section as a fallback. Forty-seven of these
+also have upstream repository license or authors files from the Git commit
+recorded in their crate's `.cargo_vcs_info.json`. These are labeled separately
+from archive files, pinned by SHA-256 in `scripts/rust-upstream-notices/catalog.json`,
+and copied into the notice bundle. Cargo describes that VCS information as a
+best-effort snapshot, not proof that the crate archive matches the repository.
+For the other 14 archives no matching repository text has been pinned; their
+fallback and metadata remain visible for review. The standard texts
 are pinned under `scripts/rust-spdx-texts/`; they came from the `spdx` 0.13.4
 crate's license text collection. The MIT template contains copyright
-placeholders, so fallback entries need source and attribution review before
-release. `rust-notice-manifest.json` records each included source file's hash,
-package identity, fallback IDs, and the lockfile hash. To regenerate and verify:
+placeholders, so fallback entries still need source and attribution review
+before release. `rust-notice-manifest.json` records each included archive file's
+hash, separately identified upstream files, package identity, fallback IDs,
+and the lockfile hash. The neutral generators and pinned input texts are
+included in the Foundation source checkout. To regenerate and verify:
 
 ```
 python scripts/rust-license-inventory.py --offline
@@ -71,7 +96,11 @@ python scripts/rust-license-inventory.py --check --offline
 python scripts/rust-notice-bundle.py --check --offline
 ```
 
-The graph currently has 784 packages: 778 external and six workspace crates.
+The `turbojpeg-sys` archive also includes vendored libjpeg-turbo code. Its
+`libjpeg-turbo/LICENSE.md` is bundled as an archive-origin nested notice; it
+does not replace the crate's own `Unlicense OR MIT` fallback.
+
+The graph currently has 786 packages: 780 external and six workspace crates.
 `pdfium-worker` now declares LGPL-3.0-or-later, matching the application. The
 `open-pdf-render` workspace crate declares MIT; its authors should verify that
 declaration and a standalone notice before distribution. Forty-seven external

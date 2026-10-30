@@ -103,6 +103,7 @@ Panels live in three hosts: left, right and bottom. Each host has an access bar 
 - **Window ▸ Hide Panels** (Shift+F4) hides all hosts. **Auto-Hide Panel Access** hides the access bars while their panels are closed.
 - The header of each panel shows its title and a ▾ panel menu with panel-specific items.
 - Thumbnails and Tool Chest have a size slider in the footer.
+- On desktop, drag the Thumbnails header outside the application window, or use its separate-window button, to open a live thumbnail view beside the drawing. Clicking a page there navigates the drawing window; the view follows the active document and closes independently.
 
 The panels are:
 
@@ -205,11 +206,19 @@ Drawing aids:
 The **Drawing Set** panel (Alt+2) is a register of sheets.
 
 - **Add PDFs** registers every page of the chosen PDFs as a sheet. Each sheet has a Sheet ID, a title and a revision. Edit them in **Sheet details**.
+- **Review sheet numbers and titles** reads selectable text from the current registered PDF pages. It proposes values only when a labeled field in the lower or right title block is unambiguous. Review each proposed value and its source text, select the rows to update, then choose **Apply selected details**. The review reports missing or changed PDFs and sources without a recorded fingerprint; those rows cannot be applied. Image-only pages need manual entry. The register changes in one step only after Apply, and the PDFs are never changed.
+- **Review titles from selected index sheet** reads one selected registered page after checking its PDF fingerprint. Select a drawing index page with selectable text. Rows with an exact, unique sheet ID match propose titles only; duplicate or unmatched rows are shown for review. Check the source line and target PDF status, select the titles to update, then choose **Apply selected details**. The app checks the index and selected target PDFs again before updating the register. Sheet IDs, source paths, stable IDs and PDFs stay unchanged. Image-only indexes need manual entry.
+- **Review index navigation links** uses the selected registered index page to propose links on its sheet-number text. Only distinct, selectable rows with an exact registered target and verified PDFs are eligible. Review blocked rows and select the links to create. **Create Links** writes separate linked copies of the set PDFs after rechecking their fingerprints; the register and original PDFs stay unchanged. Links to another PDF use a relative path within the copied set.
 - Search the list, or filter it by revision. **Open sheet** opens the page in a tab. **Previous sheet** and **Next sheet** step through the set.
 - **Record revision** records a new revision of a sheet: choose the revised PDF, and the old source moves to **Earlier revisions**. Open an earlier revision to see it with its own markups.
-- The app records a fingerprint of each PDF. **Check files** reports each source as Present, Missing or Unavailable. When a file has moved, **Relink** points the sheet to the new location after checking that the fingerprint matches.
-- **Export drawing log** writes the list of sheets and revisions as CSV or PDF.
-- **Publish current sheets PDF** writes one PDF with the current revision of every sheet, in sheet order. It refuses a signed PDF, a PDF with form fields, and an overwrite of an existing file.
+- **Compare** beside an earlier revision reviews that sheet's saved old and current PDF sources, then opens their recorded pages side by side after you confirm. Both files must match their saved fingerprints. Comparing leaves the drawing set unchanged.
+- **Check set revision summary** reads the saved PDFs for every current sheet and its latest earlier revision. It shows the recorded page, revision and SHA-256 state for each source, including missing, changed or unverified files. A ready row can enter the same two-step **Compare** review. The summary does not change the register or any PDF.
+- The app records a fingerprint of each PDF. **Check files** reports each source as Present, Missing or Unavailable. When a file has moved, **Relink** points the sheet to an identical PDF after checking its fingerprint again at confirmation. Use **Record revision** for changed contents. Older manifests without a recorded fingerprint show a warning because the original PDF cannot be verified.
+- **Export current view CSV/PDF** writes only the current sheets shown by the search and revision filter. The PDF includes the filter and count; changing the view or register during Save cancels the export.
+- **Export drawing log** writes the full register and earlier revisions as CSV or PDF, regardless of the current search and filter.
+- **Check transmittal readiness** reviews every current registered PDF against its recorded SHA-256 and page number. Resolve missing, unreadable, changed, unverified or out-of-range sources before sending drawings. The review is a snapshot, so check again after changing source files or the register.
+- **Export issue package ZIP** starts from that readiness review. Select up to 200 ready sheets, optionally enter an issue date, reference and transmittal note, then choose **Preview issue package**. These details identify the local package; export does not send it. Inspect the sheet count, source count, size and manifest before export. **Export issue package ZIP** asks for a new ZIP path and rechecks each selected source before writing. The ZIP contains a PDF of only the selected current pages and a manifest with the issue details, sheet IDs, titles, revisions, source PDF names and SHA-256 values. It excludes original multi-page PDFs and absolute source paths. A new preview is required if the selection, issue details or register changes. Package preparation is limited to 128 MiB of source PDFs, a 96 MiB combined PDF and a 100 MiB ZIP.
+- **Publish current sheets PDF** writes one PDF with the current revision of every sheet, in sheet order. The PDF includes sheet-number page labels and a bookmark for each sheet, with its title when present. It refuses a signed PDF, a PDF with form fields, and an overwrite of an existing file.
 - **Export set manifest** and **Import set manifest** save and load the register as a file.
 - **Slip sheet…** replaces sheets with a new revision and carries their markups. See [Slip sheets](#slip-sheets).
 
@@ -585,8 +594,8 @@ The bottom section of the Layers panel lists the PDF's own layers (optional cont
 **Document ▸ Compare Documents…** compares two revisions. Open both PDFs in tabs first.
 
 - Choose the **Old** and **New** document and page, then **Overlay** (both on top of each other) or **Side-by-side** (two synchronised views). **Swap** exchanges old and new.
-- In Overlay, red is only in the old revision, green only in the new one, and black is unchanged.
-- **Align** shifts or rotates one revision onto the other.
+- In Overlay, the **Earlier page** slider controls how strongly the old PDF appears over the new PDF; 0% shows only the new PDF. The change highlights remain separate from the page images.
+- **Align** shifts or rotates the earlier page onto the current page. Its position stays fixed to the drawing while zooming.
 - **Marking** shows changes as a filled **Box** or a **Contour**. The **Changes** list shows Added, Removed and Modified regions. The **Text** tab lists text differences.
 - **Page pairs**: match pages manually, or **Suggest matches** from embedded page labels. Each pair must be confirmed before its report is trusted.
 - **Compare confirmed pairs** runs all confirmed pairs in batch. **Export batch CSV** and **Export batch PDF** write the reports. A failed pair is reported apart from a pair with no changes.
@@ -782,7 +791,7 @@ The batch dialog:
 ### Batch Link
 
 - **New Batch Link…** turns sheet references and detail callouts (such as `5/S-201`) in the text of the open document into links. Options: whole word, match case, skip links to the same page. Save writes the links.
-- **Set Batch Link…** does the same over several PDFs, using each file's page labels as sheet numbers. References to another file become relative links between files. The copies are written into an empty folder you choose, keeping the subfolders, so the links still work when the folder moves.
+- **Set Batch Link…** does the same over several PDFs. Its default targets are PDF page labels. Select **Review links using current registered sheet IDs** to resolve references through the drawing set's stable sheet IDs, paths, and pages. The review shows ready, unregistered, ambiguous, and unverified references before you create copies; only ready links can be selected. A registered sheet without a recorded PDF fingerprint needs verification in the drawing set first. References to another file become relative links between files. The copies are written into an empty folder you choose, keeping the subfolders, so the links still work when the folder moves.
 - **Remove Batch Links** removes only links made by Batch Link.
 - A link to another PDF opens that file in a tab. Only plain relative paths to `.pdf` files are followed, and a target outside the current folder asks first.
 

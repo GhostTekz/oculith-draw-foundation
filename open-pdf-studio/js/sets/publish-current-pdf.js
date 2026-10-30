@@ -1,5 +1,7 @@
 import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { edition } from '../editions/active.js';
+import { writePageLabels } from '../pdf/page-labels.js';
+import { saveBookmarksToOutline } from '../pdf/saver/bookmarks.js';
 import { fingerprintPdfBytes } from './pdf-page-import.js';
 import { parseSheetRegister, sortSheetsByLabel } from './sheet-register.js';
 
@@ -45,7 +47,8 @@ export async function buildCurrentSetPdf(register, readSource) {
   combined.setTitle(`${checked.name} - current revisions`);
   combined.setCreator(edition.productName);
   const sources = new Map();
-  for (const sheet of sortSheetsByLabel(checked.sheets)) {
+  const orderedSheets = sortSheetsByLabel(checked.sheets);
+  for (const sheet of orderedSheets) {
     if (!sheet.sourceSha256) {
       throw new Error(`${sheet.label}: current PDF has no recorded fingerprint. Re-add or relink its source before publishing.`);
     }
@@ -82,5 +85,14 @@ export async function buildCurrentSetPdf(register, readSource) {
     const [page] = await combined.copyPages(source.pdf, [sheet.page - 1]);
     combined.addPage(page);
   }
+  // The published page order is the sheet register order, not the source PDF
+  // page order. Give ordinary PDF readers the same sheet navigation as the app.
+  writePageLabels(combined, orderedSheets.map(sheet => sheet.label));
+  saveBookmarksToOutline(combined, { bookmarks: orderedSheets.map((sheet, index) => ({
+    id: `published-sheet-${index}`,
+    title: sheet.title ? `${sheet.label} — ${sheet.title}` : sheet.label,
+    page: index + 1,
+    sortOrder: index,
+  })) });
   return combined.save();
 }

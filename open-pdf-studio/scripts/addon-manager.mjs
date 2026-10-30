@@ -17,6 +17,7 @@ const REMOVAL_PREFIX = '.remove-';
 const MAX_HELPER = 128 * 1024 * 1024;
 const MAX_NOTICES = 4 * 1024 * 1024;
 const HELPER_NAME = process.platform === 'win32' ? 'helper.exe' : 'helper';
+const companionName = (index) => `companion-${index}${process.platform === 'win32' ? '.exe' : ''}`;
 
 function nativeHeaderMatches(bytes) {
   if (process.platform === 'linux') {
@@ -63,30 +64,37 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
   }
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) ||
-      ![2, 3].includes(manifest.schemaVersion) || manifest.hostApiVersion !== 1 ||
+      ![2, 3, 4].includes(manifest.schemaVersion) || manifest.hostApiVersion !== 1 ||
       typeof manifest.id !== 'string' || !ID.test(manifest.id) ||
       typeof manifest.version !== 'string' || !/^[A-Za-z0-9._+-]{1,64}$/.test(manifest.version) ||
       manifest.editorVersion !== expectedEditorVersion ||
       !manifest.files || typeof manifest.files !== 'object' || Array.isArray(manifest.files) ||
       (manifest.schemaVersion === 2 && manifest.helper !== undefined) ||
-      (manifest.schemaVersion === 3 && manifest.helper !== HELPER_NAME)) {
+      (manifest.schemaVersion >= 3 && manifest.helper !== HELPER_NAME) ||
+      (manifest.schemaVersion < 4 && manifest.sidecars !== undefined) ||
+      (manifest.schemaVersion === 4 && (!Array.isArray(manifest.sidecars) ||
+        manifest.sidecars.length < 1 || manifest.sidecars.length > 4 ||
+        manifest.sidecars.some((name, index) => name !== companionName(index + 1))))) {
     throw new Error(`Add-on manifest is incompatible with editor ${expectedEditorVersion}.`);
   }
   const names = Object.keys(manifest.files);
-  if (!names.includes('plugin.js') || names.length > (manifest.schemaVersion === 3 ? 4 : 3) ||
+  const sidecars = manifest.sidecars || [];
+  if (!names.includes('plugin.js') || names.length > (manifest.schemaVersion === 2 ? 3 : 4 + sidecars.length) ||
       names.some((name) => name !== 'plugin.js' && name !== 'plugin.css' && name !== manifest.helper &&
-        name !== 'NOTICES.txt') ||
-      (manifest.schemaVersion === 3 && !names.includes(manifest.helper))) {
+        name !== 'NOTICES.txt' && !sidecars.includes(name)) ||
+      (manifest.schemaVersion >= 3 && !names.includes(manifest.helper)) ||
+      sidecars.some((name) => !names.includes(name)) ||
+      (manifest.schemaVersion === 4 && !names.includes('NOTICES.txt'))) {
     throw new Error('Add-on files do not match the package schema.');
   }
-  if (manifest.schemaVersion === 3 && manifest.target === undefined) throw new Error('Native add-on needs a target.');
+  if (manifest.schemaVersion >= 3 && manifest.target === undefined) throw new Error('Native add-on needs a target.');
   if (manifest.target !== undefined) {
     const hostOs = { linux: 'linux', darwin: 'macos', win32: 'windows' }[process.platform];
     const target = manifest.target;
     if (!target || typeof target !== 'object' || Array.isArray(target) ||
         Object.keys(target).sort().join(',') !== 'arch,os' || target.os !== hostOs ||
         (target.arch !== process.arch && !(hostOs === 'macos' && target.arch === 'universal')) ||
-        (manifest.schemaVersion === 3 && target.arch === 'universal')) {
+        (manifest.schemaVersion >= 3 && target.arch === 'universal')) {
       throw new Error('Add-on target is incompatible with this host.');
     }
   }
@@ -99,18 +107,18 @@ export async function verifyAddonPackage(packageDir, expectedEditorVersion = edi
     const file = path.join(root, name);
     const stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || !stat.size ||
-        stat.size > (name === 'plugin.js' ? 64 * 1024 * 1024 : name === manifest.helper ? MAX_HELPER
+        stat.size > (name === 'plugin.js' ? 64 * 1024 * 1024 : name === manifest.helper || sidecars.includes(name) ? MAX_HELPER
           : name === 'NOTICES.txt' ? MAX_NOTICES : 16 * 1024 * 1024)) {
       throw new Error(`Invalid add-on file: ${name}.`);
     }
     if (await sha256(file) !== manifest.files[name].toLowerCase()) throw new Error(`Add-on hash mismatch: ${name}.`);
-    if (name === manifest.helper) {
-      if (process.platform !== 'win32' && !(stat.mode & 0o111)) throw new Error('Add-on helper is not executable.');
+    if (name === manifest.helper || sidecars.includes(name)) {
+      if (process.platform !== 'win32' && !(stat.mode & 0o111)) throw new Error(`Add-on native file is not executable: ${name}.`);
       const handle = await open(file, 'r');
       try {
         const bytes = Buffer.alloc(4096);
         const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
-        if (!nativeHeaderMatches(bytes.subarray(0, bytesRead))) throw new Error('Add-on helper target does not match this host.');
+        if (!nativeHeaderMatches(bytes.subarray(0, bytesRead))) throw new Error(`Add-on ${name === manifest.helper ? 'helper' : 'companion'} target does not match this host: ${name}.`);
       } finally { await handle.close(); }
     } else new TextDecoder('utf-8', { fatal: true }).decode(await readFile(file));
   }
@@ -216,7 +224,7 @@ export async function installAddon({ packageDir, appDataDir, expectedEditorVersi
     try {
       for (const name of ['manifest.json', ...Object.keys(manifest.files)]) {
         await copyFile(path.join(source, name), path.join(stage, name));
-        if (name === manifest.helper && process.platform !== 'win32') {
+        if ((name === manifest.helper || manifest.sidecars?.includes(name)) && process.platform !== 'win32') {
           await chmod(path.join(stage, name), (await lstat(path.join(source, name))).mode & 0o777);
         }
       }

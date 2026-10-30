@@ -60,6 +60,8 @@ import {
   getCompareDocSourceBytes,
   detectComparePair,
   getCompareDoc,
+  COMPARE_BASE_SCALE,
+  scaledCompareOffset,
 } from '../../../compare/compare-viewport.js';
 import { runTextCompare, clearTextCompareCache } from '../../../compare/text-compare.js';
 import { diffWords } from '../../../compare/text-diff.js';
@@ -87,6 +89,7 @@ export default function CompareView() {
   let oldHiCanvasRef;   // side-by-side: diff overlay on OLD page
   let newHiCanvasRef;   // side-by-side: diff overlay on NEW page
   let overlayNewCanvasRef;
+  let overlayOldCanvasRef;
   let overlayHighlightCanvasRef;
   let bodyRef;
   let overlayWrapRef;
@@ -148,6 +151,9 @@ export default function CompareView() {
   // preventDefault is honoured before the default action fires.
   const killMiddleAutoscroll = (e) => { if (e.button === 1) e.preventDefault(); };
   const [highlight, setHighlight] = createSignal(null); // {x,y,w,h} flash highlight
+  const [oldLayerOpacity, setOldLayerOpacity] = createSignal(50);
+  const visibleAlignment = () => scaledCompareOffset(compareOffset(),
+    COMPARE_BASE_SCALE * compareZoom() / cssScale());
   let highlightTimer = null;
   const [reportExporting, setReportExporting] = createSignal(false);
   const [reportError, setReportError] = createSignal('');
@@ -782,9 +788,9 @@ export default function CompareView() {
       };
       if (!opts.oldPath || !opts.newPath) return;
       if (compareMode() === 'overlay') {
-        if (overlayNewCanvasRef && overlayHighlightCanvasRef) {
+        if (overlayOldCanvasRef && overlayNewCanvasRef && overlayHighlightCanvasRef) {
           await renderCompareOverlay(
-            null,
+            overlayOldCanvasRef,
             overlayNewCanvasRef,
             opts,
             overlayHighlightCanvasRef,
@@ -1317,6 +1323,12 @@ export default function CompareView() {
           {/* Uitlijnen (alleen overlay) */}
           <Show when={compareMode() === 'overlay'}>
             <Sep />
+            <label class="compare-toolbar-muted" for="compare-old-opacity">Earlier page</label>
+            <input id="compare-old-opacity" type="range" min="0" max="100" step="5"
+              value={oldLayerOpacity()} onInput={e => setOldLayerOpacity(Number(e.currentTarget.value))}
+              aria-label="Earlier page opacity" />
+            <output for="compare-old-opacity" style="min-width:32px; font-variant-numeric:tabular-nums;">{oldLayerOpacity()}%</output>
+            <Sep />
             <span class="compare-toolbar-muted">{t('compare.align') || 'Align'}</span>
             <span class="compare-toolbar-muted">dx</span>
             <input
@@ -1519,16 +1531,16 @@ export default function CompareView() {
               when={compareMode() === 'side'}
               fallback={
                 <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-                  {/* Overlay: NEW page rendered normally; diff regions drawn as
-                      translucent rectangles on a separate highlight canvas. */}
+                  {/* The old page is a visual review layer. Detection and PDF
+                      exports continue to use their separate source canvases. */}
                   <div
                     ref={overlayWrapRef}
                     style={`position:relative; background:#ffffff; box-shadow:0 0 0 1px #444; line-height:0; transform:scale(${cssScale()}); transform-origin:0 0;`}
                   >
                     <canvas ref={overlayNewCanvasRef} style="display:block;"></canvas>
-                    {/* OLD page is rasterized for change detection only via
-                        an offscreen canvas in compare-viewport.js — no DOM
-                        element required. */}
+                    <div class="compare-old-layer" style={`position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; mix-blend-mode:multiply; opacity:${oldLayerOpacity() / 100}; transform-origin:50% 50%; transform:translate(${visibleAlignment().dx}px, ${visibleAlignment().dy}px) rotate(${visibleAlignment().rotation}deg);`}>
+                      <canvas ref={overlayOldCanvasRef} style="display:block;"></canvas>
+                    </div>
                     <canvas
                       ref={overlayHighlightCanvasRef}
                       style="position:absolute; left:0; top:0; pointer-events:none;"

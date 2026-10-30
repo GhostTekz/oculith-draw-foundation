@@ -35,6 +35,13 @@ export function unclaimedLegacyCatalogKeys(pdfDoc, claimed = []) {
     .filter((key) => LEGACY_CATALOG_NAME.test(key) && !known.has(key));
 }
 
+/** Add-on catalog fields need an owner before extracting selected pages. */
+export function unclaimedAddonCatalogKeys(pdfDoc, claimed = []) {
+  const known = new Set(claimed);
+  return pdfDoc.catalog.keys().map((key) => key.decodeText())
+    .filter((key) => key.startsWith('ODX_') && !known.has(key));
+}
+
 /** Reversible ASCII encoding prevents packages with punctuation in their IDs sharing a prefix. */
 export function pdfKeyPrefix(id) {
   if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) {
@@ -108,8 +115,8 @@ export function validatePdfContribution(id, pdf) {
       throw new Error(`PDF ${name} requires declared annotation keys and a function`);
     }
   }
-  if (pdf.catalogForExtract != null && (!legacyKeys.length || typeof pdf.catalogForExtract !== 'function')) {
-    throw new Error('PDF catalogForExtract requires owned legacy catalog keys and a function');
+  if (pdf.catalogForExtract != null && (!catalogKeys.length && !legacyKeys.length || typeof pdf.catalogForExtract !== 'function')) {
+    throw new Error('PDF catalogForExtract requires owned catalog keys and a function');
   }
   if (extractAnnotationKeys.length && !pdf.catalogForExtract) {
     throw new Error('PDF extractAnnotationKeys requires catalogForExtract');
@@ -172,7 +179,7 @@ function matchingExtractTags(sourcePages, targetPages, keys) {
   }
 }
 
-function textFields(values, keys, limit, id, legacyKeys = []) {
+function textFields(values, keys, limit, id, legacyKeys = [], allowDelete = false) {
   if (values == null) return {};
   if (typeof values !== 'object' || Array.isArray(values) || typeof values.then === 'function') {
     throw new Error(`PDF ${id} fields must be a synchronous object`);
@@ -181,8 +188,9 @@ function textFields(values, keys, limit, id, legacyKeys = []) {
   const legacy = new Set(legacyKeys);
   const result = {};
   for (const [key, value] of Object.entries(values)) {
-    if (!allowed.has(key) || typeof value !== 'string'
-        || (legacy.has(key) ? encoder.encode(value).length > MAX_LEGACY_CATALOG_BYTES : value.length > limit)) {
+    if (!allowed.has(key) || !(typeof value === 'string' || (allowDelete && value === null))
+        || (typeof value === 'string' && (legacy.has(key)
+          ? encoder.encode(value).length > MAX_LEGACY_CATALOG_BYTES : value.length > limit))) {
       throw new Error(`PDF ${id} returned an unowned or oversized field: ${key}`);
     }
     result[key] = value;
@@ -206,19 +214,16 @@ function readCatalog(pdfDoc, keys, legacyKeys = []) {
         && value.value.length <= (max + 1) * 4) {
       let decoded;
       try {
-        if (legacy.has(key)) {
-          const bytes = value.asBytes();
-          // pdf-lib's UTF-16 decoder spreads all code points into one call and
-          // overflows for large workspaces. Keep its behavior for small strings;
-          // reject malformed large UTF-16 rather than normalize source bytes.
-          if (bytes.length <= 64 * 1024) {
-            decoded = value.decodeText();
-          } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
-            decoded = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
-          } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
-            decoded = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
-          }
-        } else decoded = value.decodeText();
+        const bytes = value.asBytes();
+        // pdf-lib's UTF-16 decoder spreads all code points into one call and
+        // overflows for large fields. Keep its behavior for small strings;
+        // reject malformed large UTF-16 rather than normalize source bytes.
+        if (bytes.length <= 64 * 1024) decoded = value.decodeText();
+        else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+          decoded = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
+        } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+          decoded = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
+        }
       } catch { continue; /* Unreadable source stays in the PDF. */ }
       if (decoded !== undefined
           && (legacy.has(key) ? encoder.encode(decoded).length <= max : decoded.length <= max)) {
@@ -314,20 +319,25 @@ export function composePdfHooks(current, id, contribution) {
             pdfDoc.catalog.get(PDFName.of(key)) !== undefined));
           const source = Object.freeze({ fields, presentKeys });
           return [addon.id, textFields(addon.catalogForSave?.(doc, source), addon.catalogKeys,
-            MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys)];
+            MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys, true)];
         })) };
     },
     saveWorkspace(pdfDoc, data) {
       base?.saveWorkspace?.(pdfDoc, data?.base);
       for (const addon of addons) {
         const fields = textFields(data?.addons?.[addon.id], addon.catalogKeys, MAX_CATALOG_TEXT,
-          addon.id, addon.legacyCatalogKeys);
+          addon.id, addon.legacyCatalogKeys, true);
         for (const [key, value] of Object.entries(fields)) {
-          if (addon.legacyCatalogKeys.includes(key) && pdfDoc.catalog.get(PDFName.of(key)) !== undefined
-              && !Object.hasOwn(readCatalog(pdfDoc, [key], [key]), key)) {
-            throw new Error(`Cannot replace unreadable PDF legacy catalog key: ${key}`);
+          const name = PDFName.of(key);
+          if ((value === null || addon.legacyCatalogKeys.includes(key))
+              && pdfDoc.catalog.get(name) !== undefined
+              && !Object.hasOwn(readCatalog(pdfDoc, [key], addon.legacyCatalogKeys), key)) {
+            throw new Error(value === null
+              ? `Cannot delete unreadable PDF catalog key: ${key}`
+              : `Cannot replace unreadable PDF legacy catalog key: ${key}`);
           }
-          pdfDoc.catalog.set(PDFName.of(key), PDFHexString.fromText(value));
+          if (value === null) pdfDoc.catalog.delete(name);
+          else pdfDoc.catalog.set(name, PDFHexString.fromText(value));
         }
       }
     },
@@ -376,7 +386,7 @@ export function composePdfHooks(current, id, contribution) {
       for (const addon of addons) {
         const present = addon.catalogKeys.filter((key) => source.catalog.get(PDFName.of(key)) !== undefined);
         if (!present.length) continue;
-        if (present.some((key) => !addon.legacyCatalogKeys.includes(key)) || !addon.catalogForExtract) {
+        if (!addon.catalogForExtract) {
           throw new Error(`Cannot extract pages with ${addon.id} PDF data; use the add-on that can remap its catalog.`);
         }
         const fields = readCatalog(source, present, addon.legacyCatalogKeys);
@@ -390,7 +400,7 @@ export function composePdfHooks(current, id, contribution) {
         }
         const sourceData = Object.freeze({ fields: Object.freeze(fields), presentKeys: Object.freeze(present),
           pages: sourcePages });
-        const values = textFields(addon.catalogForExtract(sourceData), addon.legacyCatalogKeys,
+        const values = textFields(addon.catalogForExtract(sourceData), addon.catalogKeys,
           MAX_CATALOG_TEXT, addon.id, addon.legacyCatalogKeys);
         if (present.some((key) => !Object.hasOwn(values, key))) {
           throw new Error(`PDF ${addon.id} did not remap every owned catalog field`);

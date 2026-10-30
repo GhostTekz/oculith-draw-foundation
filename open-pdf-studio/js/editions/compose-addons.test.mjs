@@ -79,6 +79,116 @@ test('v1 full edition stays the base when contributions fail or succeed', () => 
   assert.deepEqual(result.edition.panelIds, ['existing', 'new']);
 });
 
+test('independent home actions compose without changing the base or hiding later packages', () => {
+  const action = (id) => ({ id, label: () => id, run: () => {} });
+  const baseAction = action('base.open');
+  const base = { ...foundation, home: { title: () => 'Welcome', description: () => 'Open a drawing', actions: [baseAction] } };
+  const result = composeAddons(base, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', homeActions: [action('one.open')] } },
+    { id: 'bad', addon: { apiVersion: 2, id: 'bad', homeActions: [action('one.open')] } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', homeActions: [action('two.open')] } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.match(result.rejected[0].error.message, /Duplicate home action id/);
+  assert.deepEqual(result.edition.home.actions.map((item) => item.id), ['base.open', 'one.open', 'two.open']);
+  assert.equal(result.edition.home.title(), 'Welcome');
+  assert.deepEqual(base.home.actions, [baseAction]);
+  assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: {
+    apiVersion: 1, id: 'bad', homeActions: [action('bad.open')],
+  } }]).accepted, []);
+});
+
+test('launch actions compose in order and reject duplicate or invalid actions', () => {
+  const action = (id) => ({ id, label: () => id, run: () => {} });
+  const result = composeAddons(foundation, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', launchActions: [action('one.open')] } },
+    { id: 'duplicate', addon: { apiVersion: 2, id: 'duplicate', launchActions: [action('one.open')] } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', launchActions: [action('two.open')] } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.match(result.rejected[0].error.message, /Duplicate launch action id/);
+  assert.deepEqual(result.edition.launchActions.map((item) => item.id), ['one.open', 'two.open']);
+  assert.equal(foundation.launchActions, undefined);
+  for (const invalid of [
+    { apiVersion: 1, id: 'bad', launchActions: [action('bad.open')] },
+    { apiVersion: 2, id: 'bad', launchActions: [{ id: 'bad.open', label: 'Open', run: () => {} }] },
+  ]) assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: invalid }]).accepted, []);
+});
+
+test('independent document title providers resolve local names in order and survive a failing provider', async () => {
+  const calls = [];
+  const result = composeAddons(foundation, [
+    { id: 'one', addon: { apiVersion: 2, id: 'one', documentTitle: async (path) => {
+      calls.push(['one', path]); throw new Error('unavailable local index');
+    } } },
+    { id: 'two', addon: { apiVersion: 2, id: 'two', documentTitle: (path) => {
+      calls.push(['two', path]); return '  Drawing A-101  ';
+    } } },
+  ]);
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.equal(await result.edition.documentTitle('/local/drawing.pdf'), '  Drawing A-101  ');
+  assert.deepEqual(calls, [['one', '/local/drawing.pdf'], ['two', '/local/drawing.pdf']]);
+  assert.equal(foundation.documentTitle, undefined);
+  for (const bad of [
+    { apiVersion: 1, id: 'bad', documentTitle: () => 'bad' },
+    { apiVersion: 2, id: 'bad', documentTitle: 'bad' },
+  ]) assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: bad }]).accepted, []);
+});
+
+test('the latest author provider owns future edits, including an empty signed-out name', async () => {
+  const base = { ...foundation, authorName: () => 'Previous person' };
+  const result = composeAddons(base, [{ id: 'author', addon: {
+    apiVersion: 2, id: 'author', authorName: async () => '',
+  } }]);
+  assert.deepEqual(result.accepted, ['author']);
+  assert.equal(await result.edition.authorName(), '');
+  assert.equal(base.authorName(), 'Previous person');
+  for (const authorName of ['name', () => 'Name']) {
+    const apiVersion = typeof authorName === 'string' ? 2 : 1;
+    assert.deepEqual(composeAddons(foundation, [{ id: 'bad', addon: {
+      apiVersion, id: 'bad', authorName,
+    } }]).accepted, []);
+  }
+});
+
+test('undo restorers are scoped to their package and fall through to the full edition', () => {
+  const calls = [];
+  const fullEdition = { ...foundation, undo: { restoreExtensionState(...args) {
+    calls.push(['base', ...args]); return true;
+  } } };
+  const doc = {};
+  const result = composeAddons(fullEdition, ['one', 'two'].map((id) => ({ id,
+    addon: { apiVersion: 2, id, undo: { restoreExtensionState(...args) {
+      calls.push([id, ...args]); return true;
+    } } },
+  })));
+  assert.deepEqual(result.accepted, ['one', 'two']);
+  assert.deepEqual(result.rejected, []);
+  result.edition.undo.restoreExtensionState(doc, 'one', { value: 1 }, { m: 1 });
+  result.edition.undo.restoreExtensionState(doc, 'two', { value: 2 }, null);
+  result.edition.undo.restoreExtensionState(doc, 'edition.workspace', { value: 3 }, null);
+  assert.deepEqual(calls, [
+    ['one', doc, { value: 1 }, { m: 1 }],
+    ['two', doc, { value: 2 }, null],
+    ['base', doc, 'edition.workspace', { value: 3 }, null],
+  ]);
+  assert.equal(fullEdition.undo.restoreExtensionState === result.edition.undo.restoreExtensionState, false);
+  assert.equal(foundation.undo, undefined);
+});
+
+test('malformed undo contributions are rejected without changing the edition', () => {
+  for (const undo of [{}, { restoreExtensionState: () => {}, extra: () => {} },
+    { restoreExtensionState: true }, []]) {
+    const result = composeAddons(foundation, [{ id: 'bad', addon: addon('bad', { apiVersion: 2, undo }) }]);
+    assert.deepEqual(result.accepted, []);
+    assert.equal(result.edition, foundation);
+  }
+  const v1 = composeAddons(foundation, [{ id: 'bad', addon: addon('bad', {
+    undo: { restoreExtensionState() {} },
+  }) }]);
+  assert.deepEqual(v1.accepted, []);
+});
+
 test('old native binaries fall back to the singleton edition command', async () => {
   const calls = [];
   const entries = await resolvePluginEntries(async (command) => {

@@ -27,8 +27,11 @@ const { extractAnnotationColors } = await import('../pdf/loader/color-extraction
 const { writePageLabels } = await import('../pdf/page-labels.js');
 const { runBatch, batchFileList } = await import('./runner.js');
 const {
-  setLinkScanJob, setLinkWriteJob, planSetLinks, setLinkTargets, setOutputLayout, writeSetOutputs, setOutputPath,
+  setLinkScanJob, setLinkWriteJob, planSetLinks, planRegisteredSetLinks, registeredSetLinkSnapshot,
+  verifySetLinkPreviewSources,
+  setLinkTargets, setOutputLayout, writeSetOutputs, setOutputPath,
 } = await import('./set-link.js');
+const { fingerprintPdfBytes } = await import('../sets/pdf-page-import.js');
 const {
   isSafeRelativePdfPath, relativePdfPath, resolveRelativePdfPath, parseRemotePdfLink, commonDirectory, isInsideDirectory, pathInside,
 } = await import('../pdf/remote-link.js');
@@ -90,6 +93,72 @@ async function sheetFile(pages) {
   writePageLabels(pdf, pages.map((p) => p[0]));
   return pdf.save();
 }
+
+test('registered link review resolves stable IDs and shows unresolved or ambiguous references before any write', async () => {
+  const files = batchFileList(['/set/A.pdf', '/set/S.pdf', '/set/E.pdf', '/set/D.pdf']);
+  const bytes = new Map([
+    ['/set/A.pdf', await sheetFile([['A-101', 'SEE S-201', 'SEE E-101', 'SEE D-301', 'SEE M-301', 'SEE Q-101']])],
+    ['/set/S.pdf', await sheetFile([['S-201']])],
+    ['/set/E.pdf', await sheetFile([['E-101'], ['D-301']])],
+    ['/set/D.pdf', await sheetFile([['D-301']])],
+  ]);
+  const aHash = await fingerprintPdfBytes(bytes.get('/set/A.pdf'));
+  const sHash = await fingerprintPdfBytes(bytes.get('/set/S.pdf'));
+  const register = { version: 1, name: 'Set', sheets: [
+    { id: 'sheet-a', label: 'A-101', filePath: '/set/A.pdf', page: 1, sourceSha256: aHash },
+    { id: 'sheet-s', label: 'S-201', filePath: '/set/S.pdf', page: 1, sourceSha256: sHash },
+    { id: 'sheet-m', label: 'M-301', filePath: '/set/missing.pdf', page: 1 },
+    { id: 'sheet-q-one', label: 'Q-101', filePath: '/set/q1.pdf', page: 1 },
+    { id: 'sheet-q-two', label: 'q-101', filePath: '/set/q2.pdf', page: 1 },
+  ] };
+  const result = await runBatch({ files, readFile: path => bytes.get(path),
+    job: setLinkScanJob({ pdfjs, fingerprint: true }) });
+  assert.equal(result.cancelled, false);
+  assert.ok(result.log.every(entry => entry.ok));
+  const scans = files.map(file => result.output.byPath.get(file.path.toLocaleLowerCase()));
+  const plan = planRegisteredSetLinks(scans, files, register);
+  const snapshot = registeredSetLinkSnapshot(register);
+  const sourceRows = plan.review.filter(row => row.file === 0);
+  const row = label => sourceRows.find(item => item.label.toLocaleUpperCase() === label);
+  assert.equal(row('S-201').status, 'ready');
+  assert.equal(row('S-201').sourceSheetId, 'sheet-a');
+  assert.equal(row('S-201').targetSheetId, 'sheet-s');
+  assert.deepEqual(row('S-201').target, { file: 1, page: 1 });
+  assert.equal(row('E-101').status, 'unregistered-target');
+  assert.equal(row('D-301').status, 'ambiguous-target');
+  assert.equal(row('M-301').status, 'missing-target');
+  assert.equal(row('Q-101').status, 'ambiguous-target');
+  assert.deepEqual(row('Q-101').candidates.map(item => item.sheetId), ['sheet-q-one', 'sheet-q-two']);
+  assert.equal(row('A-101').status, 'self');
+  assert.ok(plan.review.some(item => item.file === 2 && item.page === 1 && item.status === 'unregistered-source'));
+  assert.equal(plan.links.length, 1);
+  assert.equal(plan.links[0].targetSheetId, 'sheet-s');
+  register.sheets[1].page = 2;
+  assert.notEqual(registeredSetLinkSnapshot(register), snapshot, 'an in-place page edit invalidates the review');
+  register.sheets[1].page = 1;
+  assert.equal(registeredSetLinkSnapshot(register), snapshot);
+  const pinned = await verifySetLinkPreviewSources(files, scans, path => bytes.get(path));
+  assert.deepEqual(pinned.get('/set/a.pdf'), bytes.get('/set/A.pdf'));
+  const changed = new Map(bytes);
+  changed.set('/set/S.pdf', await sheetFile([['S-201', 'changed contents']]));
+  await assert.rejects(verifySetLinkPreviewSources(files, scans, path => changed.get(path)),
+    /S\.pdf changed since Find/);
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, sourceSha256: aHash } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'changed-target');
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, sourceSha256: null } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'unverified-target');
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-a' ? { ...sheet, sourceSha256: sHash } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'changed-source');
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-a' ? { ...sheet, sourceSha256: null } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'unverified-source');
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, page: 9 } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'missing-page');
+});
 
 async function linksOf(bytes) {
   const pdf = await PDFDocument.load(bytes);

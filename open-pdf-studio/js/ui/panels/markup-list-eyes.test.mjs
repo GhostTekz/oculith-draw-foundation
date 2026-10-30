@@ -115,7 +115,7 @@ test('the component: real buttons at the left, labelled, pressed state, clicks s
   assert.match(src, /const eyeIcon = lucide\('eye'\);/);
   assert.match(src, /const eyeOffIcon = lucide\('eye-off'\);/);
   // Row eye in the gutter cell (the first, left column); group eye before the chevron.
-  assert.match(src, /<div class="annotation-cell annotation-cell-gutter">\{rowEye\(item\)\}<\/div>/);
+  assert.match(src, /<div class="annotation-cell annotation-cell-gutter">\s*<Show when=\{item\.accentColor\}>[\s\S]*?<\/Show>\s*\{rowEye\(item\)\}\s*<\/div>/);
   // Every section has an eye now (docs/MARKUP-GROUPS.md); Group By Layer's is the layer switch.
   assert.match(src, /\{headerEye\(item\)\}\s*<svg class="annotations-group-chevron"/);
   assert.match(src, /const headerEye = \(item\) => \(item\.sortMode === 'layer' && item\.layerId \? groupEye\(item\) : sectionEye\(item\)\)/);

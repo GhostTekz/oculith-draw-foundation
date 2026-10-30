@@ -1,9 +1,10 @@
-import { createSignal, For, onMount } from 'solid-js';
+import { createSignal, For, onMount, Show } from 'solid-js';
 import Dialog from '../Dialog.jsx';
 import { closeDialog } from '../../stores/dialogStore.js';
 import { getAppVersion, openExternal } from '../../../core/platform.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { edition } from '../../../editions/active.js';
+import { readBundledFoundationSource } from '../../../core/foundation-source.js';
 
 // Notices for works this program uses. The desktop package ships the full
 // texts under notices/. The sentences required by those licenses stay in English.
@@ -83,10 +84,12 @@ const CREDITS = [
 export default function AboutDialog() {
   const { t } = useTranslation('appMenu');
   const [version, setVersion] = createSignal(t('aboutPanel.version'));
+  const [foundationSource, setFoundationSource] = createSignal(null);
 
   onMount(async () => {
-    const v = await getAppVersion();
+    const [v, source] = await Promise.all([getAppVersion(), readBundledFoundationSource()]);
     if (v) setVersion(`${t('aboutPanel.version')} ${v}`);
+    if (source) setFoundationSource(source);
   });
 
   const close = () => closeDialog('about');
@@ -131,7 +134,18 @@ export default function AboutDialog() {
           </a>
         </div>
 
-        <p class="bs-about-source-note"><strong>{edition.about.sourceLabel}.</strong> {edition.about.sourceNote}</p>
+        <Show when={foundationSource()} fallback={
+          <p class="bs-about-source-note"><strong>{edition.about.sourceLabel}.</strong> {edition.about.sourceNote}</p>
+        }>
+          {(source) => (
+            <div class="bs-about-source-note">
+              <strong>Oculith Draw Foundation source.</strong> This build records public revision <code>{source().commit}</code>
+              {' '}and Git tree <code>{source().tree}</code> for version {source().version}.
+              {' '}<a href={source().sourceArchive} onClick={(e) => { e.preventDefault(); openExternal(source().sourceArchive); }}>Download source</a>
+              {' '}or <a href={source().buildInstructions} onClick={(e) => { e.preventDefault(); openExternal(source().buildInstructions); }}>read build instructions</a>.
+            </div>
+          )}
+        </Show>
 
         <div class="bs-about-footer">
           <p class="bs-about-copyright">{edition.about.copyright || t('aboutPanel.copyright')}</p>

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.tauri.app/config/2",
   "identifier": "default",
-  "description": "Default capabilities for the main window + detached document windows + the standalone print-queue window (desktop)",
+  "description": "Default capabilities for the main window, detached document windows, and the print-queue window (desktop)",
   "platforms": ["linux", "macOS", "windows"],
   "windows": ["main", "pdf-*", "print-queue"],
   "permissions": [

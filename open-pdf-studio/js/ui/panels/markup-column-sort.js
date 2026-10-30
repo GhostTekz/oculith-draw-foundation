@@ -15,6 +15,15 @@ export function nextMarkupColumnSort(current, column) {
 // serves every sort.
 const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
+/** Resolve each displayed markup's sort value once during a list build. */
+export function memoizeMarkupSortValue(valueForColumn) {
+  const values = new Map();
+  return (row, column) => {
+    if (!values.has(row)) values.set(row, valueForColumn(row, column));
+    return values.get(row);
+  };
+}
+
 /** Sort displayed rows within a group; the caller retains its group/filter order. */
 export function sortMarkupRows(rows, sort, valueForColumn) {
   if (!sort || !markupColumns.includes(sort.column)) return rows;

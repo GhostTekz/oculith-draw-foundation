@@ -82,6 +82,26 @@ test('a staged resource tree contains the exact source license and notice files'
       external.map(entry => [entry.name, entry.version, entry.source]));
     const noticeText = rustNotices.toString('utf8');
     assert.match(noticeText, /STANDARD SPDX LICENSE AND EXCEPTION TEXTS/);
+    const upstreamRoot = path.resolve(appDir, '../scripts/rust-upstream-notices');
+    const upstreamCatalog = JSON.parse(await readFile(path.join(upstreamRoot, 'catalog.json')));
+    const upstreamByPackage = new Map();
+    for (const entry of upstreamCatalog.entries) {
+      for (const file of entry.files) {
+        const stored = await readFile(path.join(upstreamRoot, file.storedFile));
+        assert.equal(createHash('sha256').update(stored).digest('hex'), file.sha256,
+          `pinned upstream file ${file.storedFile}`);
+        assert.ok(noticeText.includes(normalizedNotice(stored)),
+          `upstream text ${file.storedFile} ships in the notice bundle`);
+      }
+      for (const { name, version } of entry.packages) {
+        const key = `${name}@${version}`;
+        assert.ok(!upstreamByPackage.has(key), `unique upstream mapping ${key}`);
+        upstreamByPackage.set(key, entry.files.map((file) => ({
+          url: `${entry.repository}/blob/${entry.revision}/${file.path}`,
+          sha256: file.sha256,
+        })));
+      }
+    }
     for (const entry of rustManifest.packages) {
       assert.ok(entry.sourceFiles.length || entry.standardTextIds.length,
         `${entry.name}@${entry.version} has source or standard text`);
@@ -90,6 +110,12 @@ test('a staged resource tree contains the exact source license and notice files'
       for (const source of entry.sourceFiles) {
         assert.ok(noticeText.includes(`${entry.name}@${entry.version}: ${source.path} (SHA-256 ${source.sha256})`),
           `${entry.name}@${entry.version} source ${source.path} is indexed`);
+      }
+      assert.deepEqual(entry.upstreamFiles, upstreamByPackage.get(`${entry.name}@${entry.version}`) || [],
+        `${entry.name}@${entry.version} upstream provenance`);
+      for (const source of entry.upstreamFiles) {
+        assert.ok(noticeText.includes(`Upstream: ${source.url} (SHA-256 ${source.sha256})`),
+          `${entry.name}@${entry.version} upstream source is labeled separately`);
       }
       for (const identifier of entry.standardTextIds) {
         assert.ok(rustManifest.standardTextIds.includes(identifier), identifier);
@@ -137,5 +163,30 @@ test('npm notice inventory tracks every production lockfile entry', async () => 
     } catch (error) {
       if (error.code !== 'ENOENT' || !lock.packages[`node_modules/${entry.name}`]?.optional) throw error;
     }
+  }
+});
+
+test('drag binding retains pinned upstream notice provenance', async () => {
+  const name = '@crabnebula/tauri-plugin-drag';
+  const lock = await json('package-lock.json');
+  const locked = lock.packages[`node_modules/${name}`];
+  assert.equal(locked.version, '2.1.0');
+  assert.equal(locked.integrity,
+    'sha512-LnUXAZwQt1cdMoGDLJ6ogW9wFCYServCZXlGadS7CA+CZ9eXS7L+Q7QyQW6g/zGw9YI2MwKFqf1aSNBGyWw+OA==');
+  const inventory = await json('src-tauri/package-notices/npm-inventory.json');
+  const entry = inventory.packages.find((item) => item.name === name);
+  assert.deepEqual([entry.version, entry.licenseFromLockfile, entry.noticeFile],
+    ['2.1.0', null, null]);
+
+  const upstreamSource = await readFile(path.join(appDir, 'node_modules', name, 'guest-js/index.ts'));
+  assert.equal(createHash('sha256').update(upstreamSource).digest('hex'),
+    'bc2521c0c7b19cd503c69efc108102c58aab02349f1b8409a306c070b5c0dc0a');
+  for (const [file, expected] of Object.entries({
+    'LICENSE.spdx': '6326d64033572a9b5f627ec7a39fd468dcbc6e01ee12fa71a600c66e12e0e411',
+    LICENSE_MIT: '9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9',
+    'LICENSE_APACHE-2.0': '0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594',
+  })) {
+    const notice = await readFile(path.join(tauriDir, 'package-notices/npm', name, file));
+    assert.equal(createHash('sha256').update(notice).digest('hex'), expected, file);
   }
 });

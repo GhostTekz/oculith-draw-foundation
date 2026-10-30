@@ -39,6 +39,27 @@ test('replacement keeps sheet identity and prior revision; relink does not creat
   assert.equal(removeSheet(relinked, first.sheet.id).sheets.length, 0);
 });
 
+test('current relink keeps a recorded PDF fingerprint; changed contents need a new revision', () => {
+  const oldHash = 'a'.repeat(64);
+  const newHash = 'b'.repeat(64);
+  const first = addSheet(createSheetRegister(), {
+    filePath: '/plans/issued.pdf', label: 'A-101', page: 1, revision: 'A', sourceSha256: oldHash,
+  });
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/unrelated.pdf', 1, newHash), /does not match/);
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/issued.pdf', 1, newHash), /does not match/);
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/unknown.pdf', 1), /does not match/);
+  assert.equal(first.register.sheets[0].filePath, '/plans/issued.pdf');
+
+  const moved = relinkSheet(first.register, first.sheet.id, '/plans/moved.pdf', 1, oldHash);
+  assert.equal(moved.sheets[0].id, first.sheet.id);
+  assert.equal(moved.sheets[0].sourceSha256, oldHash);
+  assert.equal(moved.sheets[0].history.length, 0);
+  assert.throws(() => replaceSheet(first.register, first.sheet.id, '/plans/issued.pdf', 'A', 'now', 1, newHash), /new revision/);
+  const revised = replaceSheet(first.register, first.sheet.id, '/plans/issued.pdf', 'B', 'now', 1, newHash);
+  assert.equal(revised.sheets[0].sourceSha256, newHash);
+  assert.equal(revised.sheets[0].history[0].sourceSha256, oldHash);
+});
+
 test('revision and relink reject pages already used by another sheet', () => {
   const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', page: 1 });
   const second = addSheet(initial.register, { filePath: '/plans/new.pdf', label: 'A-102', page: 2 });
@@ -123,17 +144,42 @@ test('bad manifests cannot silently replace the current set', () => {
   assert.throws(() => parseSheetRegister({ version: 9, sheets: [], name: 'Future' }), /supported/);
 });
 
-test('sheet search matches ID, title, and current or prior revision while current revision filter is exact', () => {
+test('sheet search matches ID, title, revisions, and current or earlier PDF names while current revision filter is exact', () => {
   const first = addSheet(createSheetRegister(), { filePath: '/plans/first.pdf', label: 'A-101', title: 'Lobby', revision: 'P0' });
-  const second = addSheet(first.register, { filePath: '/plans/second.pdf', label: 'M-201', title: 'Mechanical room', revision: 'C' });
+  const second = addSheet(first.register, { filePath: 'C:\\Drawings\\second.pdf', label: 'M-201', title: 'Mechanical room', revision: 'C' });
   const revised = replaceSheet(second.register, first.sheet.id, '/plans/revised.pdf', 'B', 'now', 3);
   assert.deepEqual(filterSheets(revised, 'a-101').map(sheet => sheet.id), [first.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'MECHANICAL').map(sheet => sheet.id), [second.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'b').map(sheet => sheet.id), [first.sheet.id]);
   assert.deepEqual(filterSheets(revised, 'p0', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'REVISED.PDF').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'first.pdf', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'SECOND.PDF').map(sheet => sheet.id), [second.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'drawings'), []);
+  assert.deepEqual(filterSheets(revised, 'second.pdf', 'B'), []);
   assert.deepEqual(filterSheets(revised, 'lobby', 'C'), []);
   assert.deepEqual(filterSheets(revised, '', 'p0'), []);
   assert.deepEqual(filterSheets(revised, '  '), revised.sheets);
+});
+
+test('sheet search matches every word across fields and remembered PDF names', () => {
+  const first = addSheet(createSheetRegister(), {
+    filePath: '/plans/issued.pdf', label: 'A-101', title: 'Main lobby', revision: 'P0',
+  });
+  const second = addSheet(first.register, {
+    filePath: '/plans/issued.pdf', page: 2, label: 'A-102', title: 'Rear lobby', revision: 'P0',
+  });
+  const moved = relinkSheet(second.register, first.sheet.id, '/new-location/current.pdf');
+  const revised = replaceSheet(moved, first.sheet.id, '/plans/revised.pdf', 'B', 'now');
+
+  assert.deepEqual(filterSheets(revised, 'A-101 lobby').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'LOBBY   REVISED').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'current main').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main', 'B').map(sheet => sheet.id), [first.sheet.id]);
+  assert.deepEqual(filterSheets(revised, 'issued main', 'P0'), []);
+  assert.deepEqual(filterSheets(revised, 'lobby missing'), []);
+  assert.deepEqual(filterSheets(revised, 'new-location'), []);
 });
 
 test('set navigation uses natural sheet ID order without changing manifest order', () => {
@@ -156,16 +202,20 @@ test('set navigation uses natural sheet ID order without changing manifest order
 });
 
 test('drawing log lists current and prior source records with the same stable sheet ID', () => {
-  const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', title: 'Lobby', revision: 'A', page: 1 });
-  const revised = replaceSheet(initial.register, initial.sheet.id, '/plans/revised.pdf', 'B', '2026-10-13T10:00:00Z', 3);
-  const moved = relinkSheet(revised, initial.sheet.id, '/plans/moved.pdf', 2);
-  const latest = replaceSheet(moved, initial.sheet.id, '/plans/final.pdf', 'C', '2026-10-14T10:00:00Z', 4);
+  const oldHash = 'a'.repeat(64);
+  const recentHash = 'b'.repeat(64);
+  const currentHash = 'c'.repeat(64);
+  const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', title: 'Lobby', revision: 'A', page: 1, sourceSha256: oldHash });
+  const revised = replaceSheet(initial.register, initial.sheet.id, '/plans/revised.pdf', 'B', '2026-10-13T10:00:00Z', 3, recentHash);
+  const moved = relinkSheet(revised, initial.sheet.id, '/plans/moved.pdf', 2, recentHash);
+  const latest = replaceSheet(moved, initial.sheet.id, '/plans/final.pdf', 'C', '2026-10-14T10:00:00Z', 4, currentHash);
   const csv = drawingLogCsv(latest, { [initial.sheet.id]: 'Present' });
   const [header, current, recentPrior, oldestPrior] = csv.slice(1).trimEnd().split('\r\n');
   assert.match(header, /"Stable sheet ID","Sheet ID","Title","Source"/);
-  assert.equal(current, `"${initial.sheet.id}","A-101","Lobby","Current","C","4","/plans/final.pdf","Present",""`);
-  assert.equal(recentPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","B","2","/plans/moved.pdf","","2026-10-14T10:00:00Z"`);
-  assert.equal(oldestPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","A","1","/plans/old.pdf","","2026-10-13T10:00:00Z"`);
+  assert.match(header, /"Recorded PDF SHA-256"/);
+  assert.equal(current, `"${initial.sheet.id}","A-101","Lobby","Current","C","4","/plans/final.pdf","Present","","${currentHash}"`);
+  assert.equal(recentPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","B","2","/plans/moved.pdf","","2026-10-14T10:00:00Z","${recentHash}"`);
+  assert.equal(oldestPrior, `"${initial.sheet.id}","A-101","Lobby","Prior","A","1","/plans/old.pdf","","2026-10-13T10:00:00Z","${oldHash}"`);
   assert.equal(csv.includes('/plans/revised.pdf'), false);
   assert.deepEqual(parseSheetRegister(JSON.stringify(latest)), latest);
 });

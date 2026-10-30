@@ -22,13 +22,18 @@ try {
     ],
   })));
   await page.goto(server.resolvedUrls.local[0], { waitUntil: 'networkidle' });
-  await page.locator('#left-panel .left-panel-tab[data-panel="sheets"]').click();
+  await page.getByText('Start a drawing review').waitFor();
+  await page.locator('.ws-host-left .ws-access-tab[data-panel="sheets"]').click();
   const rows = page.locator('#sheets-panel .sheets-row');
+  await rows.first().waitFor();
   assert.equal(await rows.count(), 3);
   await page.getByLabel('Search sheets').fill('lobby');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /A-101/);
   await page.getByLabel('Search sheets').fill('p0');
+  assert.equal(await rows.count(), 1);
+  assert.match(await rows.first().innerText(), /A-101/);
+  await page.getByLabel('Search sheets').fill('old.pdf');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /A-101/);
   await page.getByLabel('Filter current revision').selectOption('C');
@@ -37,6 +42,33 @@ try {
   await page.getByLabel('Search sheets').fill('');
   assert.equal(await rows.count(), 1);
   assert.match(await rows.first().innerText(), /M-201/);
+  await page.getByLabel('Search sheets').fill('MECHANICAL.PDF');
+  assert.equal(await rows.count(), 1);
+  assert.match(await rows.first().innerText(), /M-201/);
+  await page.getByLabel('Search sheets').fill('');
+
+  const viewCsvDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export current view CSV' }).click();
+  const viewCsv = await viewCsvDownload;
+  assert.equal(viewCsv.suggestedFilename(), 'Level 1 drawings-current-view-drawing-log.csv');
+  const viewRows = (await readFile(await viewCsv.path(), 'utf8')).slice(1).trimEnd().split('\r\n');
+  assert.equal(viewRows.length, 2);
+  assert.match(viewRows[1], /"stable-m201","M-201","Mechanical room","Current","C"/u);
+  assert.doesNotMatch(viewRows.join(' '), /stable-a101|stable-e301|Prior/u);
+
+  const viewPdfDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export current view PDF' }).click();
+  const viewPdf = await viewPdfDownload;
+  assert.equal(viewPdf.suggestedFilename(), 'Level 1 drawings-current-view-drawing-log.pdf');
+  const viewTask = getDocument({ data: new Uint8Array(await readFile(await viewPdf.path())), useSystemFonts: false });
+  const viewReader = await viewTask.promise;
+  const viewText = (await (await viewReader.getPage(1)).getTextContent()).items.map(item => item.str).join(' ');
+  assert.match(viewText, /CURRENT DRAWING LOG/u);
+  assert.match(viewText, /1 of 3 current sheets in this view/u);
+  assert.match(viewText, /Current revision: C/u);
+  assert.match(viewText, /Stable sheet ID: stable-m201/u);
+  assert.doesNotMatch(viewText, /stable-a101|stable-e301|Earlier/u);
+  await viewTask.destroy();
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export drawing log', exact: true }).click();

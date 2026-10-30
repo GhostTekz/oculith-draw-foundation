@@ -23,6 +23,8 @@ import { buildHyperlinkDict } from '../pdf/saver/hyperlink-dict.js';
 import { saveBookmarksToOutline } from '../pdf/saver/bookmarks.js';
 import { commonDirectory, pathInside, relativePdfPath } from '../pdf/remote-link.js';
 import { throwIfCancelled, batchFileName, joinOutputPath } from './runner.js';
+import { fingerprintPdfBytes } from '../sets/pdf-fingerprint.js';
+import { indexSheetTitleSuggestions } from '../sets/index-sheet-titles.js';
 
 const PRINT_FLAG = 4;
 const keyOf = (path) => String(path ?? '').replace(/\\/gu, '/').toLocaleLowerCase();
@@ -43,22 +45,27 @@ function modelRectOf(viewport, pdfRect) {
 }
 
 /**
- * Read one file for the plan: its page labels, the text runs of every page
- * (with a function that frames a character range) and the links already on
- * its pages. `measureFor(fontFamily)` may return a text width function (a
- * canvas in the app); without it the character share is used.
+ * Read one file for the plan: its page count, page labels, text runs and
+ * existing links. `pageNumbers` limits text and link extraction to selected
+ * pages for index review; the ordinary Set Batch Link scan reads every page.
+ * `measureFor(fontFamily)` may return a text width function (a canvas in the
+ * app); without it the character share is used.
  */
-export async function scanSetFile(bytes, { pdfjs, signal, measureFor } = {}) {
+export async function scanSetFile(bytes, { pdfjs, signal, measureFor, pageNumbers = null } = {}) {
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes).slice(), isEvalSupported: false, verbosity: 0 });
   try {
     const doc = await task.promise;
     throwIfCancelled(signal);
     let raw = null;
-    try { raw = await doc.getPageLabels(); } catch { raw = null; }
-    const labels = Array.from({ length: doc.numPages }, (_, i) => cleanPageLabel(raw?.[i]));
+    if (!pageNumbers) {
+      try { raw = await doc.getPageLabels(); } catch { raw = null; }
+    }
+    const labels = pageNumbers ? [] : Array.from({ length: doc.numPages }, (_, i) => cleanPageLabel(raw?.[i]));
     const pages = [];
     const existing = [];
-    for (let p = 1; p <= doc.numPages; p++) {
+    const selected = pageNumbers || Array.from({ length: doc.numPages }, (_, i) => i + 1);
+    for (const p of selected) {
+      if (!Number.isSafeInteger(p) || p < 1 || p > doc.numPages) continue;
       const page = await doc.getPage(p);
       const viewport = modelViewport(page, 0);
       let content = { items: [], styles: {} };
@@ -147,6 +154,232 @@ export function planSetLinks(scans, options = {}) {
     }
   });
   return { links, skipped, ambiguous, pagesWithoutText };
+}
+
+/**
+ * Review references against the current drawing-set register. A sheet's stable
+ * ID, path and page are the authority; PDF page labels only expose references
+ * whose target has not been registered. Nothing here changes a PDF or set.
+ * `files` and `scans` have the same order as the batch runner.
+ */
+export function planRegisteredSetLinks(scans, files, register, options = {}) {
+  const opts = { ...BATCH_LINK_DEFAULTS, ...options };
+  const sheets = register?.sheets || [];
+  const byPath = new Map((files || []).map((file, index) => [keyOf(file.path), index]));
+  const registered = new Map();
+  for (const sheet of sheets) {
+    const label = cleanPageLabel(sheet.label);
+    if (!label || /^\d+$/u.test(label)) continue;
+    const key = label.toLocaleLowerCase();
+    if (!registered.has(key)) registered.set(key, { label, sheets: [] });
+    registered.get(key).sheets.push(sheet);
+  }
+  const pageLabels = new Map();
+  (scans || []).forEach((scan, file) => (scan?.labels || []).forEach((raw, index) => {
+    const label = cleanPageLabel(raw);
+    if (!label || /^\d+$/u.test(label)) return;
+    const key = label.toLocaleLowerCase();
+    if (!pageLabels.has(key)) pageLabels.set(key, { label, places: [] });
+    pageLabels.get(key).places.push({ file, page: index + 1 });
+  }));
+  const candidates = new Map();
+  for (const [key, value] of registered) candidates.set(value.label, { kind: 'registered', ...value });
+  for (const [key, value] of pageLabels) {
+    if (!registered.has(key)) candidates.set(value.label, { kind: 'unregistered', ...value });
+  }
+  const matcher = referenceMatcher(candidates, opts);
+  const sourceSheets = new Map();
+  for (const sheet of sheets) {
+    const file = byPath.get(keyOf(sheet.filePath));
+    if (file === undefined) continue;
+    const key = `${file}:${sheet.page}`;
+    if (!sourceSheets.has(key)) sourceSheets.set(key, []);
+    sourceSheets.get(key).push(sheet);
+  }
+  const links = [];
+  const review = [];
+  const pagesWithoutText = [];
+  const changedFiles = new Set(sheets.filter(sheet => {
+    const file = byPath.get(keyOf(sheet.filePath));
+    return file !== undefined && sheet.sourceSha256 && sheet.sourceSha256 !== scans[file]?.fingerprint;
+  }).map(sheet => byPath.get(keyOf(sheet.filePath))));
+  (scans || []).forEach((scan, file) => {
+    if (!scan) return;
+    const placed = [];
+    for (const { page, items, toPdfRect } of scan.pages) {
+      if (!items.some(item => item.str.trim())) { pagesWithoutText.push({ file, page }); continue; }
+      for (const item of items) {
+        for (const hit of matcher.find(item.str)) {
+          const candidate = hit.page;
+          const sources = sourceSheets.get(`${file}:${page}`) || [];
+          const row = { file, page, sourceSheetId: sources.length === 1 ? sources[0].id : null,
+            text: hit.text, label: hit.label, status: '', targetSheetId: null, target: null };
+          const sourceProblem = sources.length > 1 ? 'ambiguous-source'
+            : !sources.length ? 'unregistered-source' : changedFiles.has(file) ? 'changed-source'
+              : !sources[0].sourceSha256 ? 'unverified-source' : '';
+          if (candidate.kind === 'unregistered') {
+            row.status = candidate.places.length > 1 ? 'ambiguous-target' : 'unregistered-target';
+            row.places = candidate.places;
+          } else if (candidate.sheets.length !== 1) {
+            row.status = 'ambiguous-target';
+            row.candidates = candidate.sheets.map(sheet => ({ sheetId: sheet.id, path: sheet.filePath, page: sheet.page }));
+          } else {
+            const targetSheet = candidate.sheets[0];
+            const targetFile = byPath.get(keyOf(targetSheet.filePath));
+            row.targetSheetId = targetSheet.id;
+            row.targetPath = targetSheet.filePath;
+            row.targetPage = targetSheet.page;
+            if (targetFile === undefined || !scans[targetFile]) row.status = 'missing-target';
+            else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
+              || targetSheet.page > scans[targetFile].pageCount) row.status = 'missing-page';
+            else if (!targetSheet.sourceSha256) row.status = 'unverified-target';
+            else if (targetSheet.sourceSha256 && targetSheet.sourceSha256 !== scans[targetFile].fingerprint) row.status = 'changed-target';
+            else row.target = { file: targetFile, page: targetSheet.page };
+          }
+          row.status = sourceProblem || row.status;
+          if (!row.status && opts.excludeSelf && row.target.file === file && row.target.page === page) row.status = 'self';
+          let rect;
+          if (!row.status) {
+            rect = item.box(hit.start, hit.end);
+            if (!rect || !(rect.width > 0) || !(rect.height > 0)) row.status = 'no-location';
+          }
+          if (!row.status && scan.existing.concat(placed).some(l => l.page === page && overlapRatio(l.rect || l, rect) > 0.5)) {
+            row.status = 'existing';
+          }
+          if (!row.status) {
+            const pdfRect = toPdfRect({ x: rect.x - 1, y: rect.y - 1, width: rect.width + 2, height: rect.height + 2 });
+            const link = { file, page, text: hit.text, label: hit.label, target: row.target,
+              targetSheetId: row.targetSheetId, rect, pdfRect };
+            row.status = 'ready';
+            row.linkIndex = links.length;
+            links.push(link);
+            placed.push(link);
+          }
+          review.push(row);
+        }
+      }
+    }
+  });
+  return { links, review, pagesWithoutText };
+}
+
+/**
+ * Plan links only on one verified drawing index page. The row parser anchors
+ * each link to the exact sheet-ID glyphs; titles and unrelated references do
+ * not become links. The writer and guarded preview are shared with Set Batch Link.
+ */
+export function planIndexSheetLinks(scans, files, register, indexSource, options = {}) {
+  const opts = { ...BATCH_LINK_DEFAULTS, ...options };
+  const sheets = register?.sheets || [];
+  const pathVariants = new Map();
+  for (const sheet of sheets) {
+    const key = keyOf(sheet.filePath);
+    if (pathVariants.has(key) && pathVariants.get(key) !== sheet.filePath) {
+      throw new Error('Registered PDF paths differ only by case. Review the set before linking.');
+    }
+    pathVariants.set(key, sheet.filePath);
+  }
+  const source = sheets.find(sheet => sheet.id === indexSource?.id);
+  if (!source || !source.sourceSha256 || source.filePath !== indexSource.filePath
+    || source.page !== indexSource.page || source.sourceSha256 !== indexSource.sourceSha256) {
+    throw new Error('The selected index sheet changed. Select and review it again.');
+  }
+  const byPath = new Map();
+  (files || []).forEach((file, index) => {
+    const key = keyOf(file.path);
+    if (byPath.has(key)) throw new Error('Two selected PDFs have paths that differ only by case. Review the set before linking.');
+    byPath.set(key, index);
+  });
+  const file = byPath.get(keyOf(source.filePath));
+  const scan = scans?.[file];
+  if (file === undefined || files[file].path !== source.filePath
+    || !scan || scan.fingerprint !== source.sourceSha256
+    || source.page < 1 || source.page > scan.pageCount) {
+    throw new Error('The selected index PDF is missing or changed. Review its source first.');
+  }
+  if (sheets.filter(sheet => keyOf(sheet.filePath) === keyOf(source.filePath)
+    && sheet.page === source.page).length !== 1) {
+    throw new Error('More than one registered sheet uses the selected index page.');
+  }
+  const pages = scan.pages?.filter(item => item.page === source.page) || [];
+  if (pages.length !== 1 || !Array.isArray(pages[0].items)
+    || !pages[0].items.some(item => item.str?.trim())
+    || typeof pages[0].toPdfRect !== 'function') {
+    throw new Error('The selected index page has no complete selectable text scan. Review a vector PDF page.');
+  }
+  const page = pages[0];
+  const parsed = indexSheetTitleSuggestions(page.items, null, sheets);
+  const links = [];
+  const review = [];
+  const placed = [];
+  for (const row of parsed.unmatched) {
+    review.push({ file, page: source.page, sourceSheetId: source.id,
+      text: row.text, label: row.text.split(/\s/u)[0], lineY: row.y,
+      status: row.reason.startsWith('Sheet ID is not unique') ? 'ambiguous-target' : 'unregistered-target' });
+  }
+  for (const conflict of parsed.conflicts) {
+    const target = sheets.find(sheet => sheet.id === conflict.sheetId);
+    review.push({ file, page: source.page, sourceSheetId: source.id,
+      text: conflict.lines.join(' / '), label: target?.label || '', lineY: conflict.y,
+      status: 'ambiguous-target',
+      candidates: target ? [{ sheetId: target.id, path: target.filePath, page: target.page }] : [] });
+  }
+  for (const [sheetId, match] of parsed.matched) {
+    const targetSheet = sheets.find(sheet => sheet.id === sheetId);
+    const targetFile = byPath.get(keyOf(targetSheet.filePath));
+    const targetScan = scans?.[targetFile];
+    const row = { file, page: source.page, sourceSheetId: source.id,
+      text: match.evidence, label: targetSheet.label, lineY: match.y, targetSheetId: targetSheet.id,
+      targetPath: targetSheet.filePath, targetPage: targetSheet.page, status: '' };
+    if (targetFile === undefined || files[targetFile].path !== targetSheet.filePath
+      || !targetScan) row.status = 'missing-target';
+    else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
+      || targetSheet.page > targetScan.pageCount) row.status = 'missing-page';
+    else if (!targetSheet.sourceSha256) row.status = 'unverified-target';
+    else if (targetScan.fingerprint !== targetSheet.sourceSha256) row.status = 'changed-target';
+    else if (opts.excludeSelf && targetFile === file && targetSheet.page === source.page) row.status = 'self';
+    else if (!match.rect || !(match.rect.width > 0) || !(match.rect.height > 0)) row.status = 'no-location';
+    else if (scan.existing.concat(placed).some(item => item.page === source.page
+      && overlapRatio(item.rect || item, match.rect) > 0.5)) row.status = 'existing';
+    if (!row.status) {
+      const rect = match.rect;
+      const pdfRect = page.toPdfRect({ x: rect.x - 1, y: rect.y - 1,
+        width: rect.width + 2, height: rect.height + 2 });
+      const link = { file, page: source.page, text: targetSheet.label, label: targetSheet.label,
+        target: { file: targetFile, page: targetSheet.page }, targetSheetId: targetSheet.id,
+        rect, pdfRect };
+      row.status = 'ready';
+      row.linkIndex = links.length;
+      links.push(link);
+      placed.push(link);
+    }
+    review.push(row);
+  }
+  review.sort((first, second) => first.lineY - second.lineY);
+  return { links, review, pagesWithoutText: parsed.selectableText ? [] : [{ file, page: source.page }] };
+}
+
+/** Stable identity and source state used by registered link resolution. */
+export function registeredSetLinkSnapshot(register) {
+  return JSON.stringify((register?.sheets || []).map(sheet => [
+    sheet.id, sheet.label, sheet.filePath, sheet.page, sheet.sourceSha256 || null,
+  ]));
+}
+
+/** Pin the exact bytes reviewed by Find for the later guarded output job. */
+export async function verifySetLinkPreviewSources(files, scans, readFile) {
+  const verified = new Map();
+  for (let index = 0; index < (files || []).length; index++) {
+    const file = files[index];
+    const expected = scans?.[index]?.fingerprint;
+    if (!expected) throw new Error(`${file.name} was not scanned. Run Find again.`);
+    const bytes = await readFile(file.path);
+    if (await fingerprintPdfBytes(bytes) !== expected) {
+      throw new Error(`${file.name} changed since Find. Run Find again.`);
+    }
+    verified.set(keyOf(file.path), new Uint8Array(bytes).slice());
+  }
+  return verified;
 }
 
 /**
@@ -242,10 +475,15 @@ export function writeLabelBookmarks(pdfDoc, labels = pdfLibPageLabels(pdfDoc)) {
 }
 
 /** Runner job 1: read every file for the plan. */
-export function setLinkScanJob({ pdfjs, measureFor } = {}) {
+export function setLinkScanJob({ pdfjs, measureFor, fingerprint = false, indexSource = null } = {}) {
   return {
     id: 'set-link-scan',
-    processFile: (file, { signal }) => scanSetFile(file.bytes, { pdfjs, signal, measureFor }),
+    async processFile(file, { signal }) {
+      const pageNumbers = indexSource ? (file.path === indexSource.filePath ? [indexSource.page] : []) : null;
+      const scan = await scanSetFile(file.bytes, { pdfjs, signal, measureFor, pageNumbers });
+      if (fingerprint) scan.fingerprint = await fingerprintPdfBytes(file.bytes);
+      return scan;
+    },
     describe: (scan) => scan.labels.filter((l) => l && !/^\d+$/u.test(l)).length,
     async finish(successes) {
       const byPath = new Map(successes.map((s) => [keyOf(s.file.path), s.result]));

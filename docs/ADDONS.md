@@ -10,6 +10,8 @@ The full edition manifest uses schema version 1. Its `editorVersion` must **exac
 
 These checks catch mismatched or changed files. They do not establish who created a package. Add-on code runs with the editor's privileges and the interface is not a security sandbox. Install add-ons only from a source you trust.
 
+An add-on may request `js/sets/register-context.js` from the host when that module is available. Its `drawingSetSnapshot()` function returns a frozen copy of the local drawing-set name, stable sheet IDs, labels, titles, current sources, earlier sources, and recorded PDF fingerprints. It exposes no register write method. Check `host.provides('js/sets/register-context.js')` before adding the module to `requires` when supporting older compatible editor builds. A recorded fingerprint describes the saved PDF bytes at the time of registration; add-ons must check the current file before treating a source as verified.
+
 ## Install, update, and remove
 
 The full edition package belongs under `addons/active/` in the app's effective per-user data directory, with `manifest.json` and all files named by its `files` map inside that directory. An add-on distributor can provide an installer that stages and verifies these files. To remove it, close Foundation and remove `addons/active/`; the editor then starts with its built-in defaults and any enabled independent packages. To update it, replace the whole active package while the app is closed. Installation, replacement, and removal take effect after restarting the app because selection is fixed for each process. See [Independent add-on packages](ADDON-PACKAGES.md) for their separate builder and installer.

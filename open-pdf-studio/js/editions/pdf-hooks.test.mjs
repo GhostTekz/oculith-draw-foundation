@@ -4,7 +4,7 @@ import { PDFArray, PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib
 import { edition as foundation } from './community.js';
 import { composeAddons } from './compose-addons.js';
 import { assertEditionContract } from './contract.js';
-import { pdfKeyPrefix } from './pdf-hooks.js';
+import { pdfKeyPrefix, unclaimedAddonCatalogKeys } from './pdf-hooks.js';
 import { extractPdfLibPages } from '../pdf/extract-pages-core.js';
 import { carryUnmodeledAnnotationKeys } from '../pdf/saver/unmodeled-annotation-keys.js';
 
@@ -134,6 +134,39 @@ test('v2 PDF key ownership and operation limits reject a package without changin
   assert.throws(() => composed.edition.pdf.carryToExtract(pdf, extracted, [1]), /Cannot extract pages/);
 });
 
+test('a namespaced PDF owner remaps its catalog during page extraction', async () => {
+  const id = 'sample.study', owned = key(id, 'PagesV1');
+  const source = await PDFDocument.create();
+  source.addPage([200, 200]); source.addPage([200, 200]);
+  source.catalog.set(PDFName.of(owned), PDFHexString.fromText('page 2'));
+  source.catalog.set(PDFName.of(key('other.package', 'UnknownV1')), PDFHexString.fromText('other'));
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    catalogKeys: [owned],
+    catalogForExtract({ fields, pages }) {
+      assert.equal(fields[owned], 'page 2');
+      assert.deepEqual(pages.map((page) => [page.sourcePage, page.targetPage]), [[2, 1]]);
+      return { [owned]: 'page 1' };
+    },
+  } } }]);
+  assert.deepEqual(unclaimedAddonCatalogKeys(source, edition.pdf.catalogKeys), [key('other.package', 'UnknownV1')]);
+  const target = await PDFDocument.create();
+  target.addPage((await target.copyPages(source, [1]))[0]);
+  edition.pdf.carryToExtract(source, target, [2]);
+  assert.equal(text(target.catalog, owned), 'page 1');
+  assert.equal(text(source.catalog, owned), 'page 2');
+});
+
+test('a namespaced PDF owner reads a large UTF-16 text field within its limit', async () => {
+  const id = 'sample.large', owned = key(id, 'StudyV1');
+  const source = await PDFDocument.create();
+  source.addPage();
+  const value = 'schedule '.repeat(10_000);
+  source.catalog.set(PDFName.of(owned), PDFHexString.fromText(value));
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id,
+    pdf: { catalogKeys: [owned] } } }]);
+  assert.equal(edition.pdf.readWorkspace(source).addons[id][owned], value);
+});
+
 test('v2 PDF callbacks reject asynchronous or unowned save data before writing package fields', async () => {
   const id = 'sample.one', owned = key(id, 'State');
   const pdf = await PDFDocument.create();
@@ -214,6 +247,67 @@ test('an independent package claims an exact legacy text key without replacing u
   assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(legacy))), invalid);
   edition.pdf.saveWorkspace(reopened, edition.pdf.workspaceForSave({}, reopened));
   assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(legacy))), invalid);
+});
+
+test('an explicit v2 catalog deletion removes only the claimed readable key after save and reopen', async () => {
+  const first = 'sample.delete', second = 'sample.keep';
+  const removed = 'LAB_DrawingStateV1', kept = key(second, 'State');
+  const unclaimed = 'LAB_UnknownStateV1';
+  const seen = [];
+  const { edition, rejected } = composeAddons(foundation, [
+    { id: first, addon: { apiVersion: 2, id: first, pdf: {
+      legacyCatalogKeys: [removed],
+      catalogForSave(doc, source) {
+        seen.push(source);
+        return doc.remove ? { [removed]: null } : {};
+      },
+    } } },
+    { id: second, addon: { apiVersion: 2, id: second, pdf: {
+      catalogKeys: [kept], catalogForSave: () => ({}),
+    } } },
+  ]);
+  assert.deepEqual(rejected, []);
+
+  const source = await PDFDocument.create();
+  source.addPage();
+  source.catalog.set(PDFName.of(removed), PDFHexString.fromText('undo this'));
+  source.catalog.set(PDFName.of(kept), PDFHexString.fromText('keep this'));
+  source.catalog.set(PDFName.of(unclaimed), PDFHexString.fromText('unknown source'));
+  let pdf = await PDFDocument.load(await source.save());
+  edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({}, pdf));
+  pdf = await PDFDocument.load(await pdf.save());
+  assert.equal(text(pdf.catalog, removed), 'undo this', 'omission preserves source bytes');
+  assert.equal(text(pdf.catalog, kept), 'keep this');
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+  assert.deepEqual(seen.at(-1).presentKeys, [removed]);
+  assert.deepEqual(seen.at(-1).fields, { [removed]: 'undo this' });
+
+  edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({ remove: true }, pdf));
+  pdf = await PDFDocument.load(await pdf.save());
+  assert.equal(pdf.catalog.get(PDFName.of(removed)), undefined);
+  assert.equal(text(pdf.catalog, kept), 'keep this');
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+
+  assert.throws(() => edition.pdf.saveWorkspace(pdf, { addons: {
+    [first]: { [unclaimed]: null },
+  } }), /unowned/);
+  assert.equal(text(pdf.catalog, unclaimed), 'unknown source');
+});
+
+test('v2 catalog deletion refuses an unreadable claimed value and leaves its source intact', async () => {
+  const id = 'sample.delete', owned = 'LAB_DrawingStateV1';
+  const { edition } = composeAddons(foundation, [{ id, addon: { apiVersion: 2, id, pdf: {
+    legacyCatalogKeys: [owned], catalogForSave: () => ({ [owned]: null }),
+  } } }]);
+  const source = await PDFDocument.create();
+  source.addPage();
+  const unreadable = source.context.obj({ Data: PDFHexString.fromText('opaque') });
+  source.catalog.set(PDFName.of(owned), source.context.register(unreadable));
+  const pdf = await PDFDocument.load(await source.save());
+  assert.throws(() => edition.pdf.saveWorkspace(pdf, edition.pdf.workspaceForSave({}, pdf)), /Cannot delete unreadable/);
+  const reopened = await PDFDocument.load(await pdf.save());
+  assert.ok(reopened.catalog.get(PDFName.of(owned)));
+  assert.equal(reopened.context.lookup(reopened.catalog.get(PDFName.of(owned))).get(PDFName.of('Data')).decodeText(), 'opaque');
 });
 
 test('legacy decoding matches short pdf-lib strings and preserves malformed large UTF-16', async () => {
