@@ -1,7 +1,63 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const publicRepository = 'https://github.com/GhostTekz/oculith-foundation';
+const publicRemote = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)GhostTekz\/oculith-foundation(?:\.git)?$/i;
+
+function git(root, ...args) {
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`Cannot identify Foundation source: git ${args[0]} failed.`);
+  return result.stdout.trim();
+}
+
+export function foundationSourceRoute(root = path.resolve(project, '..')) {
+  // A downloaded source archive has no Git metadata; it remains buildable,
+  // but it cannot claim the revision of an installed release.
+  const remote = spawnSync('git', ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8' });
+  if (remote.status !== 0) return null;
+  const origin = remote.stdout.trim();
+  if (!publicRemote.test(origin)) return null;
+  if (git(root, 'status', '--porcelain', '--untracked-files=normal')) {
+    throw new Error('Cannot record a Foundation source revision from a modified public checkout.');
+  }
+  const commit = git(root, 'rev-parse', 'HEAD');
+  const tree = git(root, 'rev-parse', 'HEAD^{tree}');
+  if (!/^[a-f0-9]{40}$/.test(commit) || !/^[a-f0-9]{40}$/.test(tree)) {
+    throw new Error('Cannot record a valid Foundation source revision.');
+  }
+  const { version } = JSON.parse(readFileSync(path.join(root, 'open-pdf-studio', 'package.json'), 'utf8'));
+  if (typeof version !== 'string' || !version) throw new Error('Foundation version is missing.');
+  return {
+    schemaVersion: 1,
+    version,
+    repository: publicRepository,
+    commit,
+    tree,
+    sourceArchive: `${publicRepository}/archive/${commit}.tar.gz`,
+    buildInstructions: `${publicRepository}/blob/${commit}/docs/BUILDING.md`,
+  };
+}
+
+export function writeFoundationSourceRoute(root = path.resolve(project, '..')) {
+  const destination = path.join(root, 'open-pdf-studio', 'public', 'foundation-source.json');
+  const route = foundationSourceRoute(root);
+  if (route) writeFileSync(destination, `${JSON.stringify(route, null, 2)}\n`);
+  else rmSync(destination, { force: true });
+  return route;
+}
+
+export function verifyBuiltFoundationSourceRoute(route, root = path.resolve(project, '..')) {
+  if (!route) return;
+  const built = path.join(root, 'open-pdf-studio', 'dist', 'foundation-source.json');
+  let actual;
+  try { actual = JSON.parse(readFileSync(built, 'utf8')); }
+  catch { throw new Error('Foundation frontend did not bundle its source route.'); }
+  if (JSON.stringify(actual) !== JSON.stringify(route)) {
+    throw new Error('Foundation frontend source route differs from the build checkout.');
+  }
+}
 const editionTargetDir = (env = process.env) => path.join(path.resolve(project,
   env.OCUDRAW_TARGET_BASE || env.CARGO_TARGET_DIR || path.resolve(project, '..', 'target')), 'community');
 
@@ -37,6 +93,7 @@ export function communityBuildCommand(args = []) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const route = writeFoundationSourceRoute();
   const spec = communityBuildCommand(process.argv.slice(2));
   if (!process.argv.includes('--frontend-only')) {
     const { readFileSync } = await import('node:fs');
@@ -54,5 +111,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
+  if (result.status === 0) verifyBuiltFoundationSourceRoute(route);
   process.exit(result.status ?? 1);
 }

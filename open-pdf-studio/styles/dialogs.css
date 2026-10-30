@@ -740,6 +740,11 @@
   margin-bottom: 20px;
 }
 
+.bs-about-source-note code {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .bs-about-link {
   background: var(--theme-app-menu-sidebar);
   border: 1px solid var(--theme-app-menu-sidebar-border);
