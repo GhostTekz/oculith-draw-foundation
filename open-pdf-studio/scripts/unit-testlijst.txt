@@ -429,6 +429,7 @@ js/pdf/saver/canvas-pdf-recorder.test.mjs
 js/pdf/count-symbols-roundtrip.test.mjs
 js/pdf/symbol-count-preset-roundtrip.test.mjs
 js/batch/set-link.test.mjs
+js/batch/index-sheet-link.test.mjs
 js/pdf/save-growth-features.test.mjs
 js/tools/line-tool-drag.test.mjs
 js/pdf/ext-interop.test.mjs

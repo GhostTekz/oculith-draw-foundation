@@ -15,14 +15,16 @@ function validTitle(value) {
 }
 
 function linesFromText(items, viewport) {
-  if (!Array.isArray(items) || typeof viewport?.convertToViewportPoint !== 'function') return [];
+  if (!Array.isArray(items) || (!items.some(item => typeof item?.box === 'function')
+    && typeof viewport?.convertToViewportPoint !== 'function')) return [];
   if (items.length > 5000) throw new Error('The selected page has too much text for a complete index review. Use a smaller index page.');
   const hits = [];
   for (const item of items) {
     const value = clean(item?.str);
     if (!value) continue;
-    const box = textItemBox(item, viewport);
-    if (box && box.width > 0 && box.height > 0) hits.push({ value, box,
+    const box = typeof item.box === 'function' ? item.box(0, String(item.str).length)
+      : textItemBox(item, viewport);
+    if (box && box.width > 0 && box.height > 0) hits.push({ value, box, item,
       y: box.y + box.height / 2 });
   }
   hits.sort((a, b) => a.y - b.y || a.box.x - b.box.x);
@@ -37,7 +39,17 @@ function linesFromText(items, viewport) {
   return lines.map(line => ({
     text: clean(line.hits.sort((a, b) => a.box.x - b.box.x).map(hit => hit.value).join(' ')),
     y: Math.round(line.y),
+    hits: line.hits,
   })).filter(line => line.text).sort((a, b) => a.y - b.y);
+}
+
+function sheetIdRect(line, id, viewport) {
+  const first = line.hits[0];
+  if (!first || !first.value.toLocaleUpperCase().startsWith(id.toLocaleUpperCase())) return null;
+  const from = /^\s*/u.exec(first.item.str)?.[0].length || 0;
+  const to = from + id.length;
+  return typeof first.item.box === 'function' ? first.item.box(from, to)
+    : textItemBox(first.item, viewport, from, to);
 }
 
 /** Exact, review-only matches from one selectable PDF index page. */
@@ -58,19 +70,20 @@ export function indexSheetTitleSuggestions(items, viewport, sheets) {
     if (!validTitle(title)) continue;
     const candidates = byId.get(id) || [];
     if (candidates.length !== 1) {
-      unmatched.push({ text: line.text.slice(0, 140), reason: candidates.length
+      unmatched.push({ text: line.text.slice(0, 140), y: line.y, reason: candidates.length
         ? 'Sheet ID is not unique in the register.' : 'No exact sheet ID in the register.' });
       continue;
     }
     const sheetId = candidates[0].id;
     if (!found.has(sheetId)) found.set(sheetId, []);
-    found.get(sheetId).push({ title, evidence: line.text.slice(0, 140), y: line.y });
+    found.get(sheetId).push({ title, evidence: line.text.slice(0, 140), y: line.y,
+      rect: sheetIdRect(line, match[1], viewport) });
   }
   const matched = new Map();
   const conflicts = [];
   for (const [sheetId, rows] of found) {
     if (rows.length !== 1) {
-      conflicts.push({ sheetId, lines: rows.map(row => row.evidence),
+      conflicts.push({ sheetId, lines: rows.map(row => row.evidence), y: Math.min(...rows.map(row => row.y)),
         reason: 'More than one index row matched this sheet ID.' });
     } else matched.set(sheetId, rows[0]);
   }

@@ -24,6 +24,7 @@ test('matches exact registered IDs from rows and reports duplicates and unmatche
     item('A-101 STAIR PLAN A-102 ROOF PLAN', 50, 280),
   ], viewport, sheets);
   assert.equal(result.matched.get('one').title, 'FIRST FLOOR PLAN');
+  assert(result.matched.get('one').rect.width > 0);
   assert.equal(result.matched.has('two'), false);
   assert.equal(result.conflicts[0].sheetId, 'two');
   assert.deepEqual(result.unmatched.map(row => row.text), ['A-103 THIRD FLOOR PLAN']);

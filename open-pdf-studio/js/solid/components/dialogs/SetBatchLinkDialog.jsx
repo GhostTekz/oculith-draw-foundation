@@ -24,14 +24,15 @@ async function grant(path) {
  * linked copies into an output folder with the set's folder layout; Remove
  * writes copies without the Batch Link links. The sources are only read.
  */
-export default function SetBatchLinkDialog() {
+export default function SetBatchLinkDialog(props) {
   const { t } = useTranslation('common');
   const { t: td } = useTranslation('dialogs');
   const ts = (key, options) => t(`setBatchLink.${key}`, options);
+  const indexSource = props.data?.indexSource || null;
   const [files, setFiles] = createSignal(batchFileList(setFilePaths(sheetRegister())));
   const [selected, setSelected] = createSignal(-1);
   const [opts, setOpts] = createSignal({ ...BATCH_LINK_DEFAULTS });
-  const [registeredTargets, setRegisteredTargets] = createSignal(false);
+  const [registeredTargets, setRegisteredTargets] = createSignal(!!indexSource);
   const [bookmarks, setBookmarks] = createSignal(false);
   const [phase, setPhase] = createSignal('options'); // options | scanning | preview | writing | done
   const [progress, setProgress] = createSignal('');
@@ -110,7 +111,7 @@ export default function SetBatchLinkDialog() {
       };
       const list = files();
       const register = sheetRegister();
-      const useRegister = registeredTargets();
+      const useRegister = !!indexSource || registeredTargets();
       const registerSnapshot = useRegister ? setLink.registeredSetLinkSnapshot(register) : null;
       const run = await runBatch({
         files: list, readFile, signal: controller.signal, onProgress: onFile(ts('reading')),
@@ -122,11 +123,12 @@ export default function SetBatchLinkDialog() {
       }
       const key = (p) => p.replace(/\\/g, '/').toLocaleLowerCase();
       const scans = list.map((f) => run.output.byPath.get(key(f.path)) || null);
-      const planned = useRegister
-        ? setLink.planRegisteredSetLinks(scans, list, register, opts())
-        : setLink.planSetLinks(scans, opts());
+      const planned = indexSource
+        ? setLink.planIndexSheetLinks(scans, list, register, indexSource, opts())
+        : useRegister ? setLink.planRegisteredSetLinks(scans, list, register, opts())
+          : setLink.planSetLinks(scans, opts());
       setPlan({ files: list, scans, register, registered: useRegister,
-        registerSnapshot, ...planned });
+        indexMode: !!indexSource, registerSnapshot, ...planned });
       setChecked(planned.links.map(() => true));
       setPhase('preview');
     } catch (error) {
@@ -158,7 +160,8 @@ export default function SetBatchLinkDialog() {
       const run = await runBatch({
         files: list, readFile: verifiedBytes ? path => verifiedBytes.get(pathKey(path)) : readFile,
         signal: controller.signal, onProgress: onFile(ts('writingFile')),
-        job: setLink.setLinkWriteJob({ files: list, plan: { links }, rel, mode, bookmarks: bookmarks(), options: opts() }),
+        job: setLink.setLinkWriteJob({ files: list, plan: { links }, rel, mode,
+          bookmarks: indexSource ? false : bookmarks(), options: opts() }),
       });
       if (run.cancelled) { setMessage(ts('cancelled')); setPhase(back); return; }
       if (reviewedPlan?.registered && run.log.some(entry => !entry.ok)) throw new Error(ts('writeIncomplete'));
@@ -179,7 +182,7 @@ export default function SetBatchLinkDialog() {
       const sum = (k) => ok.reduce((n, e) => n + (e.detail?.[k] || 0), 0);
       const lines = [
         mode === 'create' ? ts('created', { count: sum('added'), files: written.length }) : ts('removed', { count: sum('removed'), files: written.length }),
-        bookmarks() ? ts('bookmarksWritten', { count: sum('bookmarks') }) : '',
+        !indexSource && bookmarks() ? ts('bookmarksWritten', { count: sum('bookmarks') }) : '',
         run.log.length > ok.length ? ts('someFailed', { count: run.log.length - ok.length }) : '',
         dir ? ts('writtenTo', { dir }) : ts('downloaded'),
       ];
@@ -231,7 +234,7 @@ export default function SetBatchLinkDialog() {
         </Show>
         <Show when={phase() === 'preview'}>
           <button class="sheet-links-btn primary" id="set-link-create"
-            disabled={(!chosen().length && !bookmarks()) || (plan().registered && plan().scans.some(scan => !scan))} onClick={createLinks}>
+            disabled={(!chosen().length && (indexSource || !bookmarks())) || (plan().registered && plan().scans.some(scan => !scan))} onClick={createLinks}>
             {td('batchLink.create', { count: chosen().length })}
           </button>
         </Show>
@@ -243,15 +246,16 @@ export default function SetBatchLinkDialog() {
     <Dialog title={ts('title')} dialogClass="sheet-links-dialog set-batch-link-dialog" bodyClass="sheet-links-body" onClose={close} footer={footer}>
       <Show when={phase() === 'options' || phase() === 'scanning' || phase() === 'writing'}>
         <div class="sheet-links-muted">{ts('intro')}</div>
+        <Show when={indexSource}><div class="sheet-links-muted">Index page: {indexSource.label} · Page {indexSource.page}. Find reviews exact sheet-number rows on this page only. Create Links writes separate copies after checking every source again.</div></Show>
         <div class="batch-summary-actions">
-          <button class="sheet-links-btn" disabled={busy()} onClick={addSet}>{ts('addSet')}</button>
+          <Show when={!indexSource}><button class="sheet-links-btn" disabled={busy()} onClick={addSet}>{ts('addSet')}</button>
           <button class="sheet-links-btn" disabled={busy()} onClick={addFiles}>{ts('addFiles')}</button>
           <Show when={isTauri()}>
             <button class="sheet-links-btn" disabled={busy()} onClick={addFolder}>{ts('addFolder')}</button>
-          </Show>
+          </Show></Show>
           <span class="batch-summary-spacer" />
-          <button class="sheet-links-btn" disabled={busy() || selected() < 0} onClick={removeSelected}>{ts('removeFile')}</button>
-          <button class="sheet-links-btn" disabled={busy() || !files().length} onClick={() => { setFiles([]); setSelected(-1); setLog({}); }}>{ts('clear')}</button>
+          <Show when={!indexSource}><button class="sheet-links-btn" disabled={busy() || selected() < 0} onClick={removeSelected}>{ts('removeFile')}</button>
+          <button class="sheet-links-btn" disabled={busy() || !files().length} onClick={() => { setFiles([]); setSelected(-1); setLog({}); }}>{ts('clear')}</button></Show>
         </div>
         <div class="batch-summary-list set-batch-link-files" role="listbox" aria-label={ts('files')}>
           <Show when={files().length} fallback={<div class="batch-summary-empty">{ts('noFiles')}</div>}>
@@ -268,15 +272,17 @@ export default function SetBatchLinkDialog() {
         </div>
         <fieldset class="sheet-links-fieldset">
           <legend>{td('batchLink.searchOptions')}</legend>
-          <label class="sheet-links-row">
+          <Show when={!indexSource}><label class="sheet-links-row">
             <input type="checkbox" id="set-link-registered-targets" checked={registeredTargets()}
               disabled={!sheetRegister().sheets.length} onChange={e => setRegisteredTargets(e.currentTarget.checked)} />
             {ts('registeredTargets')}
-          </label>
+          </label></Show>
           <div class="sheet-links-row">
+            <Show when={!indexSource}>
             <label><input type="checkbox" checked={opts().wholeWord} onChange={(e) => set('wholeWord', e.currentTarget.checked)} />{td('batchLink.wholeWord')}</label>
             <label><input type="checkbox" checked={opts().caseSensitive} onChange={(e) => set('caseSensitive', e.currentTarget.checked)} />{td('batchLink.matchCase')}</label>
             <label><input type="checkbox" checked={opts().callouts} onChange={(e) => set('callouts', e.currentTarget.checked)} />{td('batchLink.callouts')}</label>
+            </Show>
             <label><input type="checkbox" checked={opts().excludeSelf} onChange={(e) => set('excludeSelf', e.currentTarget.checked)} />{td('batchLink.excludeSelf')}</label>
           </div>
         </fieldset>
@@ -297,9 +303,9 @@ export default function SetBatchLinkDialog() {
                 onInput={(e) => set('lineWidth', Number(e.currentTarget.value) || 1)} />
             </label>
           </div>
-          <label class="sheet-links-row">
+          <Show when={!indexSource}><label class="sheet-links-row">
             <input type="checkbox" id="set-link-bookmarks" checked={bookmarks()} onChange={(e) => setBookmarks(e.currentTarget.checked)} />{ts('bookmarks')}
-          </label>
+          </label></Show>
         </fieldset>
         <div class="sheet-links-muted">{ts('outputNote')}</div>
       </Show>
@@ -315,7 +321,9 @@ export default function SetBatchLinkDialog() {
               })}
         </div>
         <Show when={plan().registered}>
-          <div class="sheet-links-muted">{ts('registeredNote')}</div>
+          <div class="sheet-links-muted">{plan().indexMode
+            ? 'Only distinct sheet-number rows on the selected index page can become links. Unmatched, repeated, changed, or unverified targets stay blocked.'
+            : ts('registeredNote')}</div>
           <Show when={plan().scans.some(scan => !scan)}>
             <div class="sheet-links-warning">{ts('unreadableFiles')}</div>
           </Show>

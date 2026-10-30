@@ -720,6 +720,12 @@ export default function SheetsPanel() {
             disabled={metadataBusy() || !selected()}>
             {metadataBusy() ? 'Reading index sheet…' : 'Review titles from selected index sheet'}
           </button>
+          <button class="sheets-wide-action" type="button" disabled={!selected()}
+            onClick={() => {
+              const sheet = selected();
+              if (sheet) openDialog('set-batch-link', { indexSource: { id: sheet.id, label: sheet.label,
+                filePath: sheet.filePath, page: sheet.page, sourceSha256: sheet.sourceSha256 } });
+            }}>Review index navigation links</button>
           <Show when={metadataReview()?.register === sheetRegister()}>
             <div class="sheets-history-title">{metadataReview().mode === 'index' ? 'Review index sheet titles' : 'Review proposed sheet details'}</div>
             <p class="sheets-suggestion-note">{metadataReview().mode === 'index'

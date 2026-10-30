@@ -24,6 +24,7 @@ import { saveBookmarksToOutline } from '../pdf/saver/bookmarks.js';
 import { commonDirectory, pathInside, relativePdfPath } from '../pdf/remote-link.js';
 import { throwIfCancelled, batchFileName, joinOutputPath } from './runner.js';
 import { fingerprintPdfBytes } from '../sets/pdf-fingerprint.js';
+import { indexSheetTitleSuggestions } from '../sets/index-sheet-titles.js';
 
 const PRINT_FLAG = 4;
 const keyOf = (path) => String(path ?? '').replace(/\\/gu, '/').toLocaleLowerCase();
@@ -255,6 +256,99 @@ export function planRegisteredSetLinks(scans, files, register, options = {}) {
     }
   });
   return { links, review, pagesWithoutText };
+}
+
+/**
+ * Plan links only on one verified drawing index page. The row parser anchors
+ * each link to the exact sheet-ID glyphs; titles and unrelated references do
+ * not become links. The writer and guarded preview are shared with Set Batch Link.
+ */
+export function planIndexSheetLinks(scans, files, register, indexSource, options = {}) {
+  const opts = { ...BATCH_LINK_DEFAULTS, ...options };
+  const sheets = register?.sheets || [];
+  const pathVariants = new Map();
+  for (const sheet of sheets) {
+    const key = keyOf(sheet.filePath);
+    if (pathVariants.has(key) && pathVariants.get(key) !== sheet.filePath) {
+      throw new Error('Registered PDF paths differ only by case. Review the set before linking.');
+    }
+    pathVariants.set(key, sheet.filePath);
+  }
+  const source = sheets.find(sheet => sheet.id === indexSource?.id);
+  if (!source || !source.sourceSha256 || source.filePath !== indexSource.filePath
+    || source.page !== indexSource.page || source.sourceSha256 !== indexSource.sourceSha256) {
+    throw new Error('The selected index sheet changed. Select and review it again.');
+  }
+  const byPath = new Map();
+  (files || []).forEach((file, index) => {
+    const key = keyOf(file.path);
+    if (byPath.has(key)) throw new Error('Two selected PDFs have paths that differ only by case. Review the set before linking.');
+    byPath.set(key, index);
+  });
+  const file = byPath.get(keyOf(source.filePath));
+  const scan = scans?.[file];
+  if (file === undefined || !scan || scan.fingerprint !== source.sourceSha256
+    || source.page < 1 || source.page > scan.pageCount) {
+    throw new Error('The selected index PDF is missing or changed. Review its source first.');
+  }
+  if (sheets.filter(sheet => keyOf(sheet.filePath) === keyOf(source.filePath)
+    && sheet.page === source.page).length !== 1) {
+    throw new Error('More than one registered sheet uses the selected index page.');
+  }
+  const pages = scan.pages?.filter(item => item.page === source.page) || [];
+  if (pages.length !== 1 || !Array.isArray(pages[0].items)
+    || !pages[0].items.some(item => item.str?.trim())
+    || typeof pages[0].toPdfRect !== 'function') {
+    throw new Error('The selected index page has no complete selectable text scan. Review a vector PDF page.');
+  }
+  const page = pages[0];
+  const parsed = indexSheetTitleSuggestions(page.items, null, sheets);
+  const links = [];
+  const review = [];
+  const placed = [];
+  for (const row of parsed.unmatched) {
+    review.push({ file, page: source.page, sourceSheetId: source.id,
+      text: row.text, label: row.text.split(/\s/u)[0], lineY: row.y, status: 'unregistered-target' });
+  }
+  for (const conflict of parsed.conflicts) {
+    const target = sheets.find(sheet => sheet.id === conflict.sheetId);
+    review.push({ file, page: source.page, sourceSheetId: source.id,
+      text: conflict.lines.join(' / '), label: target?.label || '', lineY: conflict.y,
+      status: 'ambiguous-target',
+      candidates: target ? [{ sheetId: target.id, path: target.filePath, page: target.page }] : [] });
+  }
+  for (const [sheetId, match] of parsed.matched) {
+    const targetSheet = sheets.find(sheet => sheet.id === sheetId);
+    const targetFile = byPath.get(keyOf(targetSheet.filePath));
+    const targetScan = scans?.[targetFile];
+    const row = { file, page: source.page, sourceSheetId: source.id,
+      text: match.evidence, label: targetSheet.label, lineY: match.y, targetSheetId: targetSheet.id,
+      targetPath: targetSheet.filePath, targetPage: targetSheet.page, status: '' };
+    if (targetFile === undefined || !targetScan) row.status = 'missing-target';
+    else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
+      || targetSheet.page > targetScan.pageCount) row.status = 'missing-page';
+    else if (!targetSheet.sourceSha256) row.status = 'unverified-target';
+    else if (targetScan.fingerprint !== targetSheet.sourceSha256) row.status = 'changed-target';
+    else if (opts.excludeSelf && targetFile === file && targetSheet.page === source.page) row.status = 'self';
+    else if (!match.rect || !(match.rect.width > 0) || !(match.rect.height > 0)) row.status = 'no-location';
+    else if (scan.existing.concat(placed).some(item => item.page === source.page
+      && overlapRatio(item.rect || item, match.rect) > 0.5)) row.status = 'existing';
+    if (!row.status) {
+      const rect = match.rect;
+      const pdfRect = page.toPdfRect({ x: rect.x - 1, y: rect.y - 1,
+        width: rect.width + 2, height: rect.height + 2 });
+      const link = { file, page: source.page, text: targetSheet.label, label: targetSheet.label,
+        target: { file: targetFile, page: targetSheet.page }, targetSheetId: targetSheet.id,
+        rect, pdfRect };
+      row.status = 'ready';
+      row.linkIndex = links.length;
+      links.push(link);
+      placed.push(link);
+    }
+    review.push(row);
+  }
+  review.sort((first, second) => first.lineY - second.lineY);
+  return { links, review, pagesWithoutText: parsed.selectableText ? [] : [{ file, page: source.page }] };
 }
 
 /** Stable identity and source state used by registered link resolution. */
