@@ -43,6 +43,22 @@ The inventory includes platform-specific optional packages that may not be
 present in every desktop bundle. Changes to the dependency lockfile require
 review and regeneration of this inventory and its copied notices.
 
+The `@crabnebula/tauri-plugin-drag` 2.1.0 npm archive has no license field or
+license file. Its `npm/@crabnebula/tauri-plugin-drag/` directory contains the
+upstream repository's `LICENSE.spdx`, `LICENSE_MIT`, and `LICENSE_APACHE-2.0`
+from the [`tauri-plugin-drag-v2.1.0` tag](https://github.com/crabnebula-dev/drag-rs/tree/8a0be885a087c076b8127743b217b795e8b4fe9d)
+at commit `8a0be885a087c076b8127743b217b795e8b4fe9d`. The npm archive's
+`guest-js/index.ts` matches that tag's JavaScript source byte for byte
+(SHA-256 `bc2521c0c7b19cd503c69efc108102c58aab02349f1b8409a306c070b5c0dc0a`).
+The copied upstream texts have SHA-256 hashes
+`6326d64033572a9b5f627ec7a39fd468dcbc6e01ee12fa71a600c66e12e0e411`,
+`9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9`,
+and `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`,
+respectively. The upstream README describes the repository's licenses as
+"MIT or MIT/Apache 2.0 where applicable." The inventory retains null
+`licenseFromLockfile` and `noticeFile` values because these texts came from
+the tagged upstream source, rather than from the npm archive.
+
 `rust-inventory.json` is a reproducible snapshot of the locked workspace graph's
 raw Cargo `license` and `license-file` fields. Regenerate it from the repository
 root with `python scripts/rust-license-inventory.py`; verify it with

@@ -139,3 +139,28 @@ test('npm notice inventory tracks every production lockfile entry', async () => 
     }
   }
 });
+
+test('drag binding retains pinned upstream notice provenance', async () => {
+  const name = '@crabnebula/tauri-plugin-drag';
+  const lock = await json('package-lock.json');
+  const locked = lock.packages[`node_modules/${name}`];
+  assert.equal(locked.version, '2.1.0');
+  assert.equal(locked.integrity,
+    'sha512-LnUXAZwQt1cdMoGDLJ6ogW9wFCYServCZXlGadS7CA+CZ9eXS7L+Q7QyQW6g/zGw9YI2MwKFqf1aSNBGyWw+OA==');
+  const inventory = await json('src-tauri/package-notices/npm-inventory.json');
+  const entry = inventory.packages.find((item) => item.name === name);
+  assert.deepEqual([entry.version, entry.licenseFromLockfile, entry.noticeFile],
+    ['2.1.0', null, null]);
+
+  const upstreamSource = await readFile(path.join(appDir, 'node_modules', name, 'guest-js/index.ts'));
+  assert.equal(createHash('sha256').update(upstreamSource).digest('hex'),
+    'bc2521c0c7b19cd503c69efc108102c58aab02349f1b8409a306c070b5c0dc0a');
+  for (const [file, expected] of Object.entries({
+    'LICENSE.spdx': '6326d64033572a9b5f627ec7a39fd468dcbc6e01ee12fa71a600c66e12e0e411',
+    LICENSE_MIT: '9e17784d32fbb3ac50c6c543c307d0fbcb16969585cb4cee8839b50e774708f9',
+    'LICENSE_APACHE-2.0': '0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594',
+  })) {
+    const notice = await readFile(path.join(tauriDir, 'package-notices/npm', name, file));
+    assert.equal(createHash('sha256').update(notice).digest('hex'), expected, file);
+  }
+});
