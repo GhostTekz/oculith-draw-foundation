@@ -784,7 +784,7 @@ The batch dialog:
 ### Batch Link
 
 - **New Batch Link…** turns sheet references and detail callouts (such as `5/S-201`) in the text of the open document into links. Options: whole word, match case, skip links to the same page. Save writes the links.
-- **Set Batch Link…** does the same over several PDFs, using each file's page labels as sheet numbers. References to another file become relative links between files. The copies are written into an empty folder you choose, keeping the subfolders, so the links still work when the folder moves.
+- **Set Batch Link…** does the same over several PDFs. Its default targets are PDF page labels. Select **Review links using current registered sheet IDs** to resolve references through the drawing set's stable sheet IDs, paths, and pages. The review shows ready, unregistered, and ambiguous references before you create copies; only ready links can be selected. References to another file become relative links between files. The copies are written into an empty folder you choose, keeping the subfolders, so the links still work when the folder moves.
 - **Remove Batch Links** removes only links made by Batch Link.
 - A link to another PDF opens that file in a tab. Only plain relative paths to `.pdf` files are followed, and a target outside the current folder asks first.
 

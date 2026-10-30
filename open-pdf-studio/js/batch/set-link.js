@@ -23,6 +23,7 @@ import { buildHyperlinkDict } from '../pdf/saver/hyperlink-dict.js';
 import { saveBookmarksToOutline } from '../pdf/saver/bookmarks.js';
 import { commonDirectory, pathInside, relativePdfPath } from '../pdf/remote-link.js';
 import { throwIfCancelled, batchFileName, joinOutputPath } from './runner.js';
+import { fingerprintPdfBytes } from '../sets/pdf-fingerprint.js';
 
 const PRINT_FLAG = 4;
 const keyOf = (path) => String(path ?? '').replace(/\\/gu, '/').toLocaleLowerCase();
@@ -150,6 +151,134 @@ export function planSetLinks(scans, options = {}) {
 }
 
 /**
+ * Review references against the current drawing-set register. A sheet's stable
+ * ID, path and page are the authority; PDF page labels only expose references
+ * whose target has not been registered. Nothing here changes a PDF or set.
+ * `files` and `scans` have the same order as the batch runner.
+ */
+export function planRegisteredSetLinks(scans, files, register, options = {}) {
+  const opts = { ...BATCH_LINK_DEFAULTS, ...options };
+  const sheets = register?.sheets || [];
+  const byPath = new Map((files || []).map((file, index) => [keyOf(file.path), index]));
+  const registered = new Map();
+  for (const sheet of sheets) {
+    const label = cleanPageLabel(sheet.label);
+    if (!label || /^\d+$/u.test(label)) continue;
+    const key = label.toLocaleLowerCase();
+    if (!registered.has(key)) registered.set(key, { label, sheets: [] });
+    registered.get(key).sheets.push(sheet);
+  }
+  const pageLabels = new Map();
+  (scans || []).forEach((scan, file) => (scan?.labels || []).forEach((raw, index) => {
+    const label = cleanPageLabel(raw);
+    if (!label || /^\d+$/u.test(label)) return;
+    const key = label.toLocaleLowerCase();
+    if (!pageLabels.has(key)) pageLabels.set(key, { label, places: [] });
+    pageLabels.get(key).places.push({ file, page: index + 1 });
+  }));
+  const candidates = new Map();
+  for (const [key, value] of registered) candidates.set(value.label, { kind: 'registered', ...value });
+  for (const [key, value] of pageLabels) {
+    if (!registered.has(key)) candidates.set(value.label, { kind: 'unregistered', ...value });
+  }
+  const matcher = referenceMatcher(candidates, opts);
+  const sourceIds = new Map();
+  for (const sheet of sheets) {
+    const file = byPath.get(keyOf(sheet.filePath));
+    if (file === undefined) continue;
+    const key = `${file}:${sheet.page}`;
+    if (!sourceIds.has(key)) sourceIds.set(key, []);
+    sourceIds.get(key).push(sheet.id);
+  }
+  const links = [];
+  const review = [];
+  const pagesWithoutText = [];
+  const changedFiles = new Set(sheets.filter(sheet => {
+    const file = byPath.get(keyOf(sheet.filePath));
+    return file !== undefined && sheet.sourceSha256 && sheet.sourceSha256 !== scans[file]?.fingerprint;
+  }).map(sheet => byPath.get(keyOf(sheet.filePath))));
+  (scans || []).forEach((scan, file) => {
+    if (!scan) return;
+    const placed = [];
+    for (const { page, items, toPdfRect } of scan.pages) {
+      if (!items.some(item => item.str.trim())) { pagesWithoutText.push({ file, page }); continue; }
+      for (const item of items) {
+        for (const hit of matcher.find(item.str)) {
+          const candidate = hit.page;
+          const ids = sourceIds.get(`${file}:${page}`) || [];
+          const row = { file, page, sourceSheetId: ids.length === 1 ? ids[0] : null,
+            text: hit.text, label: hit.label, status: '', targetSheetId: null, target: null };
+          const sourceProblem = ids.length > 1 ? 'ambiguous-source'
+            : !ids.length ? 'unregistered-source' : changedFiles.has(file) ? 'changed-source' : '';
+          if (candidate.kind === 'unregistered') {
+            row.status = candidate.places.length > 1 ? 'ambiguous-target' : 'unregistered-target';
+            row.places = candidate.places;
+          } else if (candidate.sheets.length !== 1) {
+            row.status = 'ambiguous-target';
+            row.candidates = candidate.sheets.map(sheet => ({ sheetId: sheet.id, path: sheet.filePath, page: sheet.page }));
+          } else {
+            const targetSheet = candidate.sheets[0];
+            const targetFile = byPath.get(keyOf(targetSheet.filePath));
+            row.targetSheetId = targetSheet.id;
+            row.targetPath = targetSheet.filePath;
+            row.targetPage = targetSheet.page;
+            if (targetFile === undefined || !scans[targetFile]) row.status = 'missing-target';
+            else if (!Number.isSafeInteger(targetSheet.page) || targetSheet.page < 1
+              || targetSheet.page > scans[targetFile].pageCount) row.status = 'missing-page';
+            else if (targetSheet.sourceSha256 && targetSheet.sourceSha256 !== scans[targetFile].fingerprint) row.status = 'changed-target';
+            else row.target = { file: targetFile, page: targetSheet.page };
+          }
+          row.status = sourceProblem || row.status;
+          if (!row.status && opts.excludeSelf && row.target.file === file && row.target.page === page) row.status = 'self';
+          let rect;
+          if (!row.status) {
+            rect = item.box(hit.start, hit.end);
+            if (!rect || !(rect.width > 0) || !(rect.height > 0)) row.status = 'no-location';
+          }
+          if (!row.status && scan.existing.concat(placed).some(l => l.page === page && overlapRatio(l.rect || l, rect) > 0.5)) {
+            row.status = 'existing';
+          }
+          if (!row.status) {
+            const pdfRect = toPdfRect({ x: rect.x - 1, y: rect.y - 1, width: rect.width + 2, height: rect.height + 2 });
+            const link = { file, page, text: hit.text, label: hit.label, target: row.target,
+              targetSheetId: row.targetSheetId, rect, pdfRect };
+            row.status = 'ready';
+            row.linkIndex = links.length;
+            links.push(link);
+            placed.push(link);
+          }
+          review.push(row);
+        }
+      }
+    }
+  });
+  return { links, review, pagesWithoutText };
+}
+
+/** Stable identity and source state used by registered link resolution. */
+export function registeredSetLinkSnapshot(register) {
+  return JSON.stringify((register?.sheets || []).map(sheet => [
+    sheet.id, sheet.label, sheet.filePath, sheet.page, sheet.sourceSha256 || null,
+  ]));
+}
+
+/** Pin the exact bytes reviewed by Find for the later guarded output job. */
+export async function verifySetLinkPreviewSources(files, scans, readFile) {
+  const verified = new Map();
+  for (let index = 0; index < (files || []).length; index++) {
+    const file = files[index];
+    const expected = scans?.[index]?.fingerprint;
+    if (!expected) throw new Error(`${file.name} was not scanned. Run Find again.`);
+    const bytes = await readFile(file.path);
+    if (await fingerprintPdfBytes(bytes) !== expected) {
+      throw new Error(`${file.name} changed since Find. Run Find again.`);
+    }
+    verified.set(keyOf(file.path), new Uint8Array(bytes).slice());
+  }
+  return verified;
+}
+
+/**
  * Where each file goes in the output: its path relative to the set folder
  * (the deepest folder holding every file), or its bare name when `flat`
  * (the browser, which downloads) or when the files share no folder. Two
@@ -242,10 +371,14 @@ export function writeLabelBookmarks(pdfDoc, labels = pdfLibPageLabels(pdfDoc)) {
 }
 
 /** Runner job 1: read every file for the plan. */
-export function setLinkScanJob({ pdfjs, measureFor } = {}) {
+export function setLinkScanJob({ pdfjs, measureFor, fingerprint = false } = {}) {
   return {
     id: 'set-link-scan',
-    processFile: (file, { signal }) => scanSetFile(file.bytes, { pdfjs, signal, measureFor }),
+    async processFile(file, { signal }) {
+      const scan = await scanSetFile(file.bytes, { pdfjs, signal, measureFor });
+      if (fingerprint) scan.fingerprint = await fingerprintPdfBytes(file.bytes);
+      return scan;
+    },
     describe: (scan) => scan.labels.filter((l) => l && !/^\d+$/u.test(l)).length,
     async finish(successes) {
       const byPath = new Map(successes.map((s) => [keyOf(s.file.path), s.result]));
