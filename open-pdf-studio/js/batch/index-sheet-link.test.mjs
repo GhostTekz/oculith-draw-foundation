@@ -54,6 +54,9 @@ test('index links cover only exact row IDs, and create guarded local and relativ
   assert(plan.links.every(link => link.rect.x + link.rect.width < 150), 'only sheet ID glyphs are linked');
   assert.equal(plan.review.find(row => row.label === 'D-301').status, 'ambiguous-target');
   assert.equal(plan.review.find(row => row.label === 'X-999').status, 'unregistered-target');
+  assert.equal(planIndexSheetLinks(scans, files, { ...register, sheets: [...register.sheets,
+    { ...register.sheets[2], id: 'duplicate', label: 's-201', page: 2 }] }, source)
+    .review.find(row => row.label === 'S-201').status, 'ambiguous-target');
   assert.equal(planIndexSheetLinks(scans, files, { ...register, sheets: register.sheets.map(sheet =>
     sheet.id === 'struct' ? { ...sheet, sourceSha256: null } : sheet) }, source)
     .review.find(row => row.label === 'S-201').status, 'unverified-target');

@@ -309,7 +309,8 @@ export function planIndexSheetLinks(scans, files, register, indexSource, options
   const placed = [];
   for (const row of parsed.unmatched) {
     review.push({ file, page: source.page, sourceSheetId: source.id,
-      text: row.text, label: row.text.split(/\s/u)[0], lineY: row.y, status: 'unregistered-target' });
+      text: row.text, label: row.text.split(/\s/u)[0], lineY: row.y,
+      status: row.reason.startsWith('Sheet ID is not unique') ? 'ambiguous-target' : 'unregistered-target' });
   }
   for (const conflict of parsed.conflicts) {
     const target = sheets.find(sheet => sheet.id === conflict.sheetId);
