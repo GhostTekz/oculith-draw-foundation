@@ -154,6 +154,21 @@ jobs:
             nsis) test -n "$(find "$bundle/nsis" -maxdepth 1 -name '*-setup.exe' -print -quit)" ;;
             app) test -n "$(find "$bundle/macos" -maxdepth 1 -name '*.app' -print -quit)" ;;
           esac
+      - name: Package macOS app for review
+        if: matrix.bundle == 'app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="target/community/release/bundle/macos"
+          shopt -s nullglob
+          apps=("$bundle"/*.app)
+          test "${#apps[@]}" -eq 1
+          app="${apps[0]}"
+          test -d "$app"
+          archive="$bundle/$(basename "$app" .app).zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+          test -s "$archive"
+          unzip -tq "$archive"
       - name: Verify installed notices and public-only contents (Linux and macOS)
         if: matrix.bundle == 'deb' || matrix.bundle == 'app'
         shell: bash
@@ -176,7 +191,13 @@ jobs:
               --output target/community/release/bundle/foundation-package-audit-appimage.json
           else
             app="$(find target/community/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
-            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$app" \
+            archive="${app%.app}.zip"
+            test -s "$archive"
+            extracted_app="$(mktemp -d)"
+            trap 'rm -rf "$extracted_app"' EXIT
+            ditto -x -k "$archive" "$extracted_app"
+            test -d "$extracted_app/$(basename "$app")"
+            node open-pdf-studio/scripts/verify-foundation-package.mjs --root "$extracted_app/$(basename "$app")" --artifact "$archive" \
               --output target/community/release/bundle/foundation-package-audit-app.json
           fi
       - name: Install and remove Foundation (Windows)

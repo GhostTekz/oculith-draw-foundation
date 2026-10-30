@@ -71,6 +71,22 @@ class ReleaseBundleTest(unittest.TestCase):
         self.assertEqual(json.loads((self.output / "receipts" / "audit.json").read_text()), self.data)
         self.assertEqual(json.loads((self.output / "release-manifest.json").read_text()), manifest)
 
+    def test_macos_zip_with_spaces_is_accepted_with_matching_receipt(self):
+        mac_zip = self.root / "Oculith Draw Foundation.zip"
+        mac_zip.write_bytes(b"mac app zip bytes")
+        mac_receipt = self.root / "foundation-package-audit-app.json"
+        mac_data = dict(self.data)
+        mac_data["resources"] = "Contents/Resources"
+        mac_data["artifactSha256"] = hashlib.sha256(mac_zip.read_bytes()).hexdigest()
+        mac_receipt.write_text(json.dumps(mac_data) + "\n", encoding="utf-8")
+        manifest = release.prepare(self.source, [(self.artifact, self.receipt),
+                                                 (mac_zip, mac_receipt)], self.output)
+        self.assertEqual(len(manifest["installers"]), 2)
+        self.assertEqual(manifest["installers"][1]["path"],
+                         "installers/Oculith Draw Foundation.zip")
+        self.assertEqual((self.output / "installers" / mac_zip.name).read_bytes(),
+                         mac_zip.read_bytes())
+
     def test_changed_installer_is_rejected_without_output(self):
         self.artifact.write_bytes(b"tampered installer")
         with self.assertRaisesRegex(ValueError, "digest differs"):
