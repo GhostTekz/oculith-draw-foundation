@@ -16,6 +16,7 @@
 .compare-body { min-width: 0; }
 .compare-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
@@ -38,6 +39,7 @@
   background: var(--theme-surface);
   color: var(--theme-text);
 }
+.compare-toolbar input[type='range'] { width: 84px; }
 .compare-exit {
   padding: 4px 14px;
   border: 1px solid var(--theme-border);
@@ -79,6 +81,7 @@
 }
 .compare-panel-tab:hover, .compare-type-toggle:hover { background: var(--theme-hover); }
 .compare-toolbar button:focus-visible,
+.compare-toolbar input:focus-visible,
 .compare-page-pairs button:focus-visible,
 .compare-change-list button:focus-visible,
 .compare-exit:focus-visible {

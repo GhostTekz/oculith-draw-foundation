@@ -60,7 +60,8 @@ try {
     return data[(py * info.width + px) * info.channels];
   };
   await slider.fill('0');
-  assert.ok(await sample() > 245, '0% reveals the new white page');
+  const zero = await sample();
+  assert.ok(zero > 245, `0% reveals the new white page (red channel ${zero})`);
   await slider.fill('50');
   const half = await sample();
   assert.ok(half > 90 && half < 170, `50% blends earlier ink (red channel ${half})`);
@@ -91,6 +92,11 @@ try {
   });
   assert.equal(await slider.inputValue(), '100', 'zoom preserves the opacity setting');
   assert.ok(await oldCanvas.evaluate(canvas => canvas.width > 1800));
+  await page.setViewportSize({ width: 1140, height: 1000 });
+  const exit = await page.locator('.compare-exit').boundingBox();
+  const opacity = await slider.boundingBox();
+  assert.ok(exit && opacity && exit.x + exit.width <= 1140 && opacity.x + opacity.width <= 1140,
+    'the review controls stay reachable in a narrow workspace');
   assert.deepEqual(errors, []);
   console.log('Visible Compare overlay smoke passed: real PDF pixels, opacity, alignment, zoom');
 } finally {
