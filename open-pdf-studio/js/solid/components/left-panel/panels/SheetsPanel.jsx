@@ -14,6 +14,7 @@ import { useTranslation } from '../../../../i18n/useTranslation.js';
 import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
 import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
 import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
+import { applySheetMetadataReview } from '../../../../sets/sheet-metadata-review.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
 
@@ -41,6 +42,8 @@ export default function SheetsPanel() {
   const [compareBusy, setCompareBusy] = createSignal(false);
   const [revisionSummary, setRevisionSummary] = createSignal(null);
   const [summaryBusy, setSummaryBusy] = createSignal(false);
+  const [metadataReview, setMetadataReview] = createSignal(null);
+  const [metadataBusy, setMetadataBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
@@ -92,6 +95,7 @@ export default function SheetsPanel() {
     setDetailSuggestion(null);
     setCompareCandidate(null);
     setRevisionSummary(null);
+    setMetadataReview(null);
     setMessage('');
     void refreshAvailability();
   }
@@ -128,6 +132,63 @@ export default function SheetsPanel() {
       commit(updateSheet(sheetRegister(), sheet.id, { label: candidate.label, title: candidate.title }));
       setMessage('Sheet details updated from the reviewed suggestion.');
     } catch (error) { setMessage(error.message); }
+  }
+
+  async function reviewSetMetadata() {
+    if (metadataBusy() || !sheetRegister().sheets.length) return;
+    const register = sheetRegister();
+    setMetadataBusy(true);
+    setMetadataReview(null);
+    setMessage('');
+    try {
+      const { suggestDetailsForSheets } = await import('../../../../sets/sheet-title-suggest-app.js');
+      const suggestions = await suggestDetailsForSheets(register.sheets);
+      if (sheetRegister() !== register) return;
+      setMetadataReview({ register, rows: sortSheetsByLabel(register.sheets).map(sheet => {
+        const result = suggestions.get(sheet.id) || { error: 'Could not read the registered PDF.' };
+        const label = result.label || sheet.label;
+        const title = result.title || sheet.title;
+        return { sheetId: sheet.id, filePath: sheet.filePath, page: sheet.page,
+          sourceSha256: sheet.sourceSha256, originalLabel: sheet.label, originalTitle: sheet.title,
+          label, title, evidence: result.evidence || {}, error: result.error || '',
+          selectableText: result.selectableText, selected: !result.error
+            && (label !== sheet.label || title !== sheet.title) };
+      }) });
+    } catch (error) { setMessage(`Could not review sheet metadata: ${error.message}`); }
+    finally { setMetadataBusy(false); }
+  }
+
+  function editMetadataRow(id, changes) {
+    setMetadataReview(current => current && ({ ...current,
+      rows: current.rows.map(row => row.sheetId === id ? { ...row, ...changes } : row) }));
+  }
+
+  async function applyMetadataReview() {
+    const review = metadataReview();
+    if (!review || metadataBusy() || review.register !== sheetRegister()) return;
+    setMetadataBusy(true);
+    try {
+      const next = applySheetMetadataReview(review.register, review.rows);
+      const selected = review.rows.filter(row => row.selected);
+      const sources = new Map();
+      for (const row of selected) {
+        if (!sources.has(row.filePath)) sources.set(row.filePath, new Set());
+        sources.get(row.filePath).add(row.sourceSha256);
+      }
+      for (const [path, fingerprints] of sources) {
+        if (isTauri()) await invoke('allow_fs_scope', { path });
+        const bytes = await readBinaryFile(path);
+        if (!bytes?.length || !fingerprints.has(await fingerprintPdfBytes(bytes)) || fingerprints.size !== 1) {
+          throw new Error(`The PDF ${extractFileName(path)} changed since review. Review the set again.`);
+        }
+      }
+      if (sheetRegister() !== review.register || metadataReview() !== review) {
+        throw new Error('The drawing set or review changed. Review the set again.');
+      }
+      commit(next);
+      setMessage(`${selected.length} sheet${selected.length === 1 ? '' : 's'} updated from the reviewed metadata.`);
+    } catch (error) { setMessage(error.message); }
+    finally { setMetadataBusy(false); }
   }
 
   async function addPdfs() {
@@ -590,6 +651,39 @@ export default function SheetsPanel() {
           <span>{selectedIndex() < 0 ? 'Select a sheet' : `${selectedIndex() + 1} of ${visibleSheets().length}`}</span>
           <button type="button" onClick={() => navigateSheet('next')}
             disabled={openingSheet() || selectedIndex() >= visibleSheets().length - 1}>Next sheet</button>
+        </div>
+        <div class="sheets-metadata-review">
+          <button class="sheets-wide-action" type="button" onClick={reviewSetMetadata}
+            disabled={metadataBusy() || !sheetRegister().sheets.length}>
+            {metadataBusy() ? 'Checking sheet metadata…' : 'Review sheet numbers and titles'}
+          </button>
+          <Show when={metadataReview()?.register === sheetRegister()}>
+            <div class="sheets-history-title">Review proposed sheet details</div>
+            <p class="sheets-suggestion-note">Selectable title-block text only. Check each proposed value and source line. The register changes only when you apply selected rows; PDFs stay unchanged.</p>
+            <div class="sheets-metadata-count">{metadataReview().rows.filter(row => row.selected).length} selected · {metadataReview().rows.filter(row => row.error).length} unavailable</div>
+            <div class="sheets-metadata-list" role="group" aria-label="Sheet metadata proposals">
+              <For each={metadataReview().rows}>{(row) => <div class={`sheets-metadata-row${row.error ? ' invalid' : ''}`}>
+                <label class="sheets-metadata-select"><input type="checkbox" aria-label={`Apply metadata for ${row.originalLabel}`}
+                  checked={row.selected} disabled={!!row.error || metadataBusy()}
+                  onChange={event => editMetadataRow(row.sheetId, { selected: event.currentTarget.checked })} />
+                  <strong>{row.originalLabel}</strong> · {extractFileName(row.filePath)} · Page {row.page}</label>
+                <Show when={row.error} fallback={<>
+                  <label class="sheets-field">Proposed sheet ID<input aria-label={`Proposed sheet ID for ${row.originalLabel}`}
+                    value={row.label} disabled={metadataBusy()}
+                    onInput={event => editMetadataRow(row.sheetId, { label: event.currentTarget.value })} /></label>
+                  <small class="sheets-suggestion-evidence">{row.evidence.label || 'No labeled sheet number found; current ID retained.'}</small>
+                  <label class="sheets-field">Proposed title<input aria-label={`Proposed title for ${row.originalLabel}`}
+                    value={row.title} disabled={metadataBusy()}
+                    onInput={event => editMetadataRow(row.sheetId, { title: event.currentTarget.value })} /></label>
+                  <small class="sheets-suggestion-evidence">{row.evidence.title || (row.selectableText
+                    ? 'No labeled title found; current title retained.' : 'No selectable title-block text found; enter manually if needed.')}</small>
+                </>}><div class="sheets-metadata-error">{row.error}</div></Show>
+              </div>}</For>
+            </div>
+            <div class="sheets-actions"><button type="button" onClick={applyMetadataReview}
+              disabled={metadataBusy() || !metadataReview().rows.some(row => row.selected)}>Apply selected details</button>
+              <button type="button" onClick={() => setMetadataReview(null)} disabled={metadataBusy()}>Dismiss review</button></div>
+          </Show>
         </div>
         <div class="sheets-revision-summary">
           <button class="sheets-wide-action" type="button" onClick={checkRevisionSummary}
