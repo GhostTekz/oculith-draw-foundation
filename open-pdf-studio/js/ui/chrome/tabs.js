@@ -1,5 +1,6 @@
 import { state, createDocument, getActiveDocument, findDocumentByPath, clearSelection } from '../../core/state.js';
 import { appVersion } from '../../core/app-version.js';
+import { edition } from '../../editions/active.js';
 import { undoStackOf } from '../../core/undo-stacks.js';
 import { renderPage, renderContinuous, clearPdfView } from '../../pdf/renderer.js';
 import { hideFormFieldsBar } from '../../pdf/form-layer.js';
@@ -8,7 +9,7 @@ import { updateAllStatus } from './status-bar.js';
 import { generateThumbnails, clearThumbnails, clearThumbnailCache, refreshActiveTab, refreshAllTabs, saveThumbnailScrollPosition } from '../panels/left-panel.js';
 import { cancelAnnotationLoading, hidePdfABar } from '../../pdf/loader.js';
 import { savePDF } from '../../pdf/saver.js';
-import { unlockFile, lockFile, renameFile, fileExists } from '../../core/platform.js';
+import { unlockFile, lockFile, renameFile, fileExists, setWindowTitle } from '../../core/platform.js';
 import { cancelPendingZoom } from '../setup/navigation-events.js';
 import { closeAllPopups } from '../../bridge.js';
 import { persistReaderPosition, restoreReaderPosition } from '../../pdf/reader-mode-view.js';
@@ -491,15 +492,16 @@ export function updateTabBar() {
  */
 export function updateWindowTitle() {
   const doc = getActiveDocument();
-  const baseTitle = `OcuDraw v${appVersion()}`;
+  const baseTitle = `${edition.productName} v${appVersion()}`;
 
-  // Update document.title (browser/OS window title)
+  // document.title and the system window title
   if (doc) {
     const modified = doc.modified ? '*' : '';
     document.title = `${modified}${doc.fileName} - ${baseTitle}`;
   } else {
     document.title = baseTitle;
   }
+  setWindowTitle(document.title);
 
   // Tab bar and title bar derive from reactive state automatically
 }

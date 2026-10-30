@@ -8,6 +8,8 @@ export const edition = Object.freeze({
   fileCommands: Object.freeze([]),
   fileMenuItems: Object.freeze([]),
   symbolCategories: Object.freeze([]),
+  electricalSymbols: Object.freeze([]),
+  constructionSymbols: Object.freeze([]),
   symbolTemplates: Object.freeze([]),
   productName: 'Oculith Draw Foundation',
   logoPath: '/community-icon.svg',

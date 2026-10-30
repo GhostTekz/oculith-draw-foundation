@@ -1,7 +1,7 @@
 // Start-up. An optional add-on is loaded through js/plugin/host.js before
 // the editor starts; without one, the editor runs as Foundation.
 import { EARLY, HOST_API_VERSION, installHost, loadHostModules, provides } from './plugin/host.js';
-import { finish, setEdition, setStatus, showLaunchActions, side, startLaunchScreen } from './launch-screen.js';
+import { finish, rememberIdentity, setEdition, setStatus, showLaunchActions, side, startLaunchScreen } from './launch-screen.js';
 import { edition as foundation } from './editions/community.js';
 import { composeAddons, resolvePluginEntries } from './editions/compose-addons.js';
 
@@ -185,6 +185,7 @@ async function installEdition(found) {
   }
   if (acceptedIds.size) globalThis.__ocudrawEdition = composed;
   if (!plugin) setEdition(editionWord(foundation));
+  if (!secondaryWindow) rememberIdentity(editionWord(composed), composed.productName);
   setStatus('Starting');
   // The active edition must be composed before a host import evaluates
   // editions/active.js. Full editions and independent add-ons share this order.

@@ -67,11 +67,34 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 const APP_STORAGE_DIR: &str = "OcuDrawCommunity";
-const APP_DESKTOP_FILE: &str = "Oculith Draw Foundation.desktop";
 const APP_PRODUCT_NAME: &str = "Oculith Draw Foundation";
+
+/// The installed product name: a distributor's installer may set its own.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn app_product_name(app: &tauri::AppHandle) -> String {
+    app.config().product_name.clone().unwrap_or_else(|| APP_PRODUCT_NAME.to_string())
+}
+
+/// tauri-bundler names the Linux launcher after the product name.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn app_desktop_file(app: &tauri::AppHandle) -> String {
+    format!("{}.desktop", app_product_name(app))
+}
 
 // Store the file paths passed via command line
 struct OpenedFiles(Mutex<Vec<String>>);
+
+// Add-on files opened with the app; the frontend asks before installing them.
+struct OpenedAddonFiles(Mutex<Vec<String>>);
+
+fn is_addon_file_arg(arg: &str) -> bool {
+    !arg.starts_with('-') && arg.to_lowercase().ends_with(".ocaddon")
+}
+
+#[tauri::command(async)]
+fn addon_opened_files_take(state: tauri::State<OpenedAddonFiles>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
+}
 
 // Store locked file handles to prevent other apps from writing
 struct LockedFiles(Mutex<HashMap<String, File>>);
@@ -541,6 +564,8 @@ struct SelectedAddon {
     helper: Option<(std::path::PathBuf, String)>,
     bundled: bool,
     files: Option<HashMap<String, String>>,
+    /// The verified package directory, when the add-on is a full package.
+    root: Option<std::path::PathBuf>,
 }
 
 /// Selection is fixed for the process lifetime. An add-on update takes effect
@@ -684,12 +709,19 @@ fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     let root = addons.join("active");
     if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink()
         || fs::symlink_metadata(&root).ok()?.file_type().is_symlink() { return None; }
-    let manifest_path = addon_file(&root, "manifest.json")?;
+    verified_edition_package(&root, &app.package_info().version.to_string())
+}
+
+/// The full edition package rules, shared by the startup loader and the
+/// in-app installer so both accept exactly the same packages.
+fn verified_edition_package(root: &std::path::Path, editor_version: &str) -> Option<SelectedAddon> {
+    if fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
+    let manifest_path = addon_file(root, "manifest.json")?;
     if manifest_path.metadata().ok()?.len() > 1024 * 1024 { return None; }
     let manifest: AddonManifest = serde_json::from_slice(&fs::read(manifest_path).ok()?).ok()?;
     if manifest.schema_version != 1 || manifest.host_api_version != HOST_API_VERSION
         || !addon_manifest_target_compatible(&manifest)
-        || manifest.editor_version != app.package_info().version.to_string()
+        || manifest.editor_version != editor_version
         || !valid_addon_version(&manifest.version)
         || manifest.id.is_empty()
         || !manifest.id.bytes().next().is_some_and(|b| b.is_ascii_alphanumeric())
@@ -699,24 +731,24 @@ fn user_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     if manifest.files.len() > 64 || !manifest.files.contains_key("plugin.js") { return None; }
     if manifest.helper.as_ref().is_some_and(|name| !manifest.files.contains_key(name)) { return None; }
     for (name, expected) in &manifest.files {
-        let path = addon_file(&root, name)?;
+        let path = addon_file(root, name)?;
         if !addon_hash_matches(&path, expected) { return None; }
     }
-    let script_path = addon_file(&root, "plugin.js")?;
+    let script_path = addon_file(root, "plugin.js")?;
     if script_path.metadata().ok()?.len() > 64 * 1024 * 1024 { return None; }
     let script = fs::read(script_path).ok()?;
     if script.is_empty() || !sha256_bytes_match(&script, manifest.files.get("plugin.js")?) { return None; }
     let css = if manifest.files.contains_key("plugin.css") {
-        let css_path = addon_file(&root, "plugin.css")?;
+        let css_path = addon_file(root, "plugin.css")?;
         if css_path.metadata().ok()?.len() > 16 * 1024 * 1024 { return None; }
         let bytes = fs::read(css_path).ok()?;
         if !sha256_bytes_match(&bytes, manifest.files.get("plugin.css")?) { return None; }
         String::from_utf8(bytes).ok()?
     } else { String::new() };
     let helper = if let Some(name) = manifest.helper {
-        Some((addon_file(&root, &name)?, manifest.files.get(&name)?.clone()))
+        Some((addon_file(root, &name)?, manifest.files.get(&name)?.clone()))
     } else { None };
-    Some(SelectedAddon { id: manifest.id, script, css, helper, bundled: false, files: Some(manifest.files) })
+    Some(SelectedAddon { id: manifest.id, script, css, helper, bundled: false, files: Some(manifest.files), root: Some(root.to_path_buf()) })
 }
 
 fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
@@ -730,11 +762,27 @@ fn bundled_addon(app: &tauri::AppHandle) -> Option<SelectedAddon> {
     let script = fs::read(root.join("plugin.js")).ok()?;
     if script.is_empty() { return None; }
     let css = fs::read_to_string(root.join("plugin.css")).unwrap_or_default();
-    Some(SelectedAddon { id: "bundled.edition".into(), script, css, helper: None, bundled: true, files: None })
+    Some(SelectedAddon { id: "bundled.edition".into(), script, css, helper: None, bundled: true, files: None, root: None })
+}
+
+/// The directory of a full edition package that a distributor ships inside
+/// the installer (its resources). It is checked exactly like an installed one.
+pub(crate) fn bundled_edition_package_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    if tauri::is_dev() {
+        if let Some(dir) = std::env::var_os("OCUDRAW_EDITION_PACKAGE_DIR") { return Some(dir.into()); }
+    }
+    Some(app.path().resource_dir().ok()?.join("edition-package"))
+}
+
+pub(crate) fn bundled_edition_package(app: &tauri::AppHandle) -> Option<SelectedAddon> {
+    verified_edition_package(&bundled_edition_package_dir(app)?, &app.package_info().version.to_string())
 }
 
 fn selected_addon(app: &tauri::AppHandle) -> Option<&'static SelectedAddon> {
-    SELECTED_ADDON.get_or_init(|| user_addon(app).or_else(|| bundled_addon(app))).as_ref()
+    // A package the user installed, then one shipped with this installation.
+    SELECTED_ADDON.get_or_init(|| user_addon(app)
+        .or_else(|| bundled_edition_package(app))
+        .or_else(|| bundled_addon(app))).as_ref()
 }
 
 fn enabled_addon_ids(addons: &std::path::Path) -> Vec<String> {
@@ -844,13 +892,12 @@ pub(crate) fn selected_helper_available(app: &tauri::AppHandle) -> bool {
 pub(crate) fn selected_helper_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     let selected = selected_addon(app)?;
     if let Some((path, expected)) = &selected.helper {
-        let addons = datamap::tauri_map(app, datamap::TauriMap::Data).ok()?.join("addons");
-        if fs::symlink_metadata(&addons).ok()?.file_type().is_symlink() { return None; }
-        let root = addons.join("active");
-        let name = path.strip_prefix(&root).ok()?.to_str()?;
-        let checked = addon_file(&root, name)?;
+        let root = selected.root.as_ref()?;
+        if fs::symlink_metadata(root).ok()?.file_type().is_symlink() { return None; }
+        let name = path.strip_prefix(root).ok()?.to_str()?;
+        let checked = addon_file(root, name)?;
         for (name, expected) in selected.files.as_ref()? {
-            if !addon_hash_matches(&addon_file(&root, name)?, expected) { return None; }
+            if !addon_hash_matches(&addon_file(root, name)?, expected) { return None; }
         }
         return addon_hash_matches(&checked, expected).then_some(checked);
     }
@@ -1293,8 +1340,10 @@ fn is_dev_mode() -> bool {
 /// Returns true if our exe is the registered handler, false otherwise.
 /// Uses spawn_blocking so the subprocess calls never block the main thread.
 #[tauri::command]
-async fn is_default_pdf_app() -> bool {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn is_default_pdf_app(app: tauri::AppHandle) -> bool {
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    let desktop_file = app_desktop_file(&app);
+    tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
         {
             // Register lezen met de Windows-API, niet met reg.exe: een extra
@@ -1331,7 +1380,7 @@ async fn is_default_pdf_app() -> bool {
                 Err(_) => return false,
             };
             let default_desktop = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            default_desktop == APP_DESKTOP_FILE
+            default_desktop == desktop_file
         }
 
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
@@ -1345,7 +1394,8 @@ async fn is_default_pdf_app() -> bool {
 /// On Windows, opens the system default-apps settings page. On Linux, sets the
 /// xdg-mime default directly (no system UI for this exists on most desktops).
 #[tauri::command]
-fn open_default_apps_settings() -> Result<bool, String> {
+fn open_default_apps_settings(app: tauri::AppHandle) -> Result<bool, String> {
+    let _ = &app;
     #[cfg(target_os = "windows")]
     {
         // Open the "Choose default apps by file type" settings page
@@ -1362,7 +1412,7 @@ fn open_default_apps_settings() -> Result<bool, String> {
         // handler. The .desktop filename must match what tauri-bundler wrote in
         // /usr/share/applications (the bundle uses the app's productName).
         let status = std::process::Command::new("xdg-mime")
-            .args(&["default", APP_DESKTOP_FILE, "application/pdf"])
+            .args(&["default", app_desktop_file(&app).as_str(), "application/pdf"])
             .status()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
@@ -1374,7 +1424,7 @@ fn open_default_apps_settings() -> Result<bool, String> {
         if !status.success() {
             return Err(format!(
                 "xdg-mime exited with status {}. The .desktop file may not be registered — install {} via the bundled .deb/.AppImage so /usr/share/applications/{} exists.",
-                status, APP_PRODUCT_NAME, APP_DESKTOP_FILE
+                status, app_product_name(&app), app_desktop_file(&app)
             ));
         }
         Ok(true)
@@ -4236,6 +4286,7 @@ pub fn run(opts: StartupOpts) {
         .filter(|arg| arg.to_lowercase().ends_with(".pdf") && !arg.starts_with('-'))
         .cloned()
         .collect();
+    let opened_addon_files: Vec<String> = args.iter().skip(1).filter(|arg| is_addon_file_arg(arg)).cloned().collect();
 
     // Spawn the PDFium worker pool. Failures here are non-fatal — the
     // existing in-proc PDFium path serves as fallback when the pool is
@@ -4287,6 +4338,7 @@ pub fn run(opts: StartupOpts) {
 
     let mut builder = tauri::Builder::default()
         .manage(OpenedFiles(Mutex::new(opened_files)))
+        .manage(OpenedAddonFiles(Mutex::new(opened_addon_files)))
         .manage(LockedFiles(Mutex::new(HashMap::new())))
         .manage(file_range::FileRanges::default())
         .manage(print_instelling::PrinterDevmodes::default())
@@ -4343,6 +4395,10 @@ pub fn run(opts: StartupOpts) {
                     }
                     if !files.is_empty() {
                         let _ = app.emit("open-files", &files);
+                    }
+                    let addon_files: Vec<String> = argv.iter().skip(1).filter(|arg| is_addon_file_arg(arg)).cloned().collect();
+                    if !addon_files.is_empty() {
+                        let _ = app.emit("open-addon-files", &addon_files);
                     }
                 }));
         }
@@ -4569,6 +4625,11 @@ pub fn run(opts: StartupOpts) {
             addon_management::addon_package_install,
             addon_management::addon_package_set_enabled,
             addon_management::addon_package_remove,
+            addon_management::addon_install_folder,
+            addon_management::addon_file_install,
+            addon_management::addon_edition_info,
+            addon_management::addon_edition_remove,
+            addon_opened_files_take,
             edition_helper::edition_helper_available,
             edition_helper::edition_helper_call,
             edition_helper::addon_helper_available,
@@ -4709,6 +4770,18 @@ pub fn run(opts: StartupOpts) {
             // en passeren dit filter niet — geen botsing met die plugin.
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             if let tauri::RunEvent::Opened { urls } = &_event {
+                let addon_files: Vec<String> = urls
+                    .iter()
+                    .filter(|url| url.scheme() == "file")
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .filter(|p| is_addon_file_arg(p))
+                    .collect();
+                if !addon_files.is_empty() {
+                    // Buffered for a cold start; the running frontend takes the event.
+                    _app.state::<OpenedAddonFiles>().0.lock().unwrap().extend(addon_files.iter().cloned());
+                    let _ = _app.emit("open-addon-files", &addon_files);
+                }
                 let files: Vec<String> = urls
                     .iter()
                     .filter(|url| url.scheme() == "file")

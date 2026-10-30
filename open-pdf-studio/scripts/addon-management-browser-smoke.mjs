@@ -25,15 +25,29 @@ try {
   await context.addInitScript(() => {
     window.__addonManagerCalls = [];
     let rows = [];
+    let edition = null;
     window.__TAURI__ = {
       core: { invoke: async (name, args) => {
         if (name === 'edition_plugins') return [];
         if (name === 'addon_packages_list') return rows.map((row) => ({ ...row }));
-        if (name === 'addon_package_install') {
+        if (name === 'addon_edition_info') return edition && { ...edition };
+        if (name === 'addon_opened_files_take') return [];
+        if (name === 'addon_install_folder') {
           window.__addonManagerCalls.push({ name, args });
           if (args.source !== '/picked/package') throw new Error('Wrong package folder');
           rows = [{ id: 'sample.tools', version: '1.0.0', enabled: true, valid: true }];
-          return 'sample.tools';
+          return { id: 'sample.tools', version: '1.0.0', kind: 'package' };
+        }
+        if (name === 'addon_file_install') {
+          window.__addonManagerCalls.push({ name, args });
+          if (args.source !== '/picked/sample.ocaddon') throw new Error('Wrong add-on file');
+          edition = { id: 'sample.edition', version: '2.0.0', valid: true };
+          return [{ id: 'sample.edition', version: '2.0.0', kind: 'edition' }];
+        }
+        if (name === 'addon_edition_remove') {
+          window.__addonManagerCalls.push({ name, args });
+          edition = null;
+          return true;
         }
         if (name === 'addon_package_set_enabled') {
           window.__addonManagerCalls.push({ name, args });
@@ -47,7 +61,14 @@ try {
         }
         return null;
       } },
-      dialog: { open: async () => '/picked/package', ask: async () => true },
+      dialog: {
+        open: async (options) => {
+          if (options.directory) return '/picked/package';
+          window.__addonManagerCalls.push({ name: 'pick-file', args: options.filters });
+          return '/picked/sample.ocaddon';
+        },
+        ask: async () => true,
+      },
     };
   });
   const page = await context.newPage();
@@ -58,25 +79,36 @@ try {
   await page.evaluate(() => import('/js/solid/stores/dialogStore.js').then((module) => module.openDialog('extensions')));
   const section = page.getByRole('region', { name: 'Local add-ons' });
   await section.waitFor();
-  assert.match(await section.textContent(), /No local add-on packages installed/);
+  assert.match(await section.textContent(), /No local add-ons installed/);
   assert.deepEqual(await page.evaluate(() => window.__addonManagerCalls), []);
   await section.getByRole('button', { name: 'Install package folder…' }).click();
-  await section.getByText('sample.tools').waitFor();
+  await section.getByText('sample.tools', { exact: true }).waitFor();
   assert.match(await section.textContent(), /Restart the editor/);
   await section.getByRole('button', { name: 'Disable' }).click();
   await section.getByRole('button', { name: 'Enable' }).waitFor();
   await section.getByRole('button', { name: 'Enable' }).click();
+  await section.getByRole('button', { name: 'Install add-on file…' }).click();
+  const editionRow = section.locator('[data-addon-edition]');
+  await editionRow.getByText('sample.edition').waitFor();
+  assert.match(await section.textContent(), /Installed the edition package sample\.edition 2\.0\.0/);
+  assert.match(await editionRow.textContent(), /v2\.0\.0 · Edition package/);
+  await editionRow.getByRole('button', { name: 'Remove' }).click();
+  await editionRow.waitFor({ state: 'detached' });
   await section.getByRole('button', { name: 'Remove' }).click();
-  await section.getByText('No local add-on packages installed').waitFor();
+  await section.getByText('No local add-ons installed').waitFor();
+  assert.match(await section.textContent(), /Restart the editor/);
   assert.deepEqual(await page.evaluate(() => window.__addonManagerCalls), [
-    { name: 'addon_package_install', args: { source: '/picked/package' } },
+    { name: 'addon_install_folder', args: { source: '/picked/package' } },
     { name: 'addon_package_set_enabled', args: { id: 'sample.tools', enabled: false } },
     { name: 'addon_package_set_enabled', args: { id: 'sample.tools', enabled: true } },
+    { name: 'pick-file', args: [{ name: 'Add-on file', extensions: ['ocaddon', 'zip'] }] },
+    { name: 'addon_file_install', args: { source: '/picked/sample.ocaddon' } },
+    { name: 'addon_edition_remove', args: undefined },
     { name: 'addon_package_remove', args: { id: 'sample.tools' } },
   ]);
   assert.deepEqual(errors, []);
   await context.close();
-  console.log('Generic local add-on install, list, disable, enable and remove UI passed.');
+  console.log('Generic local add-on folder and file install, edition package, list, disable, enable and remove UI passed.');
 } finally {
   await browser.close();
   await server.close();

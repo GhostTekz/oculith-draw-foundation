@@ -142,10 +142,18 @@ fn render_reply_metadata(reply: &serde_json::Value, request_id: u64, mapping_len
 /// (`.exe` alleen op Windows) zodat respawn ook op Linux/macOS de juiste naam
 /// zoekt.
 pub(crate) fn worker_exe_path() -> std::path::PathBuf {
-    let base = "ocudraw-community-pdfium-worker";
-    let name = if cfg!(windows) { format!("{base}.exe") } else { base.to_string() };
-    std::env::current_exe()
-        .ok()
+    let exe = if cfg!(windows) { ".exe" } else { "" };
+    let current = std::env::current_exe().ok();
+    // The sidecar is named after the main binary ("<binary>-pdfium-worker"),
+    // so an installer with its own binary name keeps its own worker.
+    if let Some(own) = current.as_ref().and_then(|p| {
+        let stem = p.file_stem()?.to_str()?;
+        Some(p.parent()?.join(format!("{stem}-pdfium-worker{exe}")))
+    }) {
+        if own.exists() { return own; }
+    }
+    let name = format!("ocudraw-community-pdfium-worker{exe}");
+    current
         .and_then(|p| p.parent().map(|d| d.join(&name)))
         .unwrap_or_else(|| std::path::PathBuf::from(name))
 }

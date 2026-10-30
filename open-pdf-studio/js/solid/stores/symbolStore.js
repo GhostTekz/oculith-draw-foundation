@@ -110,7 +110,15 @@ const allCategories = createMemo(() => {
     icon: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="8" y1="5" x2="8" y2="11"/><line x1="5" y1="8" x2="11" y2="8"/></svg>`,
   }));
   return [
-    ...NL_CATEGORIES,
+    ...NL_CATEGORIES.map((category) => category.id === 'nl-ifc-bouw'
+      ? { ...category, symbols: [...category.symbols, ...edition.constructionSymbols] }
+      : category),
+    ...(edition.electricalSymbols?.length ? [{
+      id: 'nl-elektra', builtin: true, name: 'NL Elektra',
+      color: 'var(--theme-text, #000000)',
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 1 3 9h4l-1 6 6-8H8z"/></svg>',
+      symbols: edition.electricalSymbols,
+    }] : []),
     ...INB_CATEGORIES,
     ...BUILT_IN_CATEGORIES,
     ...NEN1414_CATEGORIES,

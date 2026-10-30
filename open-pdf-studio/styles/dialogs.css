@@ -3402,10 +3402,19 @@
 }
 
 .addon-package-section .ext-install-btn { margin: 12px 0; }
+.addon-package-install { display: flex; flex-wrap: wrap; gap: 8px; }
 .addon-package-message, .addon-package-restart {
   margin: 6px 0 10px;
   font-size: 12px;
   line-height: 1.4;
+  color: var(--theme-app-menu-text);
+}
+.addon-package-restart { display: flex; align-items: center; gap: 10px; }
+.addon-package-restart button {
+  padding: 4px 8px;
+  border: 1px solid var(--theme-app-menu-sidebar-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-app-menu-bg, #fff);
   color: var(--theme-app-menu-text);
 }
 .addon-package-list { display: grid; gap: 6px; margin-top: 10px; }

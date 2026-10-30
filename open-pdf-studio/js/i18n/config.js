@@ -90,6 +90,10 @@ async function fetchLocale(lng) {
     const data = mod.default || mod;
     bundles[n] = communityBuild ? communityProductText(data) : data;
   }));
+  // An installed edition may add its own strings ({ [language]: { [namespace]: {...} } }).
+  for (const [n, data] of Object.entries(edition.strings?.[lng] || {})) {
+    if (ns.includes(n) && data && typeof data === 'object') bundles[n] = { ...bundles[n], ...data };
+  }
   // Product names and legal attribution must not revert to the upstream
   // application's text when the user switches language. Translations for the
   // rest of the interface stay in their original locale bundles.

@@ -10,6 +10,9 @@ export function assertEditionContract(edition) {
     'symbolTemplates']) {
     if (!Array.isArray(edition[name])) throw new Error(`Edition ${name} must be an array.`);
   }
+  for (const name of ['electricalSymbols', 'constructionSymbols']) {
+    if (!Array.isArray(edition[name])) throw new Error(`Edition ${name} must be an array.`);
+  }
   if (!edition.dialogs || typeof edition.dialogs !== 'object') throw new Error('Edition dialogs must be an object.');
   if (edition.tools != null) {
     if (!Array.isArray(edition.tools.shapeToolIds) || !Array.isArray(edition.tools.allowClick)
