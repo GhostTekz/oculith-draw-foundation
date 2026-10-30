@@ -67,6 +67,27 @@ try {
   assert.deepEqual(downloads, [], 'review creates no output');
 
   await page.evaluate(async () => {
+    const { saveSheetRegister, sheetRegister } = await import('/js/solid/stores/sheetRegisterStore.js');
+    saveSheetRegister({ ...sheetRegister(), sheets: sheetRegister().sheets.map(sheet => {
+      if (sheet.id !== 'sheet-s201') return sheet;
+      const { sourceSha256, ...legacySheet } = sheet;
+      return legacySheet;
+    }) });
+  });
+  await page.locator('#set-link-back').click();
+  await page.locator('#set-link-find').click();
+  await review.waitFor();
+  assert.match(await review.innerText(), /S-201[\s\S]*Target sheet has no recorded PDF fingerprint/u);
+  assert.equal(await page.locator('#set-link-registered-review tbody input[type="checkbox"]').count(), 0);
+  assert.deepEqual(downloads, [], 'an unverified target remains a read-only review row');
+  await page.evaluate(async value => {
+    (await import('/js/solid/stores/sheetRegisterStore.js')).saveSheetRegister(value);
+  }, manifest);
+  await page.locator('#set-link-back').click();
+  await page.locator('#set-link-find').click();
+  await review.waitFor();
+
+  await page.evaluate(async () => {
     (await import('/js/solid/stores/sheetRegisterStore.js')).sheetRegister().sheets[1].page = 2;
   });
   await page.locator('#set-link-create').click();

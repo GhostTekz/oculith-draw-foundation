@@ -147,8 +147,14 @@ test('registered link review resolves stable IDs and shows unresolved or ambiguo
     { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, sourceSha256: aHash } : sheet) })
     .review.find(item => item.file === 0 && item.label === 'S-201').status, 'changed-target');
   assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, sourceSha256: null } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'unverified-target');
+  assert.equal(planRegisteredSetLinks(scans, files,
     { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-a' ? { ...sheet, sourceSha256: sHash } : sheet) })
     .review.find(item => item.file === 0 && item.label === 'S-201').status, 'changed-source');
+  assert.equal(planRegisteredSetLinks(scans, files,
+    { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-a' ? { ...sheet, sourceSha256: null } : sheet) })
+    .review.find(item => item.file === 0 && item.label === 'S-201').status, 'unverified-source');
   assert.equal(planRegisteredSetLinks(scans, files,
     { ...register, sheets: register.sheets.map(sheet => sheet.id === 'sheet-s' ? { ...sheet, page: 9 } : sheet) })
     .review.find(item => item.file === 0 && item.label === 'S-201').status, 'missing-page');
