@@ -133,9 +133,13 @@ def receipt_for(file, artifact):
             or isinstance(receipt["noticeFilesChecked"], bool)
             or receipt["noticeFilesChecked"] <= 0):
         fail(f"Receipt {file.name} has no notice audit")
-    if (not isinstance(receipt["resources"], str) or not receipt["resources"]
-            or receipt["resources"].startswith("/")
-            or ".." in PurePosixPath(receipt["resources"]).parts):
+    resources = receipt["resources"]
+    # NSIS installs the resource directory at the package root. Its relative
+    # path is empty; other installer formats must name a resource directory.
+    if (not isinstance(resources, str)
+            or (not resources and not artifact.name.lower().endswith("-setup.exe"))
+            or resources.startswith("/")
+            or ".." in PurePosixPath(resources).parts):
         fail(f"Receipt {file.name} has an invalid resource path")
     if not isinstance(receipt["artifactSha256"], str) or not SHA256.fullmatch(receipt["artifactSha256"]):
         fail(f"Receipt {file.name} has no installer digest")

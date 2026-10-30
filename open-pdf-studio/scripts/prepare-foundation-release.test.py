@@ -87,6 +87,35 @@ class ReleaseBundleTest(unittest.TestCase):
         self.assertEqual((self.output / "installers" / mac_zip.name).read_bytes(),
                          mac_zip.read_bytes())
 
+    def test_windows_installer_accepts_resources_at_package_root(self):
+        installer = self.root / "Oculith Draw Foundation_2026.68.0_x64-setup.exe"
+        installer.write_bytes(b"windows installer bytes")
+        receipt = self.root / "foundation-package-audit-nsis.json"
+        data = dict(self.data)
+        data["resources"] = ""
+        data["artifactSha256"] = hashlib.sha256(installer.read_bytes()).hexdigest()
+        receipt.write_text(json.dumps(data) + "\n", encoding="utf-8")
+        manifest = release.prepare(self.source, [(installer, receipt)], self.output)
+        self.assertEqual(manifest["installers"][0]["path"],
+                         f"installers/{installer.name}")
+
+    def test_empty_resources_are_rejected_for_linux_and_macos(self):
+        self.data["resources"] = ""
+        self.write_receipt()
+        with self.assertRaisesRegex(ValueError, "invalid resource path"):
+            self.prepare()
+        self.assertFalse(self.output.exists())
+
+        archive = self.root / "Oculith Draw Foundation.zip"
+        archive.write_bytes(b"mac app zip bytes")
+        data = dict(self.data)
+        data["artifactSha256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
+        receipt = self.root / "foundation-package-audit-app.json"
+        receipt.write_text(json.dumps(data) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "invalid resource path"):
+            release.prepare(self.source, [(archive, receipt)], self.output)
+        self.assertFalse(self.output.exists())
+
     def test_changed_installer_is_rejected_without_output(self):
         self.artifact.write_bytes(b"tampered installer")
         with self.assertRaisesRegex(ValueError, "digest differs"):
