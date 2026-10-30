@@ -11,8 +11,8 @@ async function inspectSource(path, readSource) {
     observedSha256 = await fingerprintPdfBytes(bytes);
     const { pageCount } = await inspectPdfPages(bytes);
     if (!Number.isSafeInteger(pageCount) || pageCount < 1) throw new Error('PDF has no pages');
-    return { availability: 'readable', observedSha256, pageCount };
-  } catch { return { availability: 'unreadable', observedSha256 }; }
+    return { availability: 'readable', observedSha256, pageCount, byteLength: bytes.length };
+  } catch { return { availability: 'unreadable', observedSha256, byteLength: bytes.length }; }
 }
 
 /** Snapshot current registered sources without changing the register or any PDF. */
@@ -42,6 +42,7 @@ export async function buildSetTransmittalReadiness(register, readSource) {
       revision: sheet.revision, filePath: sheet.filePath, page: sheet.page,
       recordedSha256: sheet.sourceSha256 || null,
       observedSha256: source.observedSha256 || null, pageCount: source.pageCount || null,
+      byteLength: source.byteLength || null,
       issues, status: issues[0] || 'ready' };
   });
   return { register, rows, readyCount: rows.filter(row => row.status === 'ready').length };

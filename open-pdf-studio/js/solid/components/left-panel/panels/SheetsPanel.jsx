@@ -48,6 +48,9 @@ export default function SheetsPanel() {
   const [geometryBusy, setGeometryBusy] = createSignal(false);
   const [transmittalReview, setTransmittalReview] = createSignal(null);
   const [transmittalBusy, setTransmittalBusy] = createSignal(false);
+  const [packageSelectedIds, setPackageSelectedIds] = createSignal([]);
+  const [packagePreview, setPackagePreview] = createSignal(null);
+  const [packageBusy, setPackageBusy] = createSignal(false);
   const [metadataReview, setMetadataReview] = createSignal(null);
   const [metadataBusy, setMetadataBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
@@ -105,6 +108,8 @@ export default function SheetsPanel() {
     setRevisionSummary(null);
     setGeometryAudit(null);
     setTransmittalReview(null);
+    setPackageSelectedIds([]);
+    setPackagePreview(null);
     setMetadataReview(null);
     setMessage('');
     void refreshAvailability();
@@ -524,9 +529,11 @@ export default function SheetsPanel() {
   }
 
   async function checkTransmittalReadiness() {
-    if (transmittalBusy() || !sheetRegister().sheets.length) return;
+    if (transmittalBusy() || packageBusy() || !sheetRegister().sheets.length) return;
     const register = sheetRegister();
     setTransmittalReview(null);
+    setPackageSelectedIds([]);
+    setPackagePreview(null);
     setTransmittalBusy(true);
     setMessage('');
     try {
@@ -534,6 +541,64 @@ export default function SheetsPanel() {
       if (sheetRegister() === register) setTransmittalReview(review);
     } catch (error) { setMessage(`Could not check transmittal readiness: ${error.message}`); }
     finally { setTransmittalBusy(false); }
+  }
+
+  function selectPackageSheet(id, checked) {
+    setPackageSelectedIds(current => checked ? [...new Set([...current, id])]
+      : current.filter(item => item !== id));
+    setPackagePreview(null);
+  }
+
+  async function previewSetPackage() {
+    if (packageBusy()) return;
+    const register = sheetRegister();
+    const review = transmittalReview();
+    const selectedIds = packageSelectedIds();
+    setPackageBusy(true);
+    setPackagePreview(null);
+    setMessage('');
+    try {
+      const { createSetPackagePlan, buildSetPackage } = await import('../../../../sets/set-transmittal-package.js');
+      const plan = createSetPackagePlan(register, review, selectedIds);
+      const built = await buildSetPackage(plan, readCompareSource);
+      if (sheetRegister() !== register || transmittalReview() !== review
+          || packageSelectedIds() !== selectedIds) return;
+      setPackagePreview({ ...built, plan, review, selectedIds });
+    } catch (error) { setMessage(`Could not preview issue package: ${error.message}`); }
+    finally { setPackageBusy(false); }
+  }
+
+  function assertPackagePreviewCurrent(preview) {
+    if (!preview || packagePreview() !== preview || sheetRegister() !== preview.plan.register
+        || transmittalReview() !== preview.review || packageSelectedIds() !== preview.selectedIds) {
+      throw new Error('The package selection or drawing set changed. Preview it again.');
+    }
+  }
+
+  async function exportSetPackage() {
+    const preview = packagePreview();
+    if (!preview || packageBusy()) return;
+    setPackageBusy(true);
+    setMessage('');
+    try {
+      assertPackagePreviewCurrent(preview);
+      const path = await saveFileDialog(`${safeName(preview.plan.name)}-issue.zip`,
+        [{ name: 'ZIP', extensions: ['zip'] }]);
+      if (!path) return;
+      if (!/\.zip$/i.test(path)) throw new Error('Choose a ZIP output path ending in .zip.');
+      assertPackagePreviewCurrent(preview);
+      await assertSafeExportDestination(path, preview.plan.register);
+      assertPackagePreviewCurrent(preview);
+      const { recheckSetPackageSources } = await import('../../../../sets/set-transmittal-package.js');
+      await recheckSetPackageSources(preview.plan, readCompareSource);
+      assertPackagePreviewCurrent(preview);
+      await assertSafeExportDestination(path, preview.plan.register);
+      assertPackagePreviewCurrent(preview);
+      await writeBinaryFile(path, preview.bytes);
+      setPackagePreview(null);
+      setMessage(`${preview.manifest.sheets.length} selected sheet${preview.manifest.sheets.length === 1 ? '' : 's'} exported in an issue package.`);
+    } catch (error) { setMessage(`Could not export issue package: ${error.message}`); }
+    finally { setPackageBusy(false); }
   }
 
   const transmittalStatus = status => ({ ready: 'Source ready', missing: 'Missing or inaccessible PDF',
@@ -911,6 +976,11 @@ export default function SheetsPanel() {
             <For each={transmittalReview().rows}>{(row) => <div class="sheets-summary-row">
               <div class="sheets-summary-heading"><strong>{row.label}</strong><span>{transmittalStatus(row.status)}</span></div>
               <div>{row.title || 'Untitled'} · Revision {row.revision || 'Unnumbered'} · {extractFileName(row.filePath)} · Page {row.page}{row.pageCount ? ` of ${row.pageCount}` : ''}</div>
+              <Show when={row.status === 'ready'}><label class="sheets-package-select">
+                <input type="checkbox" aria-label={`Include ${row.label} in issue package`}
+                  checked={packageSelectedIds().includes(row.sheetId)} disabled={packageBusy()}
+                  onChange={event => selectPackageSheet(row.sheetId, event.currentTarget.checked)} /> Include in issue package
+              </label></Show>
               <For each={row.issues}>{(issue) => <div class="sheets-metadata-error">{transmittalAction(issue, row)}</div>}</For>
               <details class="sheets-summary-hashes"><summary>Source path and SHA-256</summary>
                 <div>Path: {row.filePath}</div>
@@ -918,6 +988,29 @@ export default function SheetsPanel() {
                 <div>Observed: <code>{row.observedSha256 || 'Unavailable'}</code></div>
               </details>
             </div>}</For>
+            <div class="sheets-actions">
+              <button type="button" disabled={packageBusy() || !transmittalReview().readyCount || transmittalReview().readyCount > 200}
+                onClick={() => { setPackageSelectedIds(transmittalReview().rows.filter(row => row.status === 'ready').map(row => row.sheetId)); setPackagePreview(null); }}>Select all ready</button>
+              <button type="button" disabled={packageBusy() || !packageSelectedIds().length}
+                onClick={() => { setPackageSelectedIds([]); setPackagePreview(null); }}>Clear selection</button>
+            </div>
+            <p class="sheets-suggestion-note">{packageSelectedIds().length} selected · maximum 200 sheets. Source PDFs can contain other pages; the package includes only selected pages.</p>
+            <button class="sheets-wide-action" type="button" onClick={previewSetPackage}
+              disabled={packageBusy() || !packageSelectedIds().length}>
+              {packageBusy() ? 'Preparing package…' : 'Preview issue package'}
+            </button>
+            <Show when={packagePreview()?.review === transmittalReview() ? packagePreview() : null}>
+              {(preview) => <div class="sheets-candidate" data-set-package-preview>
+                <div class="sheets-history-title">Issue package preview</div>
+                <div>{preview().manifest.sheets.length} selected pages · {preview().manifest.sources.length} verified source PDFs · {(preview().bytes.length / 1048576).toFixed(1)} MiB ZIP</div>
+                <p class="sheets-suggestion-note">The ZIP contains current-sheets.pdf and manifest.json. Original multi-page source PDFs and absolute source paths are excluded. Export rechecks each source before writing.</p>
+                <details class="sheets-summary-hashes"><summary>Review package manifest</summary>
+                  <pre class="sheets-package-manifest">{JSON.stringify(preview().manifest, null, 2)}</pre>
+                </details>
+                <div class="sheets-actions"><button type="button" onClick={exportSetPackage} disabled={packageBusy()}>Export issue package ZIP</button>
+                  <button type="button" onClick={() => setPackagePreview(null)} disabled={packageBusy()}>Dismiss preview</button></div>
+              </div>}
+            </Show>
           </Show>
         </div>
         <div class="sheets-list" role="group" aria-label="Registered sheets" onKeyDown={onSheetListKeyDown}>
