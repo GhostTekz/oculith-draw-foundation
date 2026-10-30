@@ -748,7 +748,12 @@ export default function SheetsPanel() {
                   <small class="sheets-suggestion-evidence">{row.evidence.title || (row.selectableText
                     ? 'No labeled title found; current title retained.' : 'No selectable title-block text found; enter manually if needed.')}</small>
                   <Show when={metadataIssues().get(row.sheetId)}><div class="sheets-metadata-error">{metadataIssues().get(row.sheetId)}</div></Show>
-                </>}><div class="sheets-metadata-error">{row.error}</div></Show>
+                </>}><>
+                  <div class="sheets-metadata-error">{row.error}</div>
+                  <Show when={metadataReview().mode === 'index' && row.evidence?.title}>
+                    <small class="sheets-suggestion-evidence">{row.evidence.title}</small>
+                  </Show>
+                </>}</Show>
               </div>}</For>
             </div>
             <div class="sheets-actions"><button type="button" onClick={applyMetadataReview}
