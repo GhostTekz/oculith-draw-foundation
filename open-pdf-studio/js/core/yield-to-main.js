@@ -20,7 +20,7 @@ function viaKanaal(resolve) {
 /** Resolves in a later task of the event loop. */
 export function yieldToMain() {
   return new Promise((resolve) => {
-    if (typeof setImmediate === 'function') setImmediate(resolve);
+    if (typeof globalThis.setImmediate === 'function') globalThis.setImmediate(resolve);
     else if (typeof MessageChannel === 'function') viaKanaal(resolve);
     else setTimeout(resolve, 0);
   });
