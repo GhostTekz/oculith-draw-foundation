@@ -15,6 +15,13 @@
 .sheets-count { color: var(--theme-panel-tab-text); }
 .sheets-navigation { display: flex; align-items: center; gap: 5px; margin: 7px 0; }
 .sheets-navigation span { flex: 1; text-align: center; color: var(--theme-panel-tab-text); white-space: nowrap; }
+.sheets-revision-summary { border-top: 1px solid var(--theme-panel-border); padding-top: 7px; }
+.sheets-summary-row { border: 1px solid var(--theme-panel-border); border-radius: var(--ox-r-xs, 3px); padding: 6px; margin: 5px 0; line-height: 1.45; overflow-wrap: anywhere; }
+.sheets-summary-heading { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
+.sheets-summary-heading span { color: var(--theme-panel-tab-text); text-align: right; }
+.sheets-summary-hashes { margin: 3px 0; color: var(--theme-panel-tab-text); }
+.sheets-summary-hashes summary { cursor: default; }
+.sheets-summary-hashes code { overflow-wrap: anywhere; }
 .sheets-list { margin: 8px 0; border-top: 1px solid var(--theme-panel-border); }
 #sheets-panel .sheets-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 5px; width: 100%; text-align: left; border-top: 0; }
 .sheets-row small { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--theme-panel-tab-text); }

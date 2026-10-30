@@ -37,6 +37,8 @@ try {
   await page.locator('#sheets-panel .sheets-row').click();
 
   const compare = page.getByRole('button', { name: 'Compare A-101 earlier revision A to current' });
+  const checkSummary = page.getByRole('button', { name: 'Check set revision summary' });
+  const summaryRow = page.locator('.sheets-summary-row').filter({ hasText: 'A-101' });
   const preview = page.locator('[aria-label="Review sheet revision comparison"]');
   const status = text => page.getByRole('status').filter({ hasText: text }).waitFor();
   const register = () => page.evaluate(() => JSON.parse(localStorage.getItem('oculithDraw.sheetRegister.v1')));
@@ -48,6 +50,9 @@ try {
   }
 
   await cache('current.pdf', current.bytes);
+  await checkSummary.click();
+  await summaryRow.getByText('Missing PDF').waitFor();
+  assert.equal(await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).count(), 0);
   await compare.click();
   await status('Earlier revision PDF is unavailable');
   assert.equal(await preview.count(), 0);
@@ -56,15 +61,30 @@ try {
   assert.equal(await page.locator('#sheets-panel .sheets-row').getAttribute('aria-pressed'), 'true');
 
   await cache('old.pdf', wrong.bytes);
+  await checkSummary.click();
+  await summaryRow.getByText('Changed PDF bytes').waitFor();
+  assert.equal(await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).count(), 0);
   await compare.click();
   await status('Earlier revision PDF has changed');
   await cache('old.pdf', old.bytes);
   await cache('current.pdf', wrong.bytes);
+  await checkSummary.click();
+  await summaryRow.getByText('Changed PDF bytes').waitFor();
   await compare.click();
   await status('Current revision PDF has changed');
   await cache('current.pdf', current.bytes);
-
-  await compare.click();
+  await checkSummary.click();
+  await summaryRow.getByText('Ready to review').waitFor();
+  await summaryRow.locator('details').click();
+  assert.match(await summaryRow.innerText(), new RegExp(old.fingerprint));
+  assert.match(await summaryRow.innerText(), new RegExp(current.fingerprint));
+  assert.deepEqual(await register(), manifest, 'the summary never changes the drawing set');
+  await cache('old.pdf', wrong.bytes);
+  await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).click();
+  await status('Earlier revision PDF has changed');
+  assert.equal(await preview.count(), 0, 'a ready summary cannot authorize stale source bytes');
+  await cache('old.pdf', old.bytes);
+  await summaryRow.getByRole('button', { name: 'Review A-101 latest revision comparison' }).click();
   await preview.waitFor();
   assert.match(await preview.innerText(), /Earlier revision A · old\.pdf · Page 2/);
   assert.match(await preview.innerText(), /Current revision B · current\.pdf · Page 3/);

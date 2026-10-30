@@ -13,6 +13,7 @@ import { openDialog } from '../../../stores/dialogStore.js';
 import { useTranslation } from '../../../../i18n/useTranslation.js';
 import { onSlipSheetRequest } from '../../../../sets/slip-sheet-request.js';
 import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-compare.js';
+import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
 
@@ -38,6 +39,8 @@ export default function SheetsPanel() {
   const [detailSuggestion, setDetailSuggestion] = createSignal(null);
   const [compareCandidate, setCompareCandidate] = createSignal(null);
   const [compareBusy, setCompareBusy] = createSignal(false);
+  const [revisionSummary, setRevisionSummary] = createSignal(null);
+  const [summaryBusy, setSummaryBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
@@ -88,6 +91,7 @@ export default function SheetsPanel() {
     saveSheetRegister(register);
     setDetailSuggestion(null);
     setCompareCandidate(null);
+    setRevisionSummary(null);
     setMessage('');
     void refreshAvailability();
   }
@@ -365,6 +369,41 @@ export default function SheetsPanel() {
     return readBinaryFile(path);
   }
 
+  async function checkRevisionSummary() {
+    if (summaryBusy()) return;
+    const register = sheetRegister();
+    setRevisionSummary(null);
+    setSummaryBusy(true);
+    setMessage('');
+    try {
+      const summary = await buildSetRevisionSummary(register, readCompareSource);
+      if (sheetRegister() === register) setRevisionSummary(summary);
+    } catch (error) { setMessage(`Could not check revision summary: ${error.message}`); }
+    finally { setSummaryBusy(false); }
+  }
+
+  async function reviewFromSummary(row) {
+    if (revisionSummary()?.register !== sheetRegister() || row.status !== 'ready') return;
+    setSelectedId(row.sheetId);
+    setSourceCandidate(null);
+    await reviewRevisionCompare(row.sheetId, row.historyIndex);
+    if (compareCandidate()?.sheetId === row.sheetId) {
+      document.querySelector('[aria-label="Review sheet revision comparison"]')?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function sourceStateLabel(source) {
+    return ({ exact: 'Exact SHA-256 match', changed: 'Changed PDF bytes', missing: 'Missing PDF',
+      unreadable: 'Unreadable PDF', unrecorded: 'No recorded SHA-256',
+      'invalid-page': 'Recorded page missing' })[source.state] || 'Unverified';
+  }
+
+  function summaryStatus(row) {
+    if (row.status === 'no-prior') return 'No earlier revision';
+    if (row.status === 'same-path') return 'Blocked · same PDF path';
+    return row.status === 'ready' ? 'Ready to review' : 'Blocked · check sources';
+  }
+
   async function reviewRevisionCompare(sheetId, historyIndex) {
     if (compareBusy()) return;
     const register = sheetRegister();
@@ -549,6 +588,37 @@ export default function SheetsPanel() {
           <span>{selectedIndex() < 0 ? 'Select a sheet' : `${selectedIndex() + 1} of ${visibleSheets().length}`}</span>
           <button type="button" onClick={() => navigateSheet('next')}
             disabled={openingSheet() || selectedIndex() >= visibleSheets().length - 1}>Next sheet</button>
+        </div>
+        <div class="sheets-revision-summary">
+          <button class="sheets-wide-action" type="button" onClick={checkRevisionSummary}
+            disabled={summaryBusy() || !sheetRegister().sheets.length}>
+            {summaryBusy() ? 'Checking saved revisions…' : 'Check set revision summary'}
+          </button>
+          <Show when={revisionSummary()?.register === sheetRegister()}>
+            <div class="sheets-history-title">Latest prior revision by sheet</div>
+            <p class="sheets-suggestion-note">Read-only check of the saved PDFs and recorded SHA-256 fingerprints. Compare rechecks both files before opening.</p>
+            <For each={revisionSummary().sheets}>{(row) => <div class="sheets-summary-row">
+              <div class="sheets-summary-heading"><strong>{row.label}</strong><span>{summaryStatus(row)}</span></div>
+              <div>Current {row.current.revision || 'Unnumbered'} · {extractFileName(row.current.filePath)} · Page {row.current.page} · {sourceStateLabel(row.current)}</div>
+              <Show when={row.prior}>
+                <div>Prior {row.prior.revision || 'Unnumbered'} · {extractFileName(row.prior.filePath)} · Page {row.prior.page} · {sourceStateLabel(row.prior)}</div>
+              </Show>
+              <details class="sheets-summary-hashes"><summary>Source paths and SHA-256</summary>
+                <div>Current: {row.current.filePath}</div>
+                <div>Recorded: <code>{row.current.sourceSha256 || 'None'}</code></div>
+                <div>Observed: <code>{row.current.observedSha256 || 'Unavailable'}</code></div>
+                <Show when={row.prior}>
+                  <div>Prior: {row.prior.filePath}</div>
+                  <div>Recorded: <code>{row.prior.sourceSha256 || 'None'}</code></div>
+                  <div>Observed: <code>{row.prior.observedSha256 || 'Unavailable'}</code></div>
+                </Show>
+              </details>
+              <Show when={row.status === 'ready'}>
+                <button type="button" aria-label={`Review ${row.label} latest revision comparison`}
+                  disabled={compareBusy()} onClick={() => reviewFromSummary(row)}>Review comparison</button>
+              </Show>
+            </div>}</For>
+          </Show>
         </div>
         <div class="sheets-list" role="group" aria-label="Registered sheets" onKeyDown={onSheetListKeyDown}>
           <For each={visibleSheets()} fallback={<p class="sheets-empty">{sheetRegister().sheets.length
