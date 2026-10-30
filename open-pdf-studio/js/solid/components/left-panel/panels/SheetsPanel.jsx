@@ -16,6 +16,7 @@ import { verifySheetRevisionCompare } from '../../../../sets/sheet-revision-comp
 import { buildSetRevisionSummary } from '../../../../sets/set-revision-summary.js';
 import { buildSetPageGeometryAudit } from '../../../../sets/set-page-geometry.js';
 import { buildSetTransmittalReadiness } from '../../../../sets/set-transmittal-readiness.js';
+import { createCurrentDrawingLog, assertCurrentDrawingLog, currentDrawingLogCsv } from '../../../../sets/current-drawing-log.js';
 import { applySheetMetadataReview, sheetMetadataReviewIssues } from '../../../../sets/sheet-metadata-review.js';
 import { startCompare } from '../../../../compare/compare-store.js';
 import { getPdfBytes } from '../../../../pdf/loader.js';
@@ -55,6 +56,7 @@ export default function SheetsPanel() {
   const [metadataBusy, setMetadataBusy] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const [revisionFilter, setRevisionFilter] = createSignal('');
+  const [exportingCurrentView, setExportingCurrentView] = createSignal(false);
   const visibleSheets = createMemo(() => sortSheetsByLabel(filterSheets(sheetRegister(), query(), revisionFilter())));
   const metadataIssues = createMemo(() => metadataReview()?.register === sheetRegister()
     ? sheetMetadataReviewIssues(sheetRegister(), metadataReview().rows) : new Map());
@@ -772,6 +774,44 @@ export default function SheetsPanel() {
     finally { setExportingPdf(false); }
   }
 
+  async function exportCurrentViewLog(extension) {
+    if (exportingCurrentView()) return;
+    setExportingCurrentView(true);
+    setMessage('');
+    try {
+      const register = sheetRegister();
+      const fileStatus = availability();
+      const view = createCurrentDrawingLog(register, query(), revisionFilter());
+      const assertFresh = () => {
+        assertCurrentDrawingLog(view, sheetRegister(), query(), revisionFilter());
+        assertCurrentExportSource(register, fileStatus);
+      };
+      const path = await saveFileDialog(`${safeName(register.name)}-current-view-drawing-log.${extension}`,
+        [{ name: extension.toUpperCase(), extensions: [extension] }]);
+      if (!path) return;
+      if (!path.toLowerCase().endsWith(`.${extension}`)) throw new Error(`Choose a .${extension} output path.`);
+      assertFresh();
+      let bytes;
+      if (extension === 'csv') {
+        bytes = new TextEncoder().encode(currentDrawingLogCsv(view, fileStatus));
+      } else {
+        const [module, response] = await Promise.all([
+          import('../../../../sets/drawing-log-pdf.js'),
+          fetch('/pdfjs/web/standard_fonts/LiberationSans-Regular.ttf'),
+        ]);
+        if (!response.ok) throw new Error('Could not load the bundled drawing log font.');
+        bytes = await module.buildDrawingLogPdf(view.register, fileStatus, new Uint8Array(await response.arrayBuffer()),
+          new Date(), { currentView: view });
+      }
+      assertFresh();
+      await assertSafeExportDestination(path, register);
+      assertFresh();
+      await writeBinaryFile(path, bytes);
+      setMessage(`Current-view drawing log exported for ${view.register.sheets.length} sheet${view.register.sheets.length === 1 ? '' : 's'}.`);
+    } catch (error) { setMessage(`Could not export current-view drawing log: ${error.message}`); }
+    finally { setExportingCurrentView(false); }
+  }
+
   async function publishCurrentSet() {
     if (publishingSet()) return;
     setPublishingSet(true);
@@ -1116,6 +1156,9 @@ export default function SheetsPanel() {
         </Show>
         <div class="sheets-export">
           <button onClick={publishCurrentSet} disabled={publishingSet() || !sheetRegister().sheets.length}>{publishingSet() ? 'Preparing current sheets…' : 'Publish current sheets PDF'}</button>
+          <p class="sheets-suggestion-note">Current view: {visibleSheets().length} of {sheetRegister().sheets.length} sheets. These exports include the displayed current revision only.</p>
+          <button onClick={() => exportCurrentViewLog('csv')} disabled={exportingCurrentView() || !visibleSheets().length}>Export current view CSV</button>
+          <button onClick={() => exportCurrentViewLog('pdf')} disabled={exportingCurrentView() || !visibleSheets().length}>{exportingCurrentView() ? 'Preparing current-view log…' : 'Export current view PDF'}</button>
           <button onClick={() => exportFile('csv', drawingLogCsv, true)}>Export drawing log</button>
           <button onClick={exportDrawingLogPdf} disabled={exportingPdf()}>{exportingPdf() ? 'Preparing drawing log PDF…' : 'Export drawing log PDF'}</button>
           <button onClick={() => exportFile('json', register => JSON.stringify(register, null, 2))}>Export set manifest</button>

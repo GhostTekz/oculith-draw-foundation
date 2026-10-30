@@ -45,8 +45,8 @@ function wrap(font, value, size, width) {
   return lines.length ? lines : [''];
 }
 
-/** Export the complete local register; historical file presence is not implied. */
-export async function buildDrawingLogPdf(register, availability = {}, fontBytes, generatedAt = new Date()) {
+/** Export the complete local register, or an explicit current-view snapshot. */
+export async function buildDrawingLogPdf(register, availability = {}, fontBytes, generatedAt = new Date(), options = {}) {
   const fontkit = await loadFontkit();
   if (!fontBytes?.byteLength) throw new Error('The bundled drawing log font is unavailable.');
   if (!register || !Array.isArray(register.sheets)) throw new Error('A drawing set is required.');
@@ -55,7 +55,8 @@ export async function buildDrawingLogPdf(register, availability = {}, fontBytes,
   const face = fontkit.create(fontBytes);
   const font = await document.embedFont(fontBytes, { subset: false });
   const fallback = { used: false };
-  document.setTitle(`${edition.productName} drawing log - ${register.name}`);
+  const currentView = options.currentView || null;
+  document.setTitle(`${edition.productName} ${currentView ? 'current drawing log' : 'drawing log'} - ${register.name}`);
   document.setCreator(edition.productName);
   document.setCreationDate(new Date(generatedAt));
 
@@ -84,10 +85,16 @@ export async function buildDrawingLogPdf(register, availability = {}, fontBytes,
   };
 
   addPage();
-  line('DRAWING LOG', { size: 18, gap: 8 });
+  line(currentView ? 'CURRENT DRAWING LOG' : 'DRAWING LOG', { size: 18, gap: 8 });
   line(register.name || 'Drawing set', { size: 13, gap: 8 });
   line(`Generated (UTC): ${new Date(generatedAt).toISOString()}`, { size: 9, color: muted });
-  line(`${register.sheets.length} registered sheet${register.sheets.length === 1 ? '' : 's'}`, { size: 10, color: muted, gap: 10 });
+  if (currentView) {
+    line(`${register.sheets.length} of ${currentView.total} current sheets in this view`, { size: 10, color: muted });
+    line(`Search: ${currentView.query.trim() || 'All'} | Current revision: ${currentView.revision || 'All'}`,
+      { size: 9, color: muted, gap: 10 });
+  } else {
+    line(`${register.sheets.length} registered sheet${register.sheets.length === 1 ? '' : 's'}`, { size: 10, color: muted, gap: 10 });
+  }
   separator();
 
   if (!register.sheets.length) line('No sheets are registered in this drawing set.');
@@ -111,7 +118,7 @@ export async function buildDrawingLogPdf(register, availability = {}, fontBytes,
   for (const [index, sheet] of pages.entries()) {
     sheet.drawLine({ start: { x: MARGIN, y: 42 }, end: { x: WIDTH - MARGIN, y: 42 }, thickness: 0.5, color: muted });
     const mark = drawBrandMark(sheet, MARGIN, 25, 10);
-    sheet.drawText(`${edition.productName} | Drawing log | Page ${index + 1} of ${pages.length}`, {
+    sheet.drawText(`${edition.productName} | ${currentView ? 'Current drawing log' : 'Drawing log'} | Page ${index + 1} of ${pages.length}`, {
       x: MARGIN + mark + 5, y: 27, font, size: 8, color: muted,
     });
   }

@@ -320,6 +320,7 @@ js/compare/revision-polygon.test.mjs
 js/compare/change-report-pdf.test.mjs
 js/compare/batch-report-pdf.test.mjs
 js/sets/drawing-log-pdf.test.mjs
+js/sets/current-drawing-log.test.mjs
 js/sets/index-sheet-titles.test.mjs
 js/sets/set-page-geometry.test.mjs
 js/sets/set-transmittal-readiness.test.mjs
