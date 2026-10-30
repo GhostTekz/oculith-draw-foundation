@@ -45,10 +45,11 @@ function modelRectOf(viewport, pdfRect) {
 }
 
 /**
- * Read one file for the plan: its page labels, the text runs of every page
- * (with a function that frames a character range) and the links already on
- * its pages. `measureFor(fontFamily)` may return a text width function (a
- * canvas in the app); without it the character share is used.
+ * Read one file for the plan: its page count, page labels, text runs and
+ * existing links. `pageNumbers` limits text and link extraction to selected
+ * pages for index review; the ordinary Set Batch Link scan reads every page.
+ * `measureFor(fontFamily)` may return a text width function (a canvas in the
+ * app); without it the character share is used.
  */
 export async function scanSetFile(bytes, { pdfjs, signal, measureFor, pageNumbers = null } = {}) {
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes).slice(), isEvalSupported: false, verbosity: 0 });
