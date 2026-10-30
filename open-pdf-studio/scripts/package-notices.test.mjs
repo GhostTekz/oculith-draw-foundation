@@ -82,6 +82,26 @@ test('a staged resource tree contains the exact source license and notice files'
       external.map(entry => [entry.name, entry.version, entry.source]));
     const noticeText = rustNotices.toString('utf8');
     assert.match(noticeText, /STANDARD SPDX LICENSE AND EXCEPTION TEXTS/);
+    const upstreamRoot = path.resolve(appDir, '../scripts/rust-upstream-notices');
+    const upstreamCatalog = JSON.parse(await readFile(path.join(upstreamRoot, 'catalog.json')));
+    const upstreamByPackage = new Map();
+    for (const entry of upstreamCatalog.entries) {
+      for (const file of entry.files) {
+        const stored = await readFile(path.join(upstreamRoot, file.storedFile));
+        assert.equal(createHash('sha256').update(stored).digest('hex'), file.sha256,
+          `pinned upstream file ${file.storedFile}`);
+        assert.ok(noticeText.includes(normalizedNotice(stored)),
+          `upstream text ${file.storedFile} ships in the notice bundle`);
+      }
+      for (const { name, version } of entry.packages) {
+        const key = `${name}@${version}`;
+        assert.ok(!upstreamByPackage.has(key), `unique upstream mapping ${key}`);
+        upstreamByPackage.set(key, entry.files.map((file) => ({
+          url: `${entry.repository}/blob/${entry.revision}/${file.path}`,
+          sha256: file.sha256,
+        })));
+      }
+    }
     for (const entry of rustManifest.packages) {
       assert.ok(entry.sourceFiles.length || entry.standardTextIds.length,
         `${entry.name}@${entry.version} has source or standard text`);
@@ -90,6 +110,12 @@ test('a staged resource tree contains the exact source license and notice files'
       for (const source of entry.sourceFiles) {
         assert.ok(noticeText.includes(`${entry.name}@${entry.version}: ${source.path} (SHA-256 ${source.sha256})`),
           `${entry.name}@${entry.version} source ${source.path} is indexed`);
+      }
+      assert.deepEqual(entry.upstreamFiles, upstreamByPackage.get(`${entry.name}@${entry.version}`) || [],
+        `${entry.name}@${entry.version} upstream provenance`);
+      for (const source of entry.upstreamFiles) {
+        assert.ok(noticeText.includes(`Upstream: ${source.url} (SHA-256 ${source.sha256})`),
+          `${entry.name}@${entry.version} upstream source is labeled separately`);
       }
       for (const identifier of entry.standardTextIds) {
         assert.ok(rustManifest.standardTextIds.includes(identifier), identifier);
