@@ -3,14 +3,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { unzip } from '../js/bcf/bcf-zip.js';
 
 const port = Number(process.argv[2]);
-const scratch = process.env.OCULITH_REPLAY_SCRATCH;
-assert.ok(Number.isInteger(port) && port > 0 && scratch && process.env.DISPLAY);
+const scratchRoot = process.env.OCULITH_REPLAY_SCRATCH;
+assert.ok(Number.isInteger(port) && port > 0 && scratchRoot && process.env.DISPLAY);
+const scratch = await mkdtemp(path.join(scratchRoot, 'issue-package-'));
 let id = 0;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function call(name, args = {}) {
