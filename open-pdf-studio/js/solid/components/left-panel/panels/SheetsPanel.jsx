@@ -753,7 +753,7 @@ export default function SheetsPanel() {
                   <Show when={metadataReview().mode === 'index' && row.evidence?.title}>
                     <small class="sheets-suggestion-evidence">{row.evidence.title}</small>
                   </Show>
-                </>}</Show>
+                </></Show>
               </div>}</For>
             </div>
             <div class="sheets-actions"><button type="button" onClick={applyMetadataReview}
