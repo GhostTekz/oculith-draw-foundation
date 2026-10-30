@@ -208,7 +208,7 @@ The **Drawing Set** panel (Alt+2) is a register of sheets.
 - **Add PDFs** registers every page of the chosen PDFs as a sheet. Each sheet has a Sheet ID, a title and a revision. Edit them in **Sheet details**.
 - Search the list, or filter it by revision. **Open sheet** opens the page in a tab. **Previous sheet** and **Next sheet** step through the set.
 - **Record revision** records a new revision of a sheet: choose the revised PDF, and the old source moves to **Earlier revisions**. Open an earlier revision to see it with its own markups.
-- The app records a fingerprint of each PDF. **Check files** reports each source as Present, Missing or Unavailable. When a file has moved, **Relink** points the sheet to the new location after checking that the fingerprint matches.
+- The app records a fingerprint of each PDF. **Check files** reports each source as Present, Missing or Unavailable. When a file has moved, **Relink** points the sheet to an identical PDF after checking its fingerprint again at confirmation. Use **Record revision** for changed contents. Older manifests without a recorded fingerprint show a warning because the original PDF cannot be verified.
 - **Export drawing log** writes the list of sheets and revisions as CSV or PDF.
 - **Publish current sheets PDF** writes one PDF with the current revision of every sheet, in sheet order. It refuses a signed PDF, a PDF with form fields, and an overwrite of an existing file.
 - **Export set manifest** and **Import set manifest** save and load the register as a file.

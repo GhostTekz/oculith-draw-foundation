@@ -96,7 +96,12 @@ export function replaceSheet(register, id, filePath, revision, changedAt = new D
   if (!target) throw new Error('Sheet is no longer in this set.');
   const nextPage = page === undefined ? target.page : validPage(page);
   const nextFingerprint = sourceSha256(fingerprint);
-  if (key(target.filePath) === key(path) && target.page === nextPage && target.revision === nextRevision) return register;
+  if (key(target.filePath) === key(path) && target.page === nextPage && target.revision === nextRevision) {
+    if (target.sourceSha256 && nextFingerprint && target.sourceSha256 !== nextFingerprint) {
+      throw new Error('The PDF changed at this path. Enter a new revision before recording it.');
+    }
+    return register;
+  }
   if (sourceOwner(register, path, nextPage, id)) {
     throw new Error('That PDF page is already registered as another sheet.');
   }
@@ -119,6 +124,9 @@ export function relinkSheet(register, id, filePath, page, fingerprint) {
   if (!target) throw new Error('Sheet is no longer in this set.');
   const nextPage = page === undefined ? target.page : validPage(page);
   const nextFingerprint = sourceSha256(fingerprint);
+  if (target.sourceSha256 && nextFingerprint !== target.sourceSha256) {
+    throw new Error('Selected PDF does not match the recorded sheet. Use Record revision for changed contents.');
+  }
   if (key(target.filePath) === key(path) && target.page === nextPage) return register;
   if (sourceOwner(register, path, nextPage, id)) {
     throw new Error('That PDF page is already registered as another sheet.');

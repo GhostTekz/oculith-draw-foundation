@@ -39,6 +39,27 @@ test('replacement keeps sheet identity and prior revision; relink does not creat
   assert.equal(removeSheet(relinked, first.sheet.id).sheets.length, 0);
 });
 
+test('current relink keeps a recorded PDF fingerprint; changed contents need a new revision', () => {
+  const oldHash = 'a'.repeat(64);
+  const newHash = 'b'.repeat(64);
+  const first = addSheet(createSheetRegister(), {
+    filePath: '/plans/issued.pdf', label: 'A-101', page: 1, revision: 'A', sourceSha256: oldHash,
+  });
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/unrelated.pdf', 1, newHash), /does not match/);
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/issued.pdf', 1, newHash), /does not match/);
+  assert.throws(() => relinkSheet(first.register, first.sheet.id, '/plans/unknown.pdf', 1), /does not match/);
+  assert.equal(first.register.sheets[0].filePath, '/plans/issued.pdf');
+
+  const moved = relinkSheet(first.register, first.sheet.id, '/plans/moved.pdf', 1, oldHash);
+  assert.equal(moved.sheets[0].id, first.sheet.id);
+  assert.equal(moved.sheets[0].sourceSha256, oldHash);
+  assert.equal(moved.sheets[0].history.length, 0);
+  assert.throws(() => replaceSheet(first.register, first.sheet.id, '/plans/issued.pdf', 'A', 'now', 1, newHash), /new revision/);
+  const revised = replaceSheet(first.register, first.sheet.id, '/plans/issued.pdf', 'B', 'now', 1, newHash);
+  assert.equal(revised.sheets[0].sourceSha256, newHash);
+  assert.equal(revised.sheets[0].history[0].sourceSha256, oldHash);
+});
+
 test('revision and relink reject pages already used by another sheet', () => {
   const initial = addSheet(createSheetRegister(), { filePath: '/plans/old.pdf', label: 'A-101', page: 1 });
   const second = addSheet(initial.register, { filePath: '/plans/new.pdf', label: 'A-102', page: 2 });

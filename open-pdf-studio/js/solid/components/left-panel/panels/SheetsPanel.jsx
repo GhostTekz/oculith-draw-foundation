@@ -207,9 +207,12 @@ export default function SheetsPanel() {
       const [{ pageCount, pageLabels }, fingerprint] = await Promise.all([
         inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
       ]);
-      if (selectedId() !== sheet.id) return;
+      if (selectedId() !== sheet.id || sheetRegister().sheets.find(item => item.id === sheet.id) !== sheet) return;
+      if (mode === 'relink' && sheet.sourceSha256 && fingerprint !== sheet.sourceSha256) {
+        throw new Error('Selected PDF does not match the recorded sheet. Use Choose revised PDF to record changed contents as a new revision.');
+      }
       const labeledPage = pageLabels?.findIndex(label => label?.trim().toLocaleLowerCase() === sheet.label.toLocaleLowerCase()) ?? -1;
-      setSourceCandidate({ sheetId: sheet.id, mode, path, pageCount, pageLabels, fingerprint,
+      setSourceCandidate({ sheetId: sheet.id, sheetSnapshot: sheet, mode, path, pageCount, pageLabels, fingerprint,
         page: labeledPage >= 0 ? labeledPage + 1 : Math.min(sheet.page, pageCount) });
       setMessage('');
     } catch (error) { setMessage(error.message); }
@@ -246,32 +249,39 @@ export default function SheetsPanel() {
     if (!sheet || !candidate || candidate.sheetId !== sheet.id || applyingSource()) return;
     setApplyingSource(true);
     try {
+      if (candidate.mode !== 'history' && sheet !== candidate.sheetSnapshot) {
+        throw new Error('Sheet details changed. Choose the PDF again.');
+      }
       if (candidate.mode === 'history' && sheet.history[candidate.historyIndex]?.filePath !== candidate.recordedPath) {
         throw new Error('Earlier revision changed. Choose its PDF again.');
       }
-      let verified = null;
+      const bytes = await readBinaryFile(candidate.path);
+      const [{ pageCount }, fingerprint] = await Promise.all([
+        inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
+      ]);
+      if (sourceCandidate() !== candidate || selectedId() !== sheet.id) return;
+      if (candidate.mode !== 'history' && sheetRegister().sheets.find(item => item.id === sheet.id) !== sheet) {
+        throw new Error('Sheet details changed. Choose the PDF again.');
+      }
+      if (fingerprint !== candidate.fingerprint || candidate.page > pageCount) {
+        throw new Error('Selected PDF changed since it was chosen. Choose it again.');
+      }
       if (candidate.mode === 'history') {
-        const bytes = await readBinaryFile(candidate.path);
-        const [{ pageCount }, fingerprint] = await Promise.all([
-          inspectPdfPages(bytes), fingerprintPdfBytes(bytes),
-        ]);
-        if (sourceCandidate() !== candidate || selectedId() !== sheet.id) return;
         const currentPrior = sheetRegister().sheets.find(item => item.id === sheet.id)?.history[candidate.historyIndex];
         if (currentPrior?.filePath !== candidate.recordedPath || currentPrior.page !== candidate.page
           || currentPrior.sourceSha256 !== candidate.fingerprint) {
           throw new Error('Earlier revision changed. Choose its PDF again.');
         }
-        verified = { pageCount, fingerprint };
       }
       let next;
       if (candidate.mode === 'history') {
         next = relinkHistoricalSource(sheetRegister(), sheet.id, candidate.historyIndex,
-          candidate.path, verified.fingerprint, verified.pageCount);
+          candidate.path, fingerprint, pageCount);
       } else if (candidate.mode === 'replace') {
         next = replaceSheet(sheetRegister(), sheet.id, candidate.path, nextRevision(),
-          new Date().toISOString(), candidate.page, candidate.fingerprint);
+          new Date().toISOString(), candidate.page, fingerprint);
       } else {
-        next = relinkSheet(sheetRegister(), sheet.id, candidate.path, candidate.page, candidate.fingerprint);
+        next = relinkSheet(sheetRegister(), sheet.id, candidate.path, candidate.page, fingerprint);
       }
       commit(next);
       if (candidate.mode === 'history' && !isTauri()) {
@@ -521,6 +531,11 @@ export default function SheetsPanel() {
                 <div class="sheets-history-title">{sourceCandidate().mode === 'replace' ? 'New revision source'
                   : sourceCandidate().mode === 'history' ? 'Relink earlier revision' : 'Relink current source'}</div>
                 <div class="sheets-path" title={sourceCandidate().path}>{sourceCandidate().path}</div>
+                <Show when={sourceCandidate().mode === 'relink'}>
+                  <div class="sheets-source">{sheet().sourceSha256
+                    ? 'Exact PDF fingerprint match · the registered sheet source is preserved.'
+                    : 'No fingerprint was recorded for this sheet. The selected PDF cannot be verified against the original; check it before confirming.'}</div>
+                </Show>
                 <Show when={sourceCandidate().mode === 'history'} fallback={
                   <label class="sheets-field">PDF page
                     <select aria-label="New source page" value={sourceCandidate().page}
