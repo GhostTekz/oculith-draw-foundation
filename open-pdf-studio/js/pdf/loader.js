@@ -1819,8 +1819,7 @@ export function annotationsRead(doc, pageNum) {
 // between, so stamps and the Markups List are complete without visiting
 // every sheet. A sheet the user opens meanwhile loads at once (its load is
 // shared, ensureAnnotationsForPage).
-// Sheets read and in the document (the large-open path reads a sheet's
-// markups when it is shown, like Bluebeam, not all of them after opening).
+// Report the number of sheets whose markups are ready in large-open mode.
 export function annotationSheetsLoaded(doc = getActiveDocument()) {
   const total = doc?.pdfDoc?.numPages || 0;
   if (!doc?._largeOpen) return { loaded: total, total };

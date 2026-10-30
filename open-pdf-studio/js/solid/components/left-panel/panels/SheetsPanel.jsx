@@ -160,6 +160,59 @@ export default function SheetsPanel() {
     finally { setMetadataBusy(false); }
   }
 
+  async function reviewIndexSheetTitles() {
+    const register = sheetRegister();
+    const indexSheet = selected();
+    if (!indexSheet || metadataBusy()) return;
+    setMetadataBusy(true);
+    setMetadataReview(null);
+    setMessage('');
+    try {
+      const { readIndexSheetTitles } = await import('../../../../sets/index-sheet-titles-app.js');
+      const parsed = await readIndexSheetTitles(indexSheet, register.sheets);
+      if (sheetRegister() !== register || selectedId() !== indexSheet.id) return;
+      const paths = new Set();
+      for (const sheet of register.sheets.filter(item => parsed.matched.has(item.id))) {
+        paths.add(sheet.filePath);
+      }
+      const observed = new Map();
+      for (const path of paths) {
+        try {
+          if (isTauri()) await invoke('allow_fs_scope', { path });
+          const bytes = await readBinaryFile(path);
+          observed.set(path, bytes?.length ? await fingerprintPdfBytes(bytes) : 'missing');
+        } catch { observed.set(path, 'missing'); }
+      }
+      if (sheetRegister() !== register || selectedId() !== indexSheet.id) return;
+      const conflicts = new Map(parsed.conflicts.map(item => [item.sheetId, item]));
+      const rows = sortSheetsByLabel(register.sheets).filter(sheet => parsed.matched.has(sheet.id) || conflicts.has(sheet.id))
+        .map(sheet => {
+          const match = parsed.matched.get(sheet.id);
+          const conflict = conflicts.get(sheet.id);
+          const error = conflict ? conflict.reason : !sheet.sourceSha256
+            ? 'No recorded PDF fingerprint for this target sheet.'
+            : observed.get(sheet.filePath) !== sheet.sourceSha256
+              ? 'Target PDF is missing or changed. Relink or record its source first.' : '';
+          return { sheetId: sheet.id, filePath: sheet.filePath, page: sheet.page,
+            sourceSha256: sheet.sourceSha256, originalLabel: sheet.label, originalTitle: sheet.title,
+            label: sheet.label, title: match?.title || sheet.title, selected: !!match && !error
+              && match.title !== sheet.title, error, evidence: {
+              label: `Exact index match: ${sheet.label}`,
+              title: match ? `Index page ${indexSheet.page}, line at y=${match.y}: ${match.evidence}`
+                : conflict.lines.join(' / '),
+            } };
+        });
+      setMetadataReview({ mode: 'index', register, rows, indexSource: {
+        filePath: indexSheet.filePath, page: indexSheet.page,
+        sourceSha256: indexSheet.sourceSha256, label: indexSheet.label,
+      }, unmatched: parsed.unmatched, selectableText: parsed.selectableText });
+      if (!rows.length && !parsed.unmatched.length) setMessage(parsed.selectableText
+        ? 'No distinct sheet ID and title rows were found on the selected page.'
+        : 'No selectable text was found on the selected page. Image-only indexes need manual entry.');
+    } catch (error) { setMessage(`Could not review index sheet: ${error.message}`); }
+    finally { setMetadataBusy(false); }
+  }
+
   function editMetadataRow(id, changes) {
     setMetadataReview(current => current && ({ ...current,
       rows: current.rows.map(row => row.sheetId === id ? { ...row, ...changes } : row) }));
@@ -170,9 +223,13 @@ export default function SheetsPanel() {
     if (!review || metadataBusy() || review.register !== sheetRegister()) return;
     setMetadataBusy(true);
     try {
-      const next = applySheetMetadataReview(review.register, review.rows);
+      const next = review.mode === 'index'
+        ? (await import('../../../../sets/index-sheet-titles.js')).applyIndexSheetTitleReview(review.register, review.rows)
+        : applySheetMetadataReview(review.register, review.rows);
       const selected = review.rows.filter(row => row.selected);
       const sources = new Map();
+      if (review.indexSource) sources.set(review.indexSource.filePath,
+        new Set([review.indexSource.sourceSha256]));
       for (const row of selected) {
         if (!sources.has(row.filePath)) sources.set(row.filePath, new Set());
         sources.get(row.filePath).add(row.sourceSha256);
@@ -659,10 +716,21 @@ export default function SheetsPanel() {
             disabled={metadataBusy() || !sheetRegister().sheets.length}>
             {metadataBusy() ? 'Checking sheet metadata…' : 'Review sheet numbers and titles'}
           </button>
+          <button class="sheets-wide-action" type="button" onClick={reviewIndexSheetTitles}
+            disabled={metadataBusy() || !selected()}>
+            {metadataBusy() ? 'Reading index sheet…' : 'Review titles from selected index sheet'}
+          </button>
           <Show when={metadataReview()?.register === sheetRegister()}>
-            <div class="sheets-history-title">Review proposed sheet details</div>
-            <p class="sheets-suggestion-note">Selectable title-block text only. Check each proposed value and source line. The register changes only when you apply selected rows; PDFs stay unchanged.</p>
+            <div class="sheets-history-title">{metadataReview().mode === 'index' ? 'Review index sheet titles' : 'Review proposed sheet details'}</div>
+            <p class="sheets-suggestion-note">{metadataReview().mode === 'index'
+              ? `Selectable rows on ${metadataReview().indexSource.label}, page ${metadataReview().indexSource.page}, matched by exact sheet ID. Only titles can change. Check every source line, then apply selected rows; PDFs stay unchanged.`
+              : 'Selectable title-block text only. Check each proposed value and source line. The register changes only when you apply selected rows; PDFs stay unchanged.'}</p>
             <div class="sheets-metadata-count">{metadataReview().rows.filter(row => row.selected).length} selected · {metadataReview().rows.filter(row => row.error).length} unavailable</div>
+            <Show when={metadataReview().mode === 'index' && metadataReview().unmatched.length}>
+              <details class="sheets-suggestion-source"><summary>{metadataReview().unmatched.length} unmatched index row{metadataReview().unmatched.length === 1 ? '' : 's'}</summary>
+                <For each={metadataReview().unmatched}>{(row) => <div>{row.text} · {row.reason}</div>}</For>
+              </details>
+            </Show>
             <div class="sheets-metadata-list" role="group" aria-label="Sheet metadata proposals">
               <For each={metadataReview().rows}>{(row) => <div class={`sheets-metadata-row${row.error || metadataIssues().has(row.sheetId) ? ' invalid' : ''}`}>
                 <label class="sheets-metadata-select"><input type="checkbox" aria-label={`Apply metadata for ${row.originalLabel}`}
@@ -671,7 +739,7 @@ export default function SheetsPanel() {
                   <strong>{row.originalLabel}</strong> · {extractFileName(row.filePath)} · Page {row.page}</label>
                 <Show when={row.error} fallback={<>
                   <label class="sheets-field">Proposed sheet ID<input aria-label={`Proposed sheet ID for ${row.originalLabel}`}
-                    value={row.label} disabled={metadataBusy()} aria-invalid={metadataIssues().has(row.sheetId)}
+                    value={row.label} disabled={metadataBusy() || metadataReview().mode === 'index'} aria-invalid={metadataIssues().has(row.sheetId)}
                     onInput={event => editMetadataRow(row.sheetId, { label: event.currentTarget.value })} /></label>
                   <small class="sheets-suggestion-evidence">{row.evidence.label || 'No labeled sheet number found; current ID retained.'}</small>
                   <label class="sheets-field">Proposed title<input aria-label={`Proposed title for ${row.originalLabel}`}
