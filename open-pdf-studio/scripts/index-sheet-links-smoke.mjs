@@ -59,6 +59,7 @@ try {
   await page.locator('#sheets-panel .sheets-row').filter({ hasText: 'I-001' }).click();
   await page.getByRole('button', { name: 'Review index navigation links' }).click();
   assert.equal(await page.locator('#set-link-registered-targets').count(), 0, 'index mode cannot switch to generic matching');
+  assert.equal(await page.locator('#set-link-remove').count(), 0, 'index mode cannot remove unscoped set links');
   await page.locator('#set-link-find').click();
   const review = page.locator('#set-link-registered-review');
   await review.waitFor();
