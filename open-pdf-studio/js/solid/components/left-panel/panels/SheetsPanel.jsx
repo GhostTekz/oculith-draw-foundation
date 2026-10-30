@@ -619,11 +619,22 @@ export default function SheetsPanel() {
     void openSheet(target);
   }
 
-  async function exportFile(extension, content) {
+  function assertCurrentExportSource(register, fileStatus = null) {
+    if (sheetRegister() !== register || (fileStatus && availability() !== fileStatus)) {
+      throw new Error('The drawing set or file status changed during export. Review it and try again.');
+    }
+  }
+
+  async function exportFile(extension, contentFor, includeFileStatus = false) {
     try {
-      const path = await saveFileDialog(`${safeName(sheetRegister().name)}.${extension}`,
+      const register = sheetRegister();
+      const fileStatus = includeFileStatus ? availability() : null;
+      const content = contentFor(register, fileStatus);
+      const path = await saveFileDialog(`${safeName(register.name)}.${extension}`,
         [{ name: extension.toUpperCase(), extensions: [extension] }]);
-      if (path) await writeBinaryFile(path, new TextEncoder().encode(content));
+      if (!path) return;
+      assertCurrentExportSource(register, fileStatus);
+      await writeBinaryFile(path, new TextEncoder().encode(content));
     } catch (error) { setMessage(error.message); }
   }
 
@@ -637,12 +648,14 @@ export default function SheetsPanel() {
       const path = await saveFileDialog(`${safeName(register.name)}-drawing-log.pdf`,
         [{ name: 'PDF', extensions: ['pdf'] }]);
       if (!path) return;
+      assertCurrentExportSource(register, fileStatus);
       const [module, response] = await Promise.all([
         import('../../../../sets/drawing-log-pdf.js'),
         fetch('/pdfjs/web/standard_fonts/LiberationSans-Regular.ttf'),
       ]);
       if (!response.ok) throw new Error('Could not load the bundled drawing log font.');
       const bytes = await module.buildDrawingLogPdf(register, fileStatus, new Uint8Array(await response.arrayBuffer()));
+      assertCurrentExportSource(register, fileStatus);
       await writeBinaryFile(path, bytes);
       setMessage('Drawing log PDF exported.');
     } catch (error) { setMessage(`Could not export drawing log PDF: ${error.message}`); }
@@ -954,9 +967,9 @@ export default function SheetsPanel() {
         </Show>
         <div class="sheets-export">
           <button onClick={publishCurrentSet} disabled={publishingSet() || !sheetRegister().sheets.length}>{publishingSet() ? 'Preparing current sheets…' : 'Publish current sheets PDF'}</button>
-          <button onClick={() => exportFile('csv', drawingLogCsv(sheetRegister(), availability()))}>Export drawing log</button>
+          <button onClick={() => exportFile('csv', drawingLogCsv, true)}>Export drawing log</button>
           <button onClick={exportDrawingLogPdf} disabled={exportingPdf()}>{exportingPdf() ? 'Preparing drawing log PDF…' : 'Export drawing log PDF'}</button>
-          <button onClick={() => exportFile('json', JSON.stringify(sheetRegister(), null, 2))}>Export set manifest</button>
+          <button onClick={() => exportFile('json', register => JSON.stringify(register, null, 2))}>Export set manifest</button>
           <button onClick={importManifest}>Import set manifest</button>
         </div>
       </div>
