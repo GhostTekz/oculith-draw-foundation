@@ -828,7 +828,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .extensions-dialog .bs-export-title {
@@ -856,8 +856,7 @@
 }
 
 .extensions-dialog .ext-list {
-  flex: 1;
-  overflow-y: auto;
+  flex: 0 0 auto;
   min-height: 0;
 }
 
@@ -3390,6 +3389,43 @@
   flex-direction: column;
   gap: 6px;
 }
+
+.addon-package-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--theme-app-menu-sidebar-border);
+}
+
+.addon-package-section .ext-install-btn { margin: 12px 0; }
+.addon-package-message, .addon-package-restart {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-app-menu-text);
+}
+.addon-package-list { display: grid; gap: 6px; margin-top: 10px; }
+.addon-package-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--theme-app-menu-sidebar-border);
+  background: var(--theme-app-menu-bg, #fff);
+}
+.addon-package-info { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.addon-package-info strong { font-size: 12px; }
+.addon-package-info span { font-size: 11px; color: var(--theme-app-menu-shortcut); }
+.addon-package-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.addon-package-actions button {
+  padding: 5px 8px;
+  border: 1px solid var(--theme-app-menu-sidebar-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-app-menu-bg, #fff);
+  color: var(--theme-app-menu-text);
+  cursor: pointer;
+}
+.addon-package-actions button:disabled { opacity: .5; cursor: default; }
 
 .ext-card {
   display: flex;

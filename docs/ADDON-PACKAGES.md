@@ -167,7 +167,9 @@ The add-on can expose its tool with a toolbar item or file command whose `run` c
 
 ## Build and manage a package
 
-From `open-pdf-studio/`, make a directory containing `plugin.js` and optional `plugin.css`, then run:
+In the desktop editor, open **Extensions → Local add-ons** and choose **Install package folder…**. Select the folder containing `manifest.json` and the files named in it. The editor verifies the package, copies it into its per-user data directory, and enables it. The same panel lists installed packages and lets you enable, disable, or remove them. It shows when a package is invalid or incompatible with this editor version. Changes take effect after restarting the editor. A package receives the editor's access to local files, so install only packages from a source you trust.
+
+The command line manager is also available for development or scripted installation. Close the editor before using it to change packages. From `open-pdf-studio/`, make a directory containing `plugin.js` and optional `plugin.css`, then run:
 
 ```sh
 node scripts/pack-addon.mjs --source ./my-addon --output ./my-addon-package --id example.tools --version 1.0.0
@@ -176,7 +178,7 @@ node scripts/addon-manager.mjs install --package ./my-addon-package --app-data-d
 
 The installer verifies the manifest, hashes, version, platform, and file types before it changes the installed set. It places the package at `addons/packages/<id>/` beneath the editor's effective per-user data directory and adds its ID to `addons/enabled.json`. It preserves any other installed packages. The location of the editor data directory depends on the operating system and the app build; use the actual data directory for the build you are running.
 
-To temporarily stop loading a package, use `disable --id example.tools --app-data-dir /path/to/editor-data`; use `enable` to load it again. To uninstall it, use `remove` with the same ID and data directory. Close the editor before changing packages, then restart it. Package selection is fixed for the life of each editor process.
+To temporarily stop loading a package, use `disable --id example.tools --app-data-dir /path/to/editor-data`; use `enable` to load it again. To uninstall it, use `remove` with the same ID and data directory. Restart after changing packages. Package selection is fixed for the life of each editor process.
 
 Removal first moves the package out of its active directory, then removes its ID from the enabled index. If Windows holds the helper executable open and prevents that move, removal fails with the original package and index intact. If the move succeeds but file deletion is still blocked, the inactive `.remove-<id>` directory is cleaned on the next add-on operation after the editor exits. An interrupted removal restores an enabled package before another operation. Disabling or removing a package stops new helper calls once the editor observes the changed index; a helper already doing work may continue until the editor exits. Close the editor first for a complete stop.
 

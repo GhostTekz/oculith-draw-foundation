@@ -3,6 +3,7 @@ import { closeAppMenu } from '../../stores/appMenuStore.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { getLoadedPlugins, installPluginFromFile, loadInstalledPlugins, unloadPlugin, reinstallPlugin } from '../../../plugins/plugin-manager.js';
 import { isTauri } from '../../../core/platform.js';
+import AddonPackagesSection from './AddonPackagesSection.jsx';
 
 export default function ExtensionsPanel() {
   const { t } = useTranslation('appMenu');
@@ -159,6 +160,7 @@ export default function ExtensionsPanel() {
           )}
         </For>
       </div>
+      <AddonPackagesSection />
     </div>
   );
 }
