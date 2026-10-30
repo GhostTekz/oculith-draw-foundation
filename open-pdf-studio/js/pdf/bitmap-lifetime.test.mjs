@@ -15,6 +15,7 @@ installeerBrowserStubs();
 const {
   closeBitmap, isUsableBitmap, parkedBitmapCount, releaseUnshownBitmaps,
 } = await import('./bitmap-lifetime.js');
+const { BITMAP_BUDGET_BYTES } = await import('./bitmap-budget.js');
 const pageCache = await import('./page-bitmap-cache.js');
 const tileCache = await import('./tile-cache.js');
 
@@ -118,10 +119,12 @@ test('the page cache evicts the least recently used bitmap, and never closes the
 test('page bitmap cache respects a byte budget before its entry limit', () => {
   freshViewport();
   const path = '/tmp/lifetime-byte-budget.pdf';
-  const first = fakeBitmap(5000, 5000);
-  const second = fakeBitmap(5000, 5000);
-  pageCache.setCachedBitmapEntry(path, 1, 0, 1, first, 5000, 5000, 1);
-  pageCache.setCachedBitmapEntry(path, 2, 0, 1, second, 5000, 5000, 1);
+  // One decoded RGBA page fits; two exceed the shared byte budget.
+  const side = Math.floor(Math.sqrt(BITMAP_BUDGET_BYTES / 8)) + 1;
+  const first = fakeBitmap(side, side);
+  const second = fakeBitmap(side, side);
+  pageCache.setCachedBitmapEntry(path, 1, 0, 1, first, side, side, 1);
+  pageCache.setCachedBitmapEntry(path, 2, 0, 1, second, side, side, 1);
   assert.equal(pageCache.getCachedBitmap(path, 1, 0, 1), null);
   assert.equal(first.closed, true);
   assert.equal(pageCache.getCachedBitmap(path, 2, 0, 1).bitmap, second);
