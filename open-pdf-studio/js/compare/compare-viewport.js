@@ -5,7 +5,7 @@
 //
 // Public API:
 //   renderCompareSideBySide(canvasOld, canvasNew, opts)
-//   renderCompareOverlay(canvasOut, opts)
+//   renderCompareOverlay(canvasOld, canvasNew, opts, canvasHighlights)
 //   getDocPageCount(filePath)
 //
 // Where opts = { oldPath, newPath, oldPage, newPage, scale, offset }
@@ -21,6 +21,17 @@ import {
 
 // Cap detection resolution to keep CPU bounded on huge pages.
 const DETECTION_MAX_DIM = 1600;
+// Alignment is entered at the normal compare render scale. Keeping this base
+// fixed lets zooming preserve the same position in the drawing and detector.
+export const COMPARE_BASE_SCALE = 1.5;
+export function scaledCompareOffset(offset = {}, scale = COMPARE_BASE_SCALE) {
+  const factor = scale / COMPARE_BASE_SCALE;
+  return {
+    dx: (offset.dx || 0) * factor,
+    dy: (offset.dy || 0) * factor,
+    rotation: offset.rotation || 0,
+  };
+}
 let _detectTimer = null;
 let _detectSeq = 0;
 
@@ -163,23 +174,20 @@ export async function renderCompareSideBySide(canvasOld, canvasNew, opts) {
 /**
  * Render the compare overlay.
  *
- * The base canvas (canvasNew) shows the NEW page rendered NORMALLY — black ink
- * on white background, no tint. The differences between OLD and NEW are then
- * highlighted by translucent colored rectangles drawn on a separate overlay
- * canvas (canvasHighlights). The OLD canvas is kept hidden (still rasterized
- * for change detection only).
+ * The new page is the base. The earlier page is rendered separately for the
+ * reviewer's aligned, adjustable visual layer. Detected differences are
+ * painted on an independent highlights canvas.
  *
  * Returns { width, height } of the rendered surface so the caller can size
  * its DOM containers.
  */
 export async function renderCompareOverlay(canvasOld, canvasNew, opts, canvasHighlights = null) {
-  const { newPath, newPage, scale = 1.5, skipDetection = false } = opts;
+  const { oldPath, oldPage, newPath, newPage, scale = 1.5, skipDetection = false } = opts;
 
-  // Render NEW normally — this is the visible base layer. The OLD page is
-  // never drawn into a visible canvas in overlay mode (only rasterized for
-  // change detection below). This avoids one full PDF.js render pass on
-  // every zoom step, which was the dominant cost.
-  await _renderPageToCanvas(newPath, newPage, scale, canvasNew);
+  await Promise.all([
+    _renderPageToCanvas(newPath, newPage, scale, canvasNew),
+    canvasOld ? _renderPageToCanvas(oldPath, oldPage, scale, canvasOld) : Promise.resolve(),
+  ]);
 
   // Size the highlights canvas to match NEW; the actual rectangles are drawn
   // separately by paintHighlights() once changes are detected.
@@ -330,12 +338,7 @@ async function runChangeDetection(opts) {
   oldRaw.getContext('2d').putImageData(oldEntry.data, 0, 0);
 
   aCtx.save();
-  const visualScale = opts.scale || 1.5;
-  const off = {
-    dx: (offset.dx || 0) * (detectScale / visualScale),
-    dy: (offset.dy || 0) * (detectScale / visualScale),
-    rotation: offset.rotation || 0,
-  };
+  const off = scaledCompareOffset(offset, detectScale);
   aCtx.translate(off.dx, off.dy);
   if (off.rotation) {
     aCtx.translate(cOldAligned.width / 2, cOldAligned.height / 2);

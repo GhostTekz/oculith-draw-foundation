@@ -589,8 +589,8 @@ The bottom section of the Layers panel lists the PDF's own layers (optional cont
 **Document ▸ Compare Documents…** compares two revisions. Open both PDFs in tabs first.
 
 - Choose the **Old** and **New** document and page, then **Overlay** (both on top of each other) or **Side-by-side** (two synchronised views). **Swap** exchanges old and new.
-- In Overlay, red is only in the old revision, green only in the new one, and black is unchanged.
-- **Align** shifts or rotates one revision onto the other.
+- In Overlay, the **Earlier page** slider controls how strongly the old PDF appears over the new PDF; 0% shows only the new PDF. The change highlights remain separate from the page images.
+- **Align** shifts or rotates the earlier page onto the current page. Its position stays fixed to the drawing while zooming.
 - **Marking** shows changes as a filled **Box** or a **Contour**. The **Changes** list shows Added, Removed and Modified regions. The **Text** tab lists text differences.
 - **Page pairs**: match pages manually, or **Suggest matches** from embedded page labels. Each pair must be confirmed before its report is trusted.
 - **Compare confirmed pairs** runs all confirmed pairs in batch. **Export batch CSV** and **Export batch PDF** write the reports. A failed pair is reported apart from a pair with no changes.
