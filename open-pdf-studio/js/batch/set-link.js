@@ -50,17 +50,21 @@ function modelRectOf(viewport, pdfRect) {
  * its pages. `measureFor(fontFamily)` may return a text width function (a
  * canvas in the app); without it the character share is used.
  */
-export async function scanSetFile(bytes, { pdfjs, signal, measureFor } = {}) {
+export async function scanSetFile(bytes, { pdfjs, signal, measureFor, pageNumbers = null } = {}) {
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes).slice(), isEvalSupported: false, verbosity: 0 });
   try {
     const doc = await task.promise;
     throwIfCancelled(signal);
     let raw = null;
-    try { raw = await doc.getPageLabels(); } catch { raw = null; }
-    const labels = Array.from({ length: doc.numPages }, (_, i) => cleanPageLabel(raw?.[i]));
+    if (!pageNumbers) {
+      try { raw = await doc.getPageLabels(); } catch { raw = null; }
+    }
+    const labels = pageNumbers ? [] : Array.from({ length: doc.numPages }, (_, i) => cleanPageLabel(raw?.[i]));
     const pages = [];
     const existing = [];
-    for (let p = 1; p <= doc.numPages; p++) {
+    const selected = pageNumbers || Array.from({ length: doc.numPages }, (_, i) => i + 1);
+    for (const p of selected) {
+      if (!Number.isSafeInteger(p) || p < 1 || p > doc.numPages) continue;
       const page = await doc.getPage(p);
       const viewport = modelViewport(page, 0);
       let content = { items: [], styles: {} };
@@ -470,11 +474,12 @@ export function writeLabelBookmarks(pdfDoc, labels = pdfLibPageLabels(pdfDoc)) {
 }
 
 /** Runner job 1: read every file for the plan. */
-export function setLinkScanJob({ pdfjs, measureFor, fingerprint = false } = {}) {
+export function setLinkScanJob({ pdfjs, measureFor, fingerprint = false, indexSource = null } = {}) {
   return {
     id: 'set-link-scan',
     async processFile(file, { signal }) {
-      const scan = await scanSetFile(file.bytes, { pdfjs, signal, measureFor });
+      const pageNumbers = indexSource ? (file.path === indexSource.filePath ? [indexSource.page] : []) : null;
+      const scan = await scanSetFile(file.bytes, { pdfjs, signal, measureFor, pageNumbers });
       if (fingerprint) scan.fingerprint = await fingerprintPdfBytes(file.bytes);
       return scan;
     },

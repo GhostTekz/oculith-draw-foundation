@@ -42,10 +42,20 @@ test('index links cover only exact row IDs, and create guarded local and relativ
     { id: 'detail', label: 'D-301', filePath: paths[1], page: 2, sourceSha256: targetHash },
   ] };
   const source = { ...register.sheets[0] };
+  const openedPages = [];
+  const trackedPdfjs = { getDocument(args) {
+    const task = pdfjs.getDocument(args);
+    return { promise: task.promise.then(doc => ({ numPages: doc.numPages,
+      getPage: async page => { openedPages.push(page); return doc.getPage(page); } })),
+    destroy: () => task.destroy() };
+  } };
   const scanned = await runBatch({ files, readFile: path => bytes.get(path),
-    job: setLinkScanJob({ pdfjs, fingerprint: true }) });
+    job: setLinkScanJob({ pdfjs: trackedPdfjs, fingerprint: true, indexSource: source }) });
   assert(scanned.log.every(entry => entry.ok));
   const scans = files.map(file => scanned.output.byPath.get(file.path.toLocaleLowerCase()));
+  assert.deepEqual(openedPages, [1], 'only the selected index page is text-extracted across multi-page PDFs');
+  assert.deepEqual(scans.map(scan => scan.pages.map(page => page.page)), [[1], []]);
+  assert.deepEqual(scans.map(scan => scan.pageCount), [2, 2], 'all target page counts remain available');
   const plan = planIndexSheetLinks(scans, files, register, source);
   assert.deepEqual(plan.links.map(link => [link.label, link.file, link.page,
     link.target.file, link.target.page]), [

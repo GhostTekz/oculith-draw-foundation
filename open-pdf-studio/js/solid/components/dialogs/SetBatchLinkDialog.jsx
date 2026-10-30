@@ -115,7 +115,7 @@ export default function SetBatchLinkDialog(props) {
       const registerSnapshot = useRegister ? setLink.registeredSetLinkSnapshot(register) : null;
       const run = await runBatch({
         files: list, readFile, signal: controller.signal, onProgress: onFile(ts('reading')),
-        job: setLink.setLinkScanJob({ pdfjs, measureFor, fingerprint: useRegister }),
+        job: setLink.setLinkScanJob({ pdfjs, measureFor, fingerprint: useRegister, indexSource }),
       });
       if (run.cancelled) { setMessage(ts('cancelled')); setPhase('options'); return; }
       if (useRegister && setLink.registeredSetLinkSnapshot(sheetRegister()) !== registerSnapshot) {
