@@ -35,7 +35,9 @@ test('package contains only selected pages, a portable manifest, and exact sourc
   const reads = [];
   const read = path => { reads.push(path); return files.get(path); };
   const readiness = await buildSetTransmittalReadiness(register, read);
-  const plan = createSetPackagePlan(register, readiness, ['m201', 'a101']);
+  const plan = createSetPackagePlan(register, readiness, ['m201', 'a101'], {
+    date: '2026-10-30', reference: 'IFC-07', note: 'Issued for construction\r\nPlease review',
+  });
   assert.deepEqual(plan.sheets.map(row => row.label), ['A-101', 'M-201']);
   assert.equal(plan.sources.length, 2);
   reads.length = 0;
@@ -43,6 +45,9 @@ test('package contains only selected pages, a portable manifest, and exact sourc
   assert.deepEqual(reads, [firstPath, secondPath]);
   assert.deepEqual(built.manifest.sheets.map(row => [row.label, row.sourcePage, row.packagePage]),
     [['A-101', 1, 1], ['M-201', 1, 2]]);
+  assert.deepEqual(built.manifest.issue, {
+    date: '2026-10-30', reference: 'IFC-07', note: 'Issued for construction\nPlease review',
+  });
   assert.deepEqual(built.manifest.sources.map(row => [row.fileName, row.sha256]),
     [['plan.pdf', sha(first)], ['plan.pdf', sha(second)]]);
   assert.doesNotMatch(JSON.stringify(built.manifest), /private\/project|C:\\different/u);
@@ -83,6 +88,21 @@ test('selection refuses unverified, missing, duplicate and over-limit sheets', a
   const oversized = { ...review, rows: review.rows.map(row => row.sheetId === 'ready'
     ? { ...row, byteLength: SET_PACKAGE_LIMITS.sourceBytes + 1 } : row) };
   assert.throws(() => createSetPackagePlan(register, oversized, ['ready']), /128 MiB/u);
+});
+
+test('issue details validate dates and bounded plain text without changing the register', async () => {
+  const bytes = await pdf(['A-101']);
+  const register = { version: 1, name: 'Review', sheets: [sheet('ready', 'A-101', 'ready.pdf', 1, sha(bytes))] };
+  const original = structuredClone(register);
+  const review = await buildSetTransmittalReadiness(register, () => bytes);
+  assert.deepEqual(createSetPackagePlan(register, review, ['ready']).issue,
+    { date: '', reference: '', note: '' });
+  assert.throws(() => createSetPackagePlan(register, review, ['ready'], { date: '2026-02-30' }), /valid issue date/u);
+  assert.throws(() => createSetPackagePlan(register, review, ['ready'], { reference: 'R\n2' }), /one line/u);
+  assert.throws(() => createSetPackagePlan(register, review, ['ready'], { reference: 'R'.repeat(81) }), /80 characters/u);
+  assert.throws(() => createSetPackagePlan(register, review, ['ready'], { note: 'x'.repeat(501) }), /500 characters/u);
+  assert.throws(() => createSetPackagePlan(register, review, ['ready'], { note: 'x\u0000y' }), /plain text/u);
+  assert.deepEqual(register, original);
 });
 
 test('preview and final recheck reject changed bytes and a changed register', async () => {

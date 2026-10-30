@@ -25,6 +25,31 @@ function snapshotSheet(sheet) {
     page: sheet.page, sourceSha256: sheet.sourceSha256 };
 }
 
+function normalizeIssueDetails(details = {}) {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    throw new Error('Issue details must be a date, reference, and note.');
+  }
+  const { date = '', reference = '', note = '' } = details;
+  if ([date, reference, note].some(value => typeof value !== 'string')) {
+    throw new Error('Issue details must be text.');
+  }
+  const issueDate = date.trim();
+  const issueReference = reference.trim();
+  const issueNote = note.replaceAll('\r\n', '\n').trim();
+  if (issueDate && (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)
+      || Number.isNaN(Date.parse(`${issueDate}T00:00:00Z`))
+      || new Date(`${issueDate}T00:00:00Z`).toISOString().slice(0, 10) !== issueDate)) {
+    throw new Error('Enter a valid issue date in YYYY-MM-DD format.');
+  }
+  if (issueReference.length > 80 || /[\x00-\x1f\x7f]/u.test(issueReference)) {
+    throw new Error('The issue reference must be one line of at most 80 characters.');
+  }
+  if (issueNote.length > 500 || /[\x00-\x08\x0b-\x1f\x7f]/u.test(issueNote)) {
+    throw new Error('The issue note must be at most 500 characters of plain text.');
+  }
+  return { date: issueDate, reference: issueReference, note: issueNote };
+}
+
 function assertPlanCurrent(plan) {
   if (JSON.stringify(plan.register) !== plan.registerJson) {
     throw new Error('The drawing set changed since package preview. Review its current sheets again.');
@@ -32,7 +57,7 @@ function assertPlanCurrent(plan) {
 }
 
 /** Plan only current, ready pages selected by the user. No source reads or writes occur here. */
-export function createSetPackagePlan(register, readiness, selectedIds) {
+export function createSetPackagePlan(register, readiness, selectedIds, issueDetails) {
   if (readiness?.register !== register || !Array.isArray(selectedIds)) {
     throw new Error('Check current sheet readiness before preparing a package.');
   }
@@ -71,6 +96,7 @@ export function createSetPackagePlan(register, readiness, selectedIds) {
     throw new Error('Selected source PDFs exceed the 128 MiB package preparation limit. Choose fewer sheets.');
   }
   return { register, registerJson: JSON.stringify(register), name: register.name,
+    issue: normalizeIssueDetails(issueDetails),
     sheets: sheets.map(snapshotSheet), sources: [...sources.values()], sourceBytes };
 }
 
@@ -100,6 +126,7 @@ export async function buildSetPackage(plan, readSource) {
   const sourceIds = new Map(plan.sources.map((source, index) => [source.filePath, `source-${index + 1}`]));
   const manifest = {
     format: 'oculith-drawing-set-package', version: 1, setName: plan.name,
+    issue: plan.issue,
     packagePdf: { file: PACKAGE_PDF, sha256: await fingerprintPdfBytes(pdf), byteLength: pdf.length },
     sources: plan.sources.map(source => ({ id: sourceIds.get(source.filePath),
       fileName: source.fileName, sha256: source.sha256, pageCount: source.pageCount,

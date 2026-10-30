@@ -45,6 +45,9 @@ try {
   await page.getByText('Current sheet source readiness · 2 of 2 ready').waitFor();
   await page.getByLabel('Include A-101 in issue package').check();
   assert.equal(await page.getByLabel('Include A-102 in issue package').isChecked(), false);
+  await page.getByLabel('Issue date').fill('2026-10-30');
+  await page.getByLabel('Issue reference').fill('IFC-07');
+  await page.getByLabel('Transmittal note').fill('Issued for construction');
   assert.deepEqual(downloads, [], 'selection does not write a package');
   await page.getByRole('button', { name: 'Preview issue package' }).click();
   const preview = page.locator('[data-set-package-preview]');
@@ -54,9 +57,16 @@ try {
       .then(async () => { throw new Error(await page.locator('.sheets-message').innerText()); }),
   ]);
   assert.match(await preview.innerText(), /1 selected pages · 1 verified source PDFs/u);
+  assert.match(await preview.innerText(), /Issue IFC-07 · 2026-10-30 · Issued for construction/u);
+  await page.getByLabel('Issue reference').fill('IFC-08');
+  assert.equal(await preview.count(), 0, 'editing issue details invalidates the prepared package');
+  await page.getByRole('button', { name: 'Preview issue package' }).click();
+  await preview.waitFor();
   await preview.getByText('Review package manifest').click();
   const visibleManifest = JSON.parse(await preview.locator('pre').innerText());
   assert.deepEqual(visibleManifest.sheets.map(sheet => sheet.label), ['A-101']);
+  assert.deepEqual(visibleManifest.issue,
+    { date: '2026-10-30', reference: 'IFC-08', note: 'Issued for construction' });
   assert.deepEqual(downloads, [], 'preview does not write a package');
   await page.evaluate(async data => {
     (await import('/js/core/platform.js')).cacheWebFile('Set.pdf', Uint8Array.from(data));
@@ -78,6 +88,8 @@ try {
     [['A-101', 1, 1]]);
   assert.equal(manifest.sources.length, 1);
   assert.equal(manifest.sources[0].sha256, hash);
+  assert.deepEqual(manifest.issue,
+    { date: '2026-10-30', reference: 'IFC-08', note: 'Issued for construction' });
   const selected = await PDFDocument.load(archive.get('current-sheets.pdf').slice());
   assert.equal(selected.getPageCount(), 1, 'the unselected source page is not packaged');
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('oculithDraw.sheetRegister.v1'))), register);

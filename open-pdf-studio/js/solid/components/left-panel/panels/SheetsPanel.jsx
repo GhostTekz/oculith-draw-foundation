@@ -50,6 +50,7 @@ export default function SheetsPanel() {
   const [transmittalReview, setTransmittalReview] = createSignal(null);
   const [transmittalBusy, setTransmittalBusy] = createSignal(false);
   const [packageSelectedIds, setPackageSelectedIds] = createSignal([]);
+  const [packageIssueDetails, setPackageIssueDetails] = createSignal({ date: '', reference: '', note: '' });
   const [packagePreview, setPackagePreview] = createSignal(null);
   const [packageBusy, setPackageBusy] = createSignal(false);
   const [metadataReview, setMetadataReview] = createSignal(null);
@@ -551,28 +552,35 @@ export default function SheetsPanel() {
     setPackagePreview(null);
   }
 
+  function updatePackageIssueDetail(field, value) {
+    setPackageIssueDetails(current => ({ ...current, [field]: value }));
+    setPackagePreview(null);
+  }
+
   async function previewSetPackage() {
     if (packageBusy()) return;
     const register = sheetRegister();
     const review = transmittalReview();
     const selectedIds = packageSelectedIds();
+    const issueDetails = packageIssueDetails();
     setPackageBusy(true);
     setPackagePreview(null);
     setMessage('');
     try {
       const { createSetPackagePlan, buildSetPackage } = await import('../../../../sets/set-transmittal-package.js');
-      const plan = createSetPackagePlan(register, review, selectedIds);
+      const plan = createSetPackagePlan(register, review, selectedIds, issueDetails);
       const built = await buildSetPackage(plan, readCompareSource);
       if (sheetRegister() !== register || transmittalReview() !== review
-          || packageSelectedIds() !== selectedIds) return;
-      setPackagePreview({ ...built, plan, review, selectedIds });
+          || packageSelectedIds() !== selectedIds || packageIssueDetails() !== issueDetails) return;
+      setPackagePreview({ ...built, plan, review, selectedIds, issueDetails });
     } catch (error) { setMessage(`Could not preview issue package: ${error.message}`); }
     finally { setPackageBusy(false); }
   }
 
   function assertPackagePreviewCurrent(preview) {
     if (!preview || packagePreview() !== preview || sheetRegister() !== preview.plan.register
-        || transmittalReview() !== preview.review || packageSelectedIds() !== preview.selectedIds) {
+        || transmittalReview() !== preview.review || packageSelectedIds() !== preview.selectedIds
+        || packageIssueDetails() !== preview.issueDetails) {
       throw new Error('The package selection or drawing set changed. Preview it again.');
     }
   }
@@ -1035,6 +1043,17 @@ export default function SheetsPanel() {
                 onClick={() => { setPackageSelectedIds([]); setPackagePreview(null); }}>Clear selection</button>
             </div>
             <p class="sheets-suggestion-note">{packageSelectedIds().length} selected · maximum 200 sheets. Source PDFs can contain other pages; the package includes only selected pages.</p>
+            <div class="sheets-package-details" role="group" aria-label="Issue package details">
+              <label>Issue date <input type="date" value={packageIssueDetails().date} disabled={packageBusy()}
+                onInput={event => updatePackageIssueDetail('date', event.currentTarget.value)} /></label>
+              <label>Issue reference <input type="text" maxlength="80" value={packageIssueDetails().reference}
+                placeholder="Optional" disabled={packageBusy()}
+                onInput={event => updatePackageIssueDetail('reference', event.currentTarget.value)} /></label>
+              <label>Transmittal note <textarea maxlength="500" value={packageIssueDetails().note}
+                placeholder="Optional" disabled={packageBusy()}
+                onInput={event => updatePackageIssueDetail('note', event.currentTarget.value)} /></label>
+            </div>
+            <p class="sheets-suggestion-note">Issue details identify this local package. Exporting it does not send it.</p>
             <button class="sheets-wide-action" type="button" onClick={previewSetPackage}
               disabled={packageBusy() || !packageSelectedIds().length}>
               {packageBusy() ? 'Preparing package…' : 'Preview issue package'}
@@ -1043,6 +1062,7 @@ export default function SheetsPanel() {
               {(preview) => <div class="sheets-candidate" data-set-package-preview>
                 <div class="sheets-history-title">Issue package preview</div>
                 <div>{preview().manifest.sheets.length} selected pages · {preview().manifest.sources.length} verified source PDFs · {(preview().bytes.length / 1048576).toFixed(1)} MiB ZIP</div>
+                <div class="sheets-suggestion-note">Issue {preview().manifest.issue.reference || 'Unreferenced'} · {preview().manifest.issue.date || 'No date'}{preview().manifest.issue.note ? ` · ${preview().manifest.issue.note}` : ''}</div>
                 <p class="sheets-suggestion-note">The ZIP contains current-sheets.pdf and manifest.json. Original multi-page source PDFs and absolute source paths are excluded. Export rechecks each source before writing.</p>
                 <details class="sheets-summary-hashes"><summary>Review package manifest</summary>
                   <pre class="sheets-package-manifest">{JSON.stringify(preview().manifest, null, 2)}</pre>

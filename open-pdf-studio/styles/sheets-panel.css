@@ -17,6 +17,11 @@
 .sheets-navigation span { flex: 1; text-align: center; color: var(--theme-panel-tab-text); white-space: nowrap; }
 .sheets-revision-summary { border-top: 1px solid var(--theme-panel-border); padding-top: 7px; }
 .sheets-package-select { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--theme-text); }
+.sheets-package-details { display: grid; gap: 5px; margin: 8px 0; }
+.sheets-package-details label { display: grid; gap: 3px; color: var(--theme-panel-tab-text); font-weight: 600; }
+.sheets-package-details input, .sheets-package-details textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--theme-panel-border); border-radius: var(--ox-r-xs, 3px); padding: 4px 5px; background: var(--theme-panel-bg); color: var(--theme-text); font: inherit; font-weight: 400; }
+.sheets-package-details textarea { min-height: 48px; resize: vertical; }
+.sheets-package-details input:focus-visible, .sheets-package-details textarea:focus-visible { outline: 2px solid var(--theme-panel-accent); outline-offset: 1px; }
 .sheets-package-manifest { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; }
 .sheets-summary-row { border: 1px solid var(--theme-panel-border); border-radius: var(--ox-r-xs, 3px); padding: 6px; margin: 5px 0; line-height: 1.45; overflow-wrap: anywhere; }
 .sheets-summary-heading { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
