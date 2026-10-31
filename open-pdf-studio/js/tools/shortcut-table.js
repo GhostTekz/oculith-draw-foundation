@@ -58,7 +58,8 @@
 // clashes resolved for them:
 //   F9        the external editor: Menu Bar. Was snap to grid (AutoCAD); snap to grid stays
 //             on Ctrl+Shift+F9 (the external editor), Show Grid on Shift+F9 and F7.
-//   Ctrl+K    the external editor: Preferences. Ctrl+, stays as the second binding.
+//   Ctrl+K    the external editor: Preferences. Here Ctrl+K (Cmd+K) opens Find Tools +
+//             Commands, the usual command-palette key; Preferences is Ctrl+,.
 //   Shift+F4  the external editor: Hide Panels.
 //   Alt+X/L/T/P/U/Y/B/N/1/2  the external editor panel keys (Tool Chest, Markups List,
 //             Thumbnails, Properties, Measurements, Layers, Bookmarks,
@@ -86,7 +87,7 @@
 //             Width / Fit Page. MultiView (docs/MULTIVIEW.md) takes the external editor's
 //             Ctrl+H (Split Horizontal) and Ctrl+Shift+2 (Unsplit); Split
 //             Vertical is Ctrl+Alt+2 (the external editor "2" plus Alt).
-//   Ctrl+Shift+P  Find Tools + Commands (our addition).
+//   Ctrl+Shift+P  Find Tools + Commands too (our addition, beside Ctrl+K).
 //   F         the external editor: File Attachment. Was free (no single-key or CAD-chord
 //             use; Shift+F stays Flag, Ctrl+F Find, F1-F12 their own keys).
 
@@ -180,8 +181,8 @@ export const SHORTCUTS = [
   { id: 'docProperties', keys: 'Ctrl+D', category: 'file', builtin: true, run: 'document.properties' },
   { id: 'flattenMarkups', keys: 'Ctrl+Shift+M', category: 'file', builtin: true, run: 'document.flatten' },
   { id: 'unflattenMarkups', keys: 'Ctrl+Shift+U', category: 'file', builtin: true, run: 'document.unflatten' },
-  { id: 'preferences', keys: ['Ctrl+K', 'Ctrl+,'], category: 'file', builtin: true, run: 'oculith.preferences' },
-  { id: 'commandPalette', keys: 'Ctrl+Shift+P', category: 'file', builtin: true, run: 'help.findCommands' },
+  { id: 'preferences', keys: 'Ctrl+,', category: 'file', builtin: true, run: 'oculith.preferences' },
+  { id: 'commandPalette', keys: ['Ctrl+K', 'Ctrl+Shift+P'], category: 'file', builtin: true, run: 'help.findCommands' },
 
   { id: 'undo', keys: 'Ctrl+Z', category: 'edit', builtin: true },
   { id: 'redo', keys: ['Ctrl+Y', 'Ctrl+Shift+Z'], category: 'edit', builtin: true },

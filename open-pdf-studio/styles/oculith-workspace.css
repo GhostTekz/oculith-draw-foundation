@@ -15,6 +15,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   outline-offset: 1px;
 }
 
+/* The default cursor outside the drawing (root guidelines): the shell's
+   controls do not switch to a hand; the drawing keeps its tool cursors. */
+:is(button, select, summary, a[href], label, [role="button"], [role="tab"], [role="menuitem"],
+  [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"]):not(#pdf-container *) {
+  cursor: default !important;
+}
+
 /* A compact application menu above the working tool strip. */
 .title-bar { height: 38px; }
 .quick-access-toolbar { gap: 4px; margin-left: 12px; }
@@ -873,7 +880,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
    ------------------------------------------------------------------ */
 body { font-size: var(--ox-fs-md); line-height: var(--ox-lh); }
 ::selection { background: var(--ox-selection); }
-*::-webkit-scrollbar-thumb { background: var(--ox-line-2); border-radius: var(--ox-r-lg); border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb { background: var(--ox-line-2); border-radius: var(--ox-r-md); border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--ox-line-3); background-clip: padding-box; }
 
 /* Ribbon: icons draw in currentColor at a 1.75 stroke (data/ribbonIcons.js). */
@@ -956,3 +963,17 @@ body { font-size: var(--ox-fs-md); line-height: var(--ox-lh); }
 .draw-empty-state .draw-empty-mark { object-fit: contain; }
 .draw-empty-state h2 { font-weight: var(--ox-fw-bold); letter-spacing: -0.02em; }
 .draw-empty-state h2 em { font-family: var(--ox-font-serif); font-style: italic; font-weight: 400; color: var(--ox-accent-ink); }
+
+/* ---- Shell polish: one pressed state, quiet empty states ---------------- */
+.ox-toolbar-btn:active:not(:disabled),
+.ws-access-tab:active,
+.ws-access-toggle:active,
+.ws-panel-title:active,
+.nav-bar button:active:not(:disabled) { background: var(--ox-surface-4); }
+.ox-toolbar-btn.active:active { background: var(--ox-accent-soft); }
+.annotations-list-empty,
+.measurements-empty {
+  font-style: normal;
+  color: var(--ox-text-3);
+  font-size: var(--ox-fs-sm);
+}

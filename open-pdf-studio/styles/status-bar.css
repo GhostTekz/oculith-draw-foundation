@@ -142,6 +142,25 @@
   color: var(--theme-status-accent-ink, var(--theme-status-nav-text));
 }
 
+/* The page scale chip: green confirmed, amber read from the sheet and not
+   applied yet, red not set. The units button beside it keeps the plain look. */
+#status-scale { cursor: default; }
+#status-scale.status-scale--ok {
+  border-color: color-mix(in srgb, var(--ox-ok) 45%, transparent);
+  background: var(--ox-ok-soft);
+  color: var(--ox-ok-ink);
+}
+#status-scale.status-scale--detected {
+  border-color: color-mix(in srgb, var(--ox-warn) 55%, transparent);
+  background: var(--ox-warn-soft);
+  color: var(--ox-warn-ink);
+}
+#status-scale.status-scale--unset {
+  border-color: color-mix(in srgb, var(--ox-danger) 45%, transparent);
+  background: var(--ox-danger-soft);
+  color: var(--ox-danger-ink);
+}
+
 .status-engine {
   height: 20px;
   margin: 0 4px;

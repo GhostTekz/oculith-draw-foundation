@@ -869,7 +869,6 @@
 .layer-list-item input[type="checkbox"] {
   width: 14px;
   height: 14px;
-  cursor: pointer;
   accent-color: var(--theme-panel-accent, var(--theme-accent));
   flex-shrink: 0;
 }
@@ -899,13 +898,46 @@
 }
 
 .layer-list-name {
-  font-size: 12px;
+  font-size: var(--ox-fs-sm);
   color: var(--theme-panel-header-text);
   flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* PDF layers from the drawing: eye, name, "show only". */
+.pdf-layers-filter {
+  flex: 1;
+  min-width: 80px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: var(--ox-fs-sm);
+  border: 1px solid var(--theme-panel-border);
+  border-radius: var(--ox-r-xs, 3px);
+  background: var(--theme-input-bg, transparent);
+  color: var(--theme-panel-header-text);
+}
+.pdf-layers-filter::placeholder { color: var(--theme-panel-tab-text); }
+
+.layer-list-item .layer-list-eye:disabled { opacity: 0.4; }
+.layer-list-hidden .layer-list-eye { color: var(--ox-text-3, var(--theme-panel-tab-text)); opacity: 0.6; }
+.layer-list-hidden .layer-list-name { color: var(--theme-panel-tab-text); }
+.layer-list-item .layer-list-solo { visibility: hidden; }
+.layer-list-item:hover .layer-list-solo,
+.layer-list-item .layer-list-solo:focus-visible { visibility: visible; }
+
+.layers-note {
+  font-size: var(--ox-fs-xs);
+  color: var(--theme-panel-tab-text);
+  padding: 6px 12px;
+  border-top: 1px solid var(--theme-panel-border);
+}
+
+.layers-note-unsupported {
+  border-top: 0;
+  border-bottom: 1px solid var(--theme-panel-border);
 }
 
 .layers-count {

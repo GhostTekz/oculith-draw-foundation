@@ -25,6 +25,7 @@ import FormValidationDialog from './dialogs/FormValidationDialog.jsx';
 import StampPickerDialog from './dialogs/StampPickerDialog.jsx';
 import StampEditorDialog from './dialogs/StampEditorDialog.jsx';
 import SetScaleDialog from './dialogs/SetScaleDialog.jsx';
+import ScaleReviewDialog from './dialogs/ScaleReviewDialog.jsx';
 import CropMarginsDialog from './dialogs/CropMarginsDialog.jsx';
 import StraightenDialog from './dialogs/StraightenDialog.jsx';
 import ShiftPageDialog from './dialogs/ShiftPageDialog.jsx';
@@ -41,6 +42,7 @@ import AboutDialog from './dialogs/AboutDialog.jsx';
 import ShortcutsDialog from './dialogs/ShortcutsDialog.jsx';
 import ExtensionsDialog from './dialogs/ExtensionsDialog.jsx';
 import ConfirmDialog from './dialogs/ConfirmDialog.jsx';
+import LayerSelectionDialog from './dialogs/LayerSelectionDialog.jsx';
 import HandtekeningDetailDialog from './dialogs/HandtekeningDetailDialog.jsx';
 import ViewportScaleDialog from './dialogs/ViewportScaleDialog.jsx';
 import ScaleRegionDialog from './dialogs/ScaleRegionDialog.jsx';
@@ -66,6 +68,8 @@ import TekeninstellingenDialog from './dialogs/TekeninstellingenDialog.jsx';
 import SysteemtypenDialog from './dialogs/SysteemtypenDialog.jsx';
 import SysteemPaneelComponentDialog from './dialogs/SysteemPaneelComponentDialog.jsx';
 import PrintProgressToast from './PrintProgressToast.jsx';
+import AddonToolApprovals from './AddonToolApprovals.jsx';
+import AddonToolLogDialog from './dialogs/AddonToolLogDialog.jsx';
 import BatchSummaryDialog from './dialogs/BatchSummaryDialog.jsx';
 import BatchOpsDialog from './dialogs/BatchOpsDialog.jsx';
 import LineStyleManagerDialog from './line-styles/LineStyleManagerDialog.jsx';
@@ -102,6 +106,7 @@ const DIALOG_MAP = {
   'stamp-picker': StampPickerDialog,
   'stamp-editor': StampEditorDialog,
   'setScale': SetScaleDialog,
+  'scaleReview': ScaleReviewDialog,
   'crop-margins': CropMarginsDialog,
   'straighten-page': StraightenDialog,
   'shift-page': ShiftPageDialog,
@@ -114,6 +119,7 @@ const DIALOG_MAP = {
   'shortcuts': ShortcutsDialog,
   'extensions': ExtensionsDialog,
   'confirm': ConfirmDialog,
+  'layer-selection': LayerSelectionDialog,
   'handtekening-detail': HandtekeningDetailDialog,
   'title-block-edit': TitleBlockDialog,
   'viewport-scale': ViewportScaleDialog,
@@ -138,6 +144,7 @@ const DIALOG_MAP = {
   'assemblies': AssembliesDialog,
   'copy-to-pages': CopyToPagesDialog,
   'markup-name': MarkupNameDialog,
+  'addon-tool-log': AddonToolLogDialog,
   ...edition.dialogs,
 };
 
@@ -158,6 +165,7 @@ export default function DialogHost() {
       <StickyNotePopupHost />
       <ParametricSymbolPicker />
       <PrintProgressToast />
+      <AddonToolApprovals />
     </>
   );
 }

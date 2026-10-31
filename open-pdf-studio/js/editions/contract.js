@@ -1,5 +1,7 @@
 // The public contract between the LGPL editor and an edition composition.
 // Bump this version together with both compositions when a required hook changes.
+import { validateTours } from '../tour/tour-model.js';
+
 export const EDITION_API_VERSION = 1;
 
 export function assertEditionContract(edition) {
@@ -56,6 +58,11 @@ export function assertEditionContract(edition) {
         || typeof action.label !== 'function' || typeof action.run !== 'function'))) {
     throw new Error('Edition launchActions must contain labeled actions.');
   }
+  // Optional: commands, workflow toolbar tabs and workspace profiles
+  // (js/solid/commands/workflows.js; docs/foundation/GUIDE.md, Workflow toolbar).
+  validateWorkspaceContributions(edition, 'Edition');
+  // Optional: guided tours the edition brings (js/tour/tour-model.js).
+  if (edition.tours != null) validateTours(edition.tours, 'Edition tours');
   if (edition.home != null) {
     if (typeof edition.home.title !== 'function' || typeof edition.home.description !== 'function'
         || !Array.isArray(edition.home.actions) || edition.home.actions.some((action) =>
@@ -100,4 +107,36 @@ export function assertEditionContract(edition) {
     throw new Error('Edition panelIds must match unique panels in order.');
   }
   return edition;
+}
+
+/**
+ * Check the optional commands, workflows and profiles of an edition or
+ * add-on: commands { id, label, run }, workflows { id, label, groups: [{ id,
+ * label, items: [commandId…] }] }, profiles { id, label }. Throws on a bad shape.
+ */
+export function validateWorkspaceContributions(source, name = 'Edition') {
+  const list = (key) => {
+    if (source[key] == null) return [];
+    if (!Array.isArray(source[key])) throw new Error(`${name} ${key} must be an array.`);
+    return source[key];
+  };
+  for (const command of list('commands')) {
+    if (typeof command?.id !== 'string' || !command.id || typeof command.label !== 'string' || !command.label
+        || typeof command.run !== 'function') {
+      throw new Error(`${name} commands need an id, a label and run().`);
+    }
+  }
+  for (const workflow of list('workflows')) {
+    if (typeof workflow?.id !== 'string' || !workflow.id || typeof workflow.label !== 'string'
+        || !Array.isArray(workflow.groups) || workflow.groups.some((group) => typeof group?.id !== 'string'
+          || typeof group.label !== 'string' || !Array.isArray(group.items)
+          || group.items.some((id) => typeof id !== 'string' || !id))) {
+      throw new Error(`${name} workflows need an id, a label and groups of command ids.`);
+    }
+  }
+  for (const profile of list('profiles')) {
+    if (typeof profile?.id !== 'string' || !profile.id || typeof profile.label !== 'string' || !profile.label) {
+      throw new Error(`${name} profiles need an id and a label.`);
+    }
+  }
 }

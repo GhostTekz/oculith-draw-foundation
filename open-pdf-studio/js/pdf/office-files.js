@@ -7,7 +7,8 @@ export function xml(value) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
-function columnName(index) {
+/** Spreadsheet column letters of a zero-based index: 0 → A, 26 → AA. */
+export function columnName(index) {
   let name = '';
   for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + (n - 1) % 26) + name;
   return name;

@@ -122,7 +122,22 @@ export function runCommand(id, ...args) {
   const cmd = commands.get(id);
   if (!cmd) throw new Error(`runCommand: unknown command "${id}"`);
   if (!isCommandEnabled(cmd)) return undefined;
+  for (const listener of runListeners) {
+    try { listener(id); } catch { /* a listener never stops the command */ }
+  }
   return cmd.run(...args);
+}
+
+const runListeners = new Set();
+
+/**
+ * Call listener(id) each time runCommand runs an enabled command (menus,
+ * toolbars, keys, the palette). Used for the palette's recent and frequent
+ * commands. Returns a function that removes the listener.
+ */
+export function onCommandRun(listener) {
+  runListeners.add(listener);
+  return () => runListeners.delete(listener);
 }
 
 /**

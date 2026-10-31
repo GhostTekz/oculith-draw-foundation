@@ -18,6 +18,7 @@ import { getCommand, commandLabel, runCommand, isCommandEnabled } from '../comma
 import { splitOrientation } from '../stores/multiViewStore.js';
 import { openPanelMenu } from './panels/PanelMenu.jsx';
 import { pageScaleStatus } from '../../annotations/scale-entry.js';
+import { scaleChip, openScaleChip } from '../../ui/chrome/scale-chip.js';
 import {
   formatPageField, parsePageInput, formatPageSize, paperUnitFor, pageScaleOf, scaleLabel, DIMMER_MAX,
 } from '../../ui/chrome/navigation-format.js';
@@ -117,21 +118,12 @@ export default function NavigationBar() {
     const info = pageInfo();
     return info ? formatPageSize(info.widthPt, info.heightPt, paperUnit(), info.rotation) : '';
   };
-  const scaleText = () => {
+  const chip = () => {
     const s = scaleStatus();
-    if (!s) return '';
-    let text;
-    if (s.kind === 'set') {
-      const label = scaleLabel(scale()) || s.ratio;
-      text = s.method === 'auto-detect' ? t('navbar.scaleAuto', { scale: label }) : label;
-    } else if (s.kind === 'detected') {
-      text = t('scaleDetected', { ratio: s.ratio });
-    } else {
-      text = t('scaleNotSet');
-    }
-    return s.regions ? `${text} ${t('scaleRegions')}` : text;
+    return s ? scaleChip(s, t, s.kind === 'set' ? scaleLabel(scale()) : '') : null;
   };
-  const scaleUnset = () => scaleStatus()?.kind !== 'set' || scaleStatus()?.method === 'auto-detect';
+  const scaleText = () => chip()?.text || '';
+  const scaleUnset = () => chip()?.tone !== 'ok';
 
   // ── Page navigation ──
   const go = async (n) => {
@@ -193,7 +185,7 @@ export default function NavigationBar() {
   });
   const dimmerPercent = () => Math.round(dimmerLevel() * 100);
 
-  const openSetScale = () => import('../../annotations/measurement.js').then((m) => m.showSetScaleDialog());
+  const openSetScale = () => openScaleChip(chip(), page());
   const openDocProperties = () => import('../../ui/chrome/dialogs.js').then((m) => m.showDocPropertiesDialog());
 
   // MultiView: the same commands as View > Split Vertical / Horizontal / Unsplit.
@@ -279,7 +271,7 @@ export default function NavigationBar() {
           <span class="nav-sep nav-sep-zoom" />
           <span class="nav-readout" id="nav-page-size" title={t('pageSizeTitle')}>{pageSizeText()}</span>
           <button type="button" class="nav-scale" id="nav-scale" classList={{ 'nav-scale--unset': scaleUnset() }}
-            title={t('scaleTitle')} onClick={openSetScale}>{scaleText()}</button>
+            data-scale-tone={chip()?.tone} title={chip()?.title} onClick={openSetScale}>{scaleText()}</button>
           <Btn id="nav-doc-properties" icon={ICON.info} title={t('navbar.documentProperties')} onClick={openDocProperties} />
           <div class="nav-split-btn" ref={dimmerWrap}>
             <Btn id="nav-dimmer" icon={ICON.sun} title={t('navbar.dimmerTitle')} active={isDimmerOn()} onClick={() => toggleDimmer()} />

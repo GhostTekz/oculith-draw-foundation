@@ -1,0 +1,242 @@
+/* Workflow toolbar (js/solid/components/WorkflowBar.jsx): a 28 px row of
+   workflow tabs with search and Quick Access at the right, and a 36 px row
+   with the active workflow's tools (icon + label, 28 px buttons). Plus the
+   shell tooltip (TooltipLayer.jsx). Oculith tokens only; small radii. */
+
+.wf-bar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: var(--ox-surface-1);
+  border-bottom: 1px solid var(--ox-line);
+  color: var(--theme-text);
+  font-size: var(--ox-fs-sm);
+  user-select: none;
+  cursor: default;
+}
+
+/* ---- row 1: tabs | search, Quick Access, fold ---- */
+
+.wf-head {
+  display: flex;
+  align-items: stretch;
+  height: 28px;
+  padding: 0 var(--ox-sp-2) 0 var(--ox-sp-1);
+  background: var(--ox-chrome);
+  border-bottom: 1px solid var(--ox-line);
+  min-width: 0;
+}
+.wf-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+.wf-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ox-text-2);
+  font: inherit;
+  font-size: var(--ox-fs-sm);
+  font-weight: var(--ox-fw-medium);
+  letter-spacing: 0.01em;
+  cursor: default;
+}
+.wf-tab-icon { display: inline-flex; width: 14px; height: 14px; color: var(--ox-text-3); }
+.wf-tab-icon svg { width: 14px; height: 14px; }
+.wf-tab:hover { color: var(--theme-text); background: var(--ox-surface-2); }
+.wf-tab:hover .wf-tab-icon { color: var(--ox-text-2); }
+.wf-tab[aria-selected="true"] { color: var(--theme-text); background: var(--ox-surface-1); }
+.wf-tab[aria-selected="true"] .wf-tab-icon { color: var(--ox-accent); }
+/* The selected tab joins the tool row below it: an accent rule on top. */
+.wf-tab[aria-selected="true"]::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 var(--ox-r-xs) var(--ox-r-xs);
+  background: var(--ox-accent);
+}
+.wf-tab[aria-selected="true"]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--ox-surface-1);
+}
+.wf-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ox-focus); }
+
+.wf-tab-sep { width: 1px; margin: 7px 4px; background: var(--ox-line-2); flex-shrink: 0; }
+.wf-tab-contextual { color: var(--ox-accent-ink); }
+.wf-tab-contextual .wf-tab-icon { color: var(--ox-accent); }
+.wf-tab-contextual:not([aria-selected="true"]) { background: var(--ox-accent-soft); }
+
+.wf-head-end {
+  display: flex;
+  align-items: center;
+  gap: var(--ox-sp-2);
+  margin-left: auto;
+  padding-left: var(--ox-sp-3);
+  flex-shrink: 0;
+}
+
+.wf-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 248px;
+  height: 22px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--ox-line-2);
+  border-radius: var(--ox-r-sm);
+  background: var(--ox-surface-1);
+  color: var(--ox-text-3);
+  font: inherit;
+  font-size: var(--ox-fs-xs);
+  cursor: default;
+}
+.wf-search:hover { border-color: var(--ox-line-3); color: var(--ox-text-2); }
+.wf-search:focus-visible { outline: none; box-shadow: var(--ox-focus-ring); }
+.wf-search-icon { display: inline-flex; width: 13px; height: 13px; }
+.wf-search-icon svg { width: 13px; height: 13px; }
+.wf-search-text { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-search-keys { display: inline-flex; gap: 2px; }
+
+.wf-quick { display: flex; align-items: center; gap: 1px; padding-left: var(--ox-sp-2); border-left: 1px solid var(--ox-line-2); }
+.wf-quick-btn, .wf-quick-menu, .wf-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--theme-ribbon-icon-stroke);
+  cursor: default;
+}
+.wf-quick-menu { width: 16px; color: var(--ox-text-3); }
+.wf-quick-btn svg, .wf-fold svg { width: 16px; height: 16px; }
+.wf-quick-menu svg { width: 12px; height: 12px; }
+.wf-quick-btn:hover:not(:disabled), .wf-quick-menu:hover, .wf-fold:hover { background: var(--ox-surface-3); color: var(--theme-text); }
+.wf-quick-btn:active:not(:disabled), .wf-quick-menu:active, .wf-fold:active { background: var(--ox-surface-4); }
+.wf-quick-btn:disabled { color: var(--ox-text-disabled); }
+.wf-quick-btn.active { background: var(--ox-accent-soft); border-color: var(--ox-accent-line); color: var(--ox-accent-ink); }
+.wf-quick-btn:focus-visible, .wf-quick-menu:focus-visible, .wf-fold:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ox-focus); }
+.wf-fold { color: var(--ox-text-3); }
+
+/* ---- row 2: the tools of the active workflow ---- */
+
+.wf-tools {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 var(--ox-sp-2);
+  overflow: hidden;
+  min-width: 0;
+}
+.wf-group { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
+.wf-sep { flex-shrink: 0; width: 1px; height: 20px; margin: 0 6px; background: var(--ox-line-2); }
+
+.wf-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--theme-text);
+  font: inherit;
+  font-size: var(--ox-fs-sm);
+  white-space: nowrap;
+  cursor: default;
+}
+.wf-tool.wf-icon-only { width: 30px; padding: 0; justify-content: center; }
+.wf-tool-icon { display: inline-flex; width: 18px; height: 18px; color: var(--theme-ribbon-icon-stroke); }
+.wf-tool-icon svg { width: 18px; height: 18px; }
+.wf-tool:hover:not(:disabled) { background: var(--ox-surface-3); }
+.wf-tool:hover:not(:disabled) .wf-tool-icon { color: var(--theme-text); }
+.wf-tool:active:not(:disabled) { background: var(--ox-surface-4); }
+.wf-tool.active { background: var(--ox-accent-soft); border-color: var(--ox-accent-line); color: var(--ox-accent-ink); }
+.wf-tool.active .wf-tool-icon { color: var(--ox-accent); }
+.wf-tool:disabled { color: var(--ox-text-disabled); }
+.wf-tool:disabled .wf-tool-icon { color: var(--ox-text-disabled); }
+.wf-tool:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ox-focus); }
+.wf-tool.wf-hidden { display: none; }
+
+.wf-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 6px 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ox-r-xs);
+  background: transparent;
+  color: var(--ox-text-2);
+  font: inherit;
+  font-size: var(--ox-fs-sm);
+  cursor: default;
+}
+.wf-more:hover { background: var(--ox-surface-3); color: var(--theme-text); }
+.wf-more:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ox-focus); }
+.wf-more-icon { display: inline-flex; width: 12px; height: 12px; }
+.wf-more-icon svg { width: 12px; height: 12px; }
+
+/* ---- keyboard keys (search box, palette, tooltips) ---- */
+
+.wf-bar kbd, .command-palette kbd, .ox-tooltip kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--ox-line-2);
+  border-bottom-width: 2px;
+  border-radius: var(--ox-r-xs);
+  background: var(--ox-surface-2);
+  color: var(--ox-text-2);
+  font-family: var(--ox-font);
+  font-size: var(--ox-fs-2xs);
+  font-weight: var(--ox-fw-medium);
+  line-height: 1;
+}
+
+/* ---- tooltip (TooltipLayer.jsx) ---- */
+
+.ox-tooltip {
+  position: fixed;
+  z-index: 10080;
+  max-width: 320px;
+  padding: 5px 8px;
+  border: 1px solid var(--ox-line-3);
+  border-radius: var(--ox-r-sm);
+  background: var(--ox-surface-4);
+  box-shadow: var(--ox-shadow-2);
+  color: var(--theme-text);
+  font-size: var(--ox-fs-xs);
+  line-height: var(--ox-lh-tight);
+  pointer-events: none;
+}
+.ox-tooltip-head { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.ox-tooltip-label { font-weight: var(--ox-fw-medium); }
+.ox-tooltip-keys { display: inline-flex; gap: 2px; margin-left: auto; }
+.ox-tooltip-desc { margin-top: 3px; color: var(--ox-text-2); white-space: normal; }

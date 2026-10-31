@@ -47,6 +47,11 @@ export interface Preferences {
   workspacePanelSizes: Partial<Record<'review' | 'markup' | 'takeoff', Partial<Record<'left' | 'properties' | 'markups', number>>>>;
   /** WorkspaceLayout (js/solid/stores/workspaceLayout.js); null until first saved. */
   workspaceLayout: Record<string, unknown> | null;
+  /** Quick Access command ids (WorkflowBar.jsx); null = the default set. */
+  quickAccess: string[] | null;
+  /** The workflow tab shown in the workflow toolbar; null = the profile's. */
+  activeWorkflow: string | null;
+  workflowBarCollapsed: boolean;
 
   // Appearance
   defaultAnnotationColor: string;

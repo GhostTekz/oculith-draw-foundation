@@ -11,7 +11,8 @@
 //   label        accessible name of the toolbar (aria-label), optional
 //   class        extra class on the root, optional
 //
-// Each button shows the command icon, a tooltip "Label (Shortcut)", is
+// Each button shows the command icon, a tooltip with the label and the
+// shortcut (data-tip, TooltipLayer.jsx), is
 // disabled when isCommandEnabled() is false and pressed (aria-pressed,
 // .active) when isCommandChecked() is true. Click runs runCommand(id).
 // Arrow keys move focus along the toolbar (roving tabindex).
@@ -19,6 +20,8 @@
 import { For, Show } from 'solid-js';
 import { getCommand, commandLabel, isCommandEnabled, isCommandChecked, runCommand, commandsVersion } from '../commands/registry.js';
 import { useTranslation } from '../../i18n/useTranslation.js';
+import { openPanelMenu } from './panels/PanelMenu.jsx';
+import { lucide } from '../data/lucideIcons.js';
 
 const SEPARATORS = new Set(['|', '-']);
 
@@ -76,12 +79,25 @@ export default function Toolbar(props) {
                   type="button"
                   class={`ox-toolbar-btn${checked() ? ' active' : ''}`}
                   data-command={id}
-                  title={cmd.shortcut ? `${label()} (${cmd.shortcut})` : label()}
+                  data-tip={label()}
+                  data-tip-key={cmd.shortcut || ''}
                   aria-label={label()}
                   aria-pressed={checked() === undefined ? undefined : String(checked())}
                   disabled={!isCommandEnabled(cmd)}
                   tabIndex={index() === 0 ? 0 : -1}
                   onClick={() => runCommand(id)}
+                  onContextMenu={(e) => {
+                    // Pin or unpin it in Quick Access (the workflow toolbar).
+                    e.preventDefault();
+                    e.stopPropagation();
+                    import('../stores/quickAccess.js').then(({ isPinned, togglePinned }) => {
+                      const pinned = isPinned(id);
+                      openPanelMenu(e.clientX, e.clientY, [{
+                        label: t(pinned ? 'workflow.unpin' : 'workflow.pin'),
+                        icon: lucide(pinned ? 'pin-off' : 'pin'), run: () => togglePinned(id),
+                      }]);
+                    });
+                  }}
                 >
                   <span class="ox-toolbar-icon" innerHTML={cmd.icon || ''} />
                 </button>

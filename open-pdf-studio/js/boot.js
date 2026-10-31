@@ -205,7 +205,7 @@ async function installEdition(found) {
   if (secondaryWindow) return;
   await ready;
   if (plugin?.launch) {
-    try { await plugin.launch({ side, setStatus }); } catch (error) { console.error('[edition] launch step failed', error); }
+    try { await plugin.launch({ side, setStatus, showActions: showLaunchActions }); } catch (error) { console.error('[edition] launch step failed', error); }
   } else if (composed.launchActions?.length) {
     // File-association opens and restored sessions should proceed directly
     // to the document. Empty workspaces can offer an optional launch action.

@@ -26,6 +26,7 @@ import { readAssemblies } from './assemblies-pdf.js';
 import { readSpaces } from '../spaces/pdf-spaces.js';
 import { leesPdfViewports } from './pdf-viewports.js';
 import { leesEigenViewports } from './viewports-vp.js';
+import { ocgRenderSupport } from './native-ocg-support.js';
 
 function field(read, fallback = null) {
   try {
@@ -107,5 +108,7 @@ export function readCatalogFields(pdfLibDoc) {
     // null = the read failed (pdf-viewports.js rondViewportLezingAf).
     viewports: field(() => leesPdfViewports(pdfLibDoc)),
     ownViewports: field(() => leesEigenViewports(pdfLibDoc)),
+    // null = not known: whether the PDF layers can be switched in the view.
+    ocgRenderSupport: field(() => ocgRenderSupport(pdfLibDoc)),
   };
 }

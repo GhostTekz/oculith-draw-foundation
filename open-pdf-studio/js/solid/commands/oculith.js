@@ -4,7 +4,7 @@ import { registerCommand } from './registry.js';
 import { lucide } from '../data/lucideIcons.js';
 import { aboutIcon, shortcutsIcon, updatesIcon, fileAssocIcon, preferencesIcon, extensionsIcon } from '../data/ribbonIcons.js';
 import { isTauri } from '../../core/platform.js';
-import { PROFILE_IDS, activeProfile } from '../stores/workspaceLayout.js';
+import { PROFILE_IDS, BUILTIN_PROFILE_IDS, activeProfile, profileLabelKey } from '../stores/workspaceLayout.js';
 import { applyWorkspaceProfile } from '../stores/workspaceProfiles.js';
 
 /** Event that opens the command palette (Help > Find Tools + Commands). */
@@ -20,14 +20,16 @@ registerCommand({
   run: () => openDialog('about'),
 });
 registerCommand({
-  // Ctrl+K is the external editor's binding; Ctrl+, stays as an alias (shortcut-table.js).
-  id: 'oculith.preferences', label: 'common:commands.preferences', icon: preferencesIcon, shortcut: 'Ctrl+K',
+  // Ctrl+, (Ctrl+K opens the command palette, shortcut-table.js).
+  id: 'oculith.preferences', label: 'common:commands.preferences', icon: preferencesIcon, shortcut: 'Ctrl+,',
   category: 'oculith', keywords: ['settings', 'options', 'theme', 'language'],
   run: () => import('../../core/preferences.js').then((m) => m.showPreferencesDialog()),
 });
 for (const profile of PROFILE_IDS) {
   registerCommand({
-    id: `oculith.profile.${profile}`, label: `common:commands.profiles.${profile}`, icon: null, category: 'oculith',
+    id: `oculith.profile.${profile}`, icon: null, category: 'oculith',
+    // An edition's profile names its own label.
+    label: BUILTIN_PROFILE_IDS.includes(profile) ? `common:commands.profiles.${profile}` : profileLabelKey(profile),
     keywords: ['profile', 'workspace', 'layout'],
     checked: () => activeProfile() === profile,
     // Resets the panel layout to the profile (and keeps the ribbon tab in step).
@@ -65,10 +67,20 @@ registerCommand({
 // --- Help ------------------------------------------------------------------
 
 registerCommand({
-  id: 'help.findCommands', label: 'common:commands.findCommands', icon: lucide('command'), shortcut: 'Ctrl+Shift+P',
-  category: 'help', keywords: ['search', 'palette', 'command', 'tools'],
+  id: 'help.findCommands', label: 'common:commands.findCommands', icon: lucide('command'), shortcut: 'Ctrl+K',
+  category: 'help', keywords: ['search', 'palette', 'command', 'tools', 'go to', 'page', 'sheet'],
   // CommandPalette.jsx listens for this event (no import cycle with the UI).
   run: () => window.dispatchEvent(new CustomEvent(OPEN_COMMAND_PALETTE)),
+});
+registerCommand({
+  id: 'help.showTour', label: 'common:commands.showTour', icon: lucide('book-open'), category: 'help',
+  keywords: ['tour', 'guide', 'getting started', 'help', 'introduction'],
+  run: () => import('../../tour/tours.js').then((m) => m.startTour(m.primaryTourId())),
+});
+registerCommand({
+  id: 'help.showBasicsTour', label: 'common:commands.showBasicsTour', icon: lucide('book-open'), category: 'help',
+  keywords: ['tour', 'guide', 'basics', 'getting started'],
+  run: () => import('../../tour/tours.js').then((m) => m.startTour('foundation.basics')),
 });
 registerCommand({
   id: 'help.extensions', label: 'common:commands.extensions', icon: extensionsIcon, category: 'help',

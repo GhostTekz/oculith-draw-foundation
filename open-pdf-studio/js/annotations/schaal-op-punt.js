@@ -65,7 +65,8 @@ export function paginaSchaal(doc, pageNum) {
   const vp = paginaViewport(doc.pdfViewports?.[pageNum]);
   if (!vp) return null;
   return { pixelsPerUnit: vp.pixelsPerUnit, unit: vp.unit, method: vp.method || 'pdfPage',
-    scaleRatio: vp.ratio || null, ...(vp.precision != null ? { precision: vp.precision } : {}) };
+    scaleRatio: vp.ratio || null, ...(vp.precision != null ? { precision: vp.precision } : {}),
+    ...(vp.source ? { source: vp.source } : {}) };
 }
 
 /**

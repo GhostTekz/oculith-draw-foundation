@@ -15,7 +15,7 @@ import {
 import { getalTekst } from '../../../pdf/cad-import-logica.js';
 import {
   nieuwJobId, paginaMaat, gebiedenOpPagina, meetschaalOp, scanPagina, exporteerPagina, annuleer,
-  luisterVoortgang, kiesDoelbestand, cadOcgSelectionError,
+  luisterVoortgang, kiesDoelbestand, cadOcgSelectionError, CAD_OCG_SELECTION_ERROR,
 } from '../../../pdf/cad-export.js';
 import { revealInFileManager } from '../../../core/file-manager-reveal.js';
 
@@ -212,10 +212,16 @@ export default function CadExportDialog() {
       setMelding({ soort: 'fout', tekst: tCommon('noDocumentOpen') });
       return;
     }
-    const layerError = cadOcgSelectionError(doc);
-    if (layerError) {
-      setMelding({ soort: 'fout', tekst: t('cadExport.failed', { error: layerError }) });
-      return;
+    if (cadOcgSelectionError(doc)) {
+      // CAD export reads the default layer state: offer to reset the view
+      // first (layer-output-policy.js); cancelling keeps it and explains.
+      const { confirmLayerRoute } = await import('../../../pdf/layer-output-policy.js');
+      const keuze = await confirmLayerRoute(doc, 'cad-export');
+      const layerError = cadOcgSelectionError(doc);
+      if (keuze !== 'continue' || layerError) {
+        setMelding({ soort: 'fout', tekst: t('cadExport.failed', { error: layerError || CAD_OCG_SELECTION_ERROR }) });
+        return;
+      }
     }
     const lijst = paginas();
     if (!lijst.length) {

@@ -305,6 +305,8 @@ export function leesViewportsVanPagina(pagina) {
         viewport.eigen = true;
         const methode = tekst(d.lookup(PDFName.of('OPS_Method'))).trim();
         if (methode) viewport.method = methode;
+        const bron = tekst(d.lookup(PDFName.of('OPS_Source'))).trim();
+        if (bron) viewport.source = bron;
         const precisie = precisieVanViewport(d, schaal.unit);
         if (precisie != null) viewport.precision = precisie;
       } else if (dektPagina(bbox, view)) {

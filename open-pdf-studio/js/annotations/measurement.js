@@ -309,9 +309,12 @@ export function showCalibrationDialog(referencePixelLength, options = {}) {
 export function showSetScaleDialog(pageNum) {
   const doc = getActiveDocument();
   const page = Number.isInteger(pageNum) && pageNum > 0 ? pageNum : (doc?.currentPage || 1);
-  const detectedRatio = paginaOfDocumentSchaal(doc, page) ? null : (doc?.detectedScale?.ratio || null);
+  // The page's own proposal first (scale-proposals.js), else the scale read from page 1.
+  const proposal = doc?.scaleProposals?.[page]?.pageScale;
+  const detected = proposal?.status === 'pending' ? proposal : (doc?.scaleProposals?.[page] ? null : doc?.detectedScale);
+  const detectedRatio = paginaOfDocumentSchaal(doc, page) ? null : (detected?.ratio || null);
   setScaleDraft = null;
-  const detectedImperial = detectedRatio ? doc?.detectedScale?.imperial === true : false;
+  const detectedImperial = detectedRatio ? detected?.imperial === true : false;
   openDialog('setScale', { detectedRatio, detectedImperial, pageNum: page });
 }
 

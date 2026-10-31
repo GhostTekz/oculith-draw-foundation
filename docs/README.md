@@ -31,6 +31,14 @@ What Oculith Draw writes into a PDF. Markups are standard PDF annotations with a
 
 How optional local add-ons connect to the editor, what the host validates, and how to install or remove full edition and [independent packages](ADDON-PACKAGES.md).
 
+### [Add-on tools for the AI link](ADDON-TOOLS.md)
+
+How an installed add-on adds tools to the AI link (MCP): the versioned registration hook, the namespaced names, the schema subset, and what the editor does on every call (argument checks, the user's approval for changes, one undo step per change, document text marked as data, the session log).
+
+### [PDF layers](PDF-LAYERS.md)
+
+Showing and hiding the drawing's own layers (optional content groups) from the Layers panel, what each output route (display, print, export, save, snapping, CAD export) does with that view, and the current limits.
+
 ### [Building from source](BUILDING.md)
 
 How to build the app on Linux, Windows and macOS. It lists the tools and system libraries you need, the npm commands for a native build and a frontend-only build, the checks to run, the optional GEOS geometry feature, and where the build outputs go.

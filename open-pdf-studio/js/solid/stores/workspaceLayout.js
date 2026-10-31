@@ -11,7 +11,16 @@
 //                 navigation:{visible}, status:{visible}, menu:{visible},
 //                 locked: true },
 //     autoHidePanelAccess: false,
-//     profileSizes: { [profile]: { left?, right?, bottom? } } }
+//     profileSizes: { [profile]: { left?, right?, bottom? } },
+//     workflow: workflowId|null,        the workflow tab the profile opens on
+//     workflows: [workflowId…]|null,    the workflow tabs shown (null = all)
+//     workflowBar: 1 }                  marks layouts saved since the workflow
+//                                       toolbar ('standard') renders
+//
+// Profiles: the built-in ones below plus any an edition brings
+// (edition.profiles: { id, label, base, workflow?, workflows?, hosts?,
+// toolbars? }; docs/foundation/GUIDE.md, Profiles); an edition profile starts from its
+// base built-in profile and overrides what it names.
 //
 // A panel is in at most one host; a panel in no host is hidden (Window >
 // Panels shows it again with showPanel). Tab order = access-bar order.
@@ -39,7 +48,13 @@ export const PANEL_IDS = Object.freeze([
 ]);
 export const TOOLBAR_IDS = Object.freeze(['standard', 'markup', 'measure', 'properties', 'navigation', 'status', 'menu']);
 export const TOOLBAR_DOCKS = Object.freeze(['top', 'left', 'right', 'bottom']);
-export const PROFILE_IDS = Object.freeze(['oculith', 'oculithAdvanced', 'quantityTakeoff', 'document']);
+export const BUILTIN_PROFILE_IDS = Object.freeze(['oculith', 'basic', 'reviewer', 'oculithAdvanced', 'quantityTakeoff', 'document']);
+const EDITION_PROFILES = (edition.profiles || []).filter((p) => !BUILTIN_PROFILE_IDS.includes(p.id));
+export const PROFILE_IDS = Object.freeze([...BUILTIN_PROFILE_IDS, ...EDITION_PROFILES.map((p) => p.id)]);
+/** Label key (or text) of a profile: an edition profile names its own. */
+export function profileLabelKey(id) {
+  return EDITION_PROFILES.find((p) => p.id === id)?.label || `common:panelHost.profile.${id}`;
+}
 export const DEFAULT_PROFILE = 'oculith';
 export const SIZE_LIMITS = Object.freeze({ side: Object.freeze([200, 520]), bottom: Object.freeze([140, 520]) });
 // Old WORKSPACE_PROFILES (workspaceProfiles.js) → new profile ids (spec R12).
@@ -58,7 +73,7 @@ const BOTTOM_TABS = ['markupsList', 'quantities'];
 const host = (tabs, active, size, collapsed) => ({ tabs: [...tabs], active, size, collapsed });
 const without = (list, id) => list.filter((x) => x !== id);
 
-function toolbars({ standard = false, markup = true, measure = true } = {}) {
+function toolbars({ standard = true, markup = true, measure = true } = {}) {
   return {
     standard: { visible: standard },
     markup: { visible: markup, dock: 'right', order: 0 },
@@ -71,7 +86,8 @@ function toolbars({ standard = false, markup = true, measure = true } = {}) {
   };
 }
 
-// Built-in profiles (spec §5 table).
+// Built-in profiles (spec §5 table). Each opens the workflow toolbar on one
+// workflow tab and may limit the tabs it shows (null = every workflow).
 const PROFILES = {
   oculith: () => ({
     hosts: {
@@ -80,6 +96,30 @@ const PROFILES = {
       bottom: host(BOTTOM_TABS, 'markupsList', 230, false),
     },
     toolbars: toolbars(),
+    workflow: 'markup',
+    workflows: null,
+  }),
+  // The essentials: review, simple markup and measuring, pages and output.
+  basic: () => ({
+    hosts: {
+      left: host(LEFT_ORDER, 'thumbnails', 260, false),
+      right: host([], null, 300, true),
+      bottom: host(BOTTOM_TABS, 'markupsList', 230, true),
+    },
+    toolbars: toolbars({ markup: false, measure: false }),
+    workflow: 'review',
+    workflows: ['review', 'markup', 'measure', 'sheets', 'output', 'view'],
+  }),
+  // Drawing review: comments, compare, the Properties panel at the right.
+  reviewer: () => ({
+    hosts: {
+      left: host(without(LEFT_ORDER, 'properties'), 'thumbnails', 260, false),
+      right: host(['properties'], 'properties', 300, false),
+      bottom: host(BOTTOM_TABS, 'markupsList', 230, false),
+    },
+    toolbars: toolbars({ measure: false }),
+    workflow: 'review',
+    workflows: ['review', 'markup', 'compare', 'sheets', 'output', 'view'],
   }),
   oculithAdvanced: () => ({
     hosts: {
@@ -88,6 +128,8 @@ const PROFILES = {
       bottom: host(BOTTOM_TABS, 'markupsList', 230, false),
     },
     toolbars: toolbars({ standard: true }),
+    workflow: 'review',
+    workflows: null,
   }),
   quantityTakeoff: () => ({
     hosts: {
@@ -96,6 +138,8 @@ const PROFILES = {
       bottom: host(BOTTOM_TABS, 'quantities', 260, false),
     },
     toolbars: toolbars({ standard: true, markup: false }),
+    workflow: 'takeoff',
+    workflows: null,
   }),
   document: () => ({
     hosts: {
@@ -104,8 +148,35 @@ const PROFILES = {
       bottom: host(BOTTOM_TABS, 'markupsList', 230, true),
     },
     toolbars: toolbars({ markup: false, measure: false }),
+    workflow: 'sheets',
+    workflows: ['sheets', 'compare', 'output', 'review', 'view'],
   }),
 };
+
+// An edition profile: its base built-in profile with the hosts, toolbars and
+// workflows it names. Unknown panels in its hosts are ignored.
+function editionProfile(def) {
+  const base = PROFILES[BUILTIN_PROFILE_IDS.includes(def.base) ? def.base : DEFAULT_PROFILE]();
+  for (const h of HOSTS) {
+    const o = def.hosts?.[h];
+    if (!o) continue;
+    const hs = base.hosts[h];
+    if (Array.isArray(o.tabs)) hs.tabs = o.tabs.filter((id) => PANEL_IDS.includes(id));
+    if (typeof o.active === 'string' && PANEL_IDS.includes(o.active)) {
+      if (!hs.tabs.includes(o.active)) hs.tabs.push(o.active);
+      hs.active = o.active;
+    }
+    if (o.size !== undefined) hs.size = clampHostSize(h, o.size);
+    if (typeof o.collapsed === 'boolean') hs.collapsed = o.collapsed;
+  }
+  for (const [id, visible] of Object.entries(def.toolbars || {})) {
+    if (base.toolbars[id] && typeof visible === 'boolean') base.toolbars[id].visible = visible;
+  }
+  if (typeof def.workflow === 'string') base.workflow = def.workflow;
+  if (Array.isArray(def.workflows)) base.workflows = [...def.workflows];
+  return base;
+}
+for (const def of EDITION_PROFILES) PROFILES[def.id] = () => editionProfile(def);
 
 const isHost = (h) => HOSTS.includes(h);
 const isPanel = (id) => PANEL_IDS.includes(id);
@@ -136,6 +207,9 @@ export function createProfileLayout(name = DEFAULT_PROFILE, profileSizes = {}) {
     profileSizes: clone(profileSizes || {}),
     // The panels this layout has seen: one added later is placed once.
     knownPanels: [...PANEL_IDS],
+    workflow: def.workflow ?? null,
+    workflows: def.workflows ? [...def.workflows] : null,
+    workflowBar: 1,
   };
 }
 
@@ -267,6 +341,12 @@ export function normalizeLayout(raw) {
     if ('order' in dst && Number.isInteger(src.order)) dst.order = src.order;
   }
   if (typeof tb.locked === 'boolean') base.toolbars.locked = tb.locked;
+  // Before the workflow toolbar rendered, the 'standard' flag drew nothing;
+  // such a layout takes the profile's default for it once.
+  if (raw.workflowBar !== 1) base.toolbars.standard.visible = createProfileLayout(base.profile).toolbars.standard.visible;
+  if (typeof raw.workflow === 'string' && raw.workflow) base.workflow = raw.workflow;
+  if (raw.workflows === null) base.workflows = null;
+  else if (Array.isArray(raw.workflows)) base.workflows = raw.workflows.filter((id) => typeof id === 'string' && id);
   base.autoHidePanelAccess = raw.autoHidePanelAccess === true;
   // A panel added since this layout was saved goes where the profile puts
   // it, once; a panel the user closed later stays closed. A layout from

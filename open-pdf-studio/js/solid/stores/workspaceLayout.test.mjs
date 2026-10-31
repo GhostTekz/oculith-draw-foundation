@@ -34,7 +34,9 @@ test('default layout is the Oculith profile', () => {
   assert.deepEqual([l.hosts.left.active, l.hosts.left.size, l.hosts.left.collapsed], ['toolChest', 300, false]);
   assert.deepEqual(l.hosts.right, { tabs: [], active: null, size: 300, collapsed: true });
   assert.deepEqual(l.hosts.bottom, { tabs: ['markupsList', 'quantities'], active: 'markupsList', size: 230, collapsed: false });
-  assert.equal(l.toolbars.standard.visible, false);
+  // The workflow toolbar ('standard') shows by default, on the Markup tab.
+  assert.equal(l.toolbars.standard.visible, true);
+  assert.deepEqual([l.workflow, l.workflows, l.workflowBar], ['markup', null, 1]);
   assert.deepEqual(l.toolbars.markup, { visible: true, dock: 'right', order: 0 });
   assert.deepEqual(l.toolbars.measure, { visible: true, dock: 'right', order: 1 });
   for (const id of ['properties', 'navigation', 'status', 'menu']) assert.equal(l.toolbars[id].visible, true, id);
@@ -69,7 +71,31 @@ test('every profile: panels unique and known, active inside its host, sizes in l
   assert.deepEqual([doc.hosts.left.active, doc.hosts.left.size], ['thumbnails', 260]);
   assert.equal(doc.hosts.bottom.collapsed, true);
   assert.equal(doc.hosts.right.collapsed, true);
-  assert.deepEqual([doc.toolbars.markup.visible, doc.toolbars.measure.visible, doc.toolbars.standard.visible], [false, false, false]);
+  assert.deepEqual([doc.toolbars.markup.visible, doc.toolbars.measure.visible, doc.toolbars.standard.visible], [false, false, true]);
+  assert.equal(doc.workflow, 'sheets');
+  // Basic: the essential workflows only, no side toolbars.
+  const basic = wl.createProfileLayout('basic');
+  assert.deepEqual(basic.workflows, ['review', 'markup', 'measure', 'sheets', 'output', 'view']);
+  assert.deepEqual([basic.workflow, basic.toolbars.markup.visible, basic.hosts.left.active], ['review', false, 'thumbnails']);
+  // Reviewer: review workflows and the Properties panel at the right.
+  const reviewer = wl.createProfileLayout('reviewer');
+  assert.ok(reviewer.workflows.includes('compare') && !reviewer.workflows.includes('takeoff'));
+  assert.deepEqual(reviewer.hosts.right.tabs, ['properties']);
+});
+
+test('workflow fields: kept when stored, and the old never-rendered standard flag is reset once', () => {
+  const stored = { ...wl.createProfileLayout('oculith'), workflow: 'measure', workflows: ['review', 'measure'] };
+  stored.toolbars.standard.visible = false;
+  const kept = wl.normalizeLayout(JSON.parse(JSON.stringify(stored)));
+  assert.deepEqual([kept.workflow, kept.workflows, kept.toolbars.standard.visible], ['measure', ['review', 'measure'], false]);
+  // Saved before the workflow toolbar rendered: its standard flag drew nothing.
+  const old = JSON.parse(JSON.stringify(stored));
+  delete old.workflowBar;
+  delete old.workflow;
+  delete old.workflows;
+  const migrated = wl.normalizeLayout(old);
+  assert.deepEqual([migrated.toolbars.standard.visible, migrated.workflow, migrated.workflowBar], [true, 'markup', 1]);
+  assert.equal(wl.profileLabelKey('basic'), 'common:panelHost.profile.basic');
 });
 
 test('movePanel between hosts, show/hide, active neighbour', () => {

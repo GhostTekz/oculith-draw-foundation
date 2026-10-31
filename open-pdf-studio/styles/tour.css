@@ -1,0 +1,64 @@
+/* Guided tours (js/tour/, solid/components/TourCoach.jsx): a spotlight on
+   the step's anchor and a small coach-mark card. The workspace stays usable
+   under them: only the card takes the pointer. */
+.tour-layer { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+.tour-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.32); }
+.tour-spotlight {
+  position: absolute;
+  border: 2px solid var(--ox-accent);
+  border-radius: var(--ox-r-sm);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.32);
+}
+.tour-card {
+  position: absolute;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  pointer-events: auto;
+  background: var(--theme-surface, var(--ox-surface-1));
+  color: var(--theme-text, var(--ox-text));
+  border: 1px solid var(--theme-border, var(--ox-line-2));
+  border-radius: var(--ox-r-md);
+  box-shadow: var(--ox-shadow-2);
+  font-family: var(--ox-font);
+  font-size: var(--ox-fs-md);
+  line-height: var(--ox-lh);
+}
+.tour-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 28px; padding-left: var(--ox-sp-3);
+  border-bottom: 1px solid var(--theme-border, var(--ox-line-2));
+  background: var(--ox-chrome, var(--theme-surface));
+  border-radius: var(--ox-r-md) var(--ox-r-md) 0 0;
+  user-select: none;
+}
+.tour-card-eyebrow {
+  color: var(--ox-accent-ink, var(--ox-accent)); font-family: var(--ox-font-mono);
+  font-size: var(--ox-fs-2xs); letter-spacing: var(--ox-tracking-caps); text-transform: uppercase;
+}
+.tour-card-close {
+  width: 28px; height: 27px; display: grid; place-items: center;
+  border: 0; background: none; color: var(--theme-text-secondary, var(--ox-text-2));
+  border-top-right-radius: var(--ox-r-md);
+}
+.tour-card-close:hover { background: var(--ox-danger-soft); color: var(--ox-danger-ink); }
+.tour-card-close:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ox-focus); }
+.tour-card-body { padding: var(--ox-sp-3) var(--ox-sp-3) var(--ox-sp-2); }
+.tour-card-body h3 { margin: 0 0 var(--ox-sp-1); font-size: var(--ox-fs-lg); font-weight: var(--ox-fw-bold); }
+.tour-card-body p { margin: 0 0 2px; color: var(--theme-text-secondary, var(--ox-text-2)); }
+.tour-card-footer {
+  display: flex; align-items: center; gap: var(--ox-sp-1);
+  padding: var(--ox-sp-2) var(--ox-sp-3) var(--ox-sp-3);
+}
+.tour-card-count { margin-right: auto; color: var(--theme-text-muted, var(--ox-text-3)); font-size: var(--ox-fs-xs); }
+.tour-btn {
+  height: var(--ox-control-sm); padding: 0 var(--ox-sp-2);
+  border: 1px solid var(--theme-input-border, var(--ox-line-3)); border-radius: var(--ox-r-xs);
+  background: var(--theme-input-bg, var(--ox-surface-2)); color: var(--theme-text, var(--ox-text));
+  font: inherit; font-size: var(--ox-fs-sm);
+}
+.tour-btn:hover:not(:disabled) { background: var(--theme-hover, var(--ox-surface-3)); }
+.tour-btn:disabled { color: var(--ox-text-disabled); }
+.tour-btn:focus-visible { outline: none; box-shadow: var(--ox-focus-ring); }
+.tour-btn-quiet { border-color: transparent; background: none; color: var(--theme-text-secondary, var(--ox-text-2)); }
+.tour-btn-primary { border-color: var(--ox-accent); background: var(--ox-accent); color: var(--ox-on-accent); }
+.tour-btn-primary:hover:not(:disabled) { background: var(--ox-accent-hover); }

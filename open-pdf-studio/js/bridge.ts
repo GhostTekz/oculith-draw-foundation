@@ -273,6 +273,8 @@ export {
   setItems as setLayerItems,
   setCountText as setLayerCountText,
   setEmptyMessage as setLayerEmptyMessage,
+  setLayerViewDiffers,
+  setLayerViewUnsupported,
 } from './solid/stores/panels/layersStore.js';
 
 export {

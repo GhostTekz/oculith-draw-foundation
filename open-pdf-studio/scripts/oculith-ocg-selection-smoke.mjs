@@ -461,6 +461,9 @@ try {
   await page.locator('.cad-dialog').waitFor();
   await page.locator('.cad-dialog .cad-input-wide').first().fill('/tmp/ocg-cad.dxf');
   await page.locator('.cad-dialog .cad-footer .pref-btn-primary').click();
+  // The dialog offers "Reset layers and continue"; cancelling keeps the view
+  // and explains why the export did not run.
+  await page.locator('#layer-selection-cancel').click();
   assert.match(await page.locator('.cad-dialog .cad-status-fout').innerText(), /native PDF layer selection/);
   await page.waitForTimeout(300); // the dialog's deferred layer scan must also stay off the native route
   assert.deepEqual(await page.evaluate(() => window.__nativeCalls.filter(call =>

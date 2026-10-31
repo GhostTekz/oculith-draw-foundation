@@ -8,7 +8,7 @@ import { scheduleVisible } from '../../stores/scheduleStore.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import {
   calibrateIcon, measureDistanceIcon, measureAreaIcon,
-  measurePerimeterIcon, measureAngleIcon, setScaleIcon,
+  measurePerimeterIcon, measureAngleIcon, setScaleIcon, detectScalesIcon,
   polylengthIcon, volumeIcon, arcLengthIcon, radius3Icon, addViewportIcon, quantitiesIcon, countIcon
 } from '../../data/ribbonIcons.js';
 import { runCommand } from '../../commands/registry.js';
@@ -42,6 +42,11 @@ export default function MeasureTab() {
           <RibbonButton id="measure-set-scale" title={tDialogs('setScale.title')}
             icon={setScaleIcon} label={tDialogs('setScale.title')}
             disabled={unavailable()} onClick={() => runCommand('tools.measure.setScale')} />
+          {/* Detect Scales: read the scale notes of every sheet and review
+              them; nothing is applied until confirmed. */}
+          <RibbonButton id="measure-detect-scales" title={tDialogs('scaleReview.detectAllTitle')}
+            icon={detectScalesIcon} label={tDialogs('scaleReview.ribbon')}
+            disabled={unavailable()} onClick={() => runCommand('tools.measure.detectScales')} />
           {/* Add Viewport: drag a rectangle that has its own scale (a named
               viewport). The whole-page case is the page scale above. */}
           <RibbonButton id="measure-add-viewport" title={t('comment.addViewportTitle')}

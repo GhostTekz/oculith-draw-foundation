@@ -9,6 +9,7 @@ import {
   PROFILE_IDS, LEGACY_PROFILE_MAP, activeProfile, applyProfile,
 } from './workspaceLayout.js';
 import { setActiveTab } from './ribbonStore.js';
+import { resetActiveWorkflow } from './workflowStore.js';
 
 export const WORKSPACE_PROFILES = PROFILE_IDS;
 
@@ -27,7 +28,9 @@ export function applyWorkspaceProfile(profile, persist = true) {
   const id = PROFILE_IDS.includes(profile) ? profile : LEGACY_PROFILE_MAP[profile];
   if (!id) return false;
   applyProfile(id, { persist });
-  setActiveTab(RIBBON_TAB[id]);
+  // The workflow toolbar opens on the profile's own workflow.
+  resetActiveWorkflow({ persist });
+  setActiveTab(RIBBON_TAB[id] || 'drawing');
   return true;
 }
 

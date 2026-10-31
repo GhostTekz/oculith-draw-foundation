@@ -119,6 +119,13 @@
   "scaleNotSet": "Schaal niet ingesteld",
   "scaleRegions": "+ schaalgebieden",
   "scaleTitle": "Tekenschaal van deze pagina. Schaalgebieden gaan voor waar ze getekend zijn. Klik om de schaal in te stellen.",
+  "scaleDetectedViews": "{{count}} aanzichtschalen gevonden: controleren?",
+  "scalePendingViews": "+ {{count}} te controleren",
+  "scaleDetectedTitle": "Gelezen uit {{source}} ({{confidence}}% zekerheid). Nog niet toegepast: metingen en totalen blijven Schaal niet ingesteld. Klik om te controleren.",
+  "scaleDetectedPlainTitle": "Er staat een schaal in de tekeningtekst. Nog niet toegepast: metingen en totalen blijven Schaal niet ingesteld. Klik om de schaal in te stellen.",
+  "scaleSetSourceTitle": "Schaal {{ratio}}, bevestigd uit {{source}}. Klik om hem te wijzigen.",
+  "scalePendingTitle": "{{count}} aanzichtschaal/schalen van het blad zijn nog niet toegepast. Klik om te controleren.",
+  "scaleNotSetTitle": "Schaal niet ingesteld: metingen blijven in pagina-eenheden. Klik om de schaal in te stellen of te kalibreren.",
   "snapToggles": {
     "group": "Tekenhulpen",
     "content": "Inhoud",

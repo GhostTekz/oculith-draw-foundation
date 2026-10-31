@@ -140,7 +140,8 @@ test('PDF summary renders second Number without changing first Number Formula', 
   assert.equal(rows[0].customNumberValue2, '0.5');
   const result = await reopen(await buildMarkupSummaryPdf({ sourcePath: 'plan.pdf', rows,
     customNumberColumn: first, customSecondNumberColumn: second,
-    customFormulaColumn: formula }, fontBytes));
+    customFormulaColumn: formula, generatedAt: new Date('2026-10-13T20:00:00.000Z') }, fontBytes));
+  // A fixed clock keeps the generated timestamp free of the excluded row's "99".
   assert.match(result.text, /Quantity: -7.25/u);
   assert.match(result.text, /Unit cost: 0.5/u);
   assert.match(result.text, /Estimate: -14.5/u);

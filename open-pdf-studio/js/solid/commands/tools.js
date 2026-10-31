@@ -10,7 +10,7 @@ import {
   textboxIcon, typewriterIcon, noteIcon, calloutIcon, highlightIcon, drawIcon, eraserIcon, cloudIcon,
   cloudPolylineIcon, lineIcon, arrowIcon, splineArrowIcon, polylineIcon, splineIcon, rectIcon, ellipseIcon,
   circleIcon, polygonIcon, arcIcon, lShapeIcon, hatchIcon, flagIcon, hyperlinkIcon, imageIcon, removeImageIcon,
-  calibrateIcon, setScaleIcon, addViewportIcon, measureDistanceIcon, polylengthIcon, measureAreaIcon,
+  calibrateIcon, setScaleIcon, detectScalesIcon, addViewportIcon, measureDistanceIcon, polylengthIcon, measureAreaIcon,
   measurePerimeterIcon, measureAngleIcon, volumeIcon, arcLengthIcon, radius3Icon, radiusIcon, diameterIcon,
   countIcon, dynamicFillIcon, conduitIcon, cableTrayIcon, quantitiesIcon, trimIcon, extendIcon, splitIcon, breakIcon, lengthenIcon, joinIcon, explodeIcon,
   arrayIcon, stampIcon, signatureIcon,
@@ -74,6 +74,11 @@ registerCommand({
   id: 'tools.measure.setScale', label: 'common:commands.tools.setScale', icon: setScaleIcon, category: 'tools.measure',
   enabled: editable, keywords: ['scale', 'ratio', 'calibrate'],
   run: () => import('../../annotations/measurement.js').then((m) => m.showSetScaleDialog()),
+});
+registerCommand({
+  id: 'tools.measure.detectScales', label: 'common:commands.tools.detectScales', icon: detectScalesIcon,
+  category: 'tools.measure', enabled: editable, keywords: ['scale', 'title block', 'viewport', 'detect', 'auto'],
+  run: () => import('../stores/dialogStore.js').then((m) => m.openDialog('scaleReview', {})),
 });
 toolCommand('tools.measure.addViewport', 'scaleRegion', 'addViewport', addViewportIcon, 'tools.measure',
   { keywords: ['viewport', 'scale region', 'detail'] });

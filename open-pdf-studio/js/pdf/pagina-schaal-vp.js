@@ -26,7 +26,7 @@
 // elke save vervangen, nooit verdubbeld. Andere viewports (CAD-plots, the external editor)
 // blijven precies staan.
 
-import { PDFName, PDFArray, PDFString, PDFBool, PDFNumber } from 'pdf-lib';
+import { PDFName, PDFArray, PDFString, PDFHexString, PDFBool, PDFNumber } from 'pdf-lib';
 import { PAGINA_SCHAAL_SLEUTEL, isEigenPaginaSchaal, geerfd, rechthoek, doorsnede } from './pdf-viewports.js';
 import { geldigeSchaal } from '../annotations/schaal-op-punt.js';
 import { ratioFromPixelsPerUnit } from '../annotations/scale-entry.js';
@@ -158,6 +158,7 @@ export function schrijfPaginaSchalen(pdfDocLib, pageScales, opties = {}) {
       });
       vp.set(PDFName.of(PAGINA_SCHAAL_SLEUTEL), PDFBool.True);
       if (schaal.method) vp.set(PDFName.of('OPS_Method'), PDFString.of(String(schaal.method)));
+      if (schaal.source) vp.set(PDFName.of('OPS_Source'), PDFHexString.fromText(String(schaal.source)));
       if (parsePrecision(schaal.precision, schaal.unit)) {
         vp.set(PDFName.of('OPS_Precision'), PDFString.of(String(schaal.precision)));
       }

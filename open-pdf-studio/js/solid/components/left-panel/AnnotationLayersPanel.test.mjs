@@ -151,16 +151,26 @@ test('de store schrijft markeringen op de annotaties van het document, zonder de
 
 // Vindbaarheid: "hoe maak ik een laag?" De tab Lagen toont de markeringslagen
 // bovenaan, met "Nieuwe laag" als knop met tekst; de lagen van de PDF zelf
-// staan eronder, alleen-lezen (K-001).
+// staan eronder, als weergave te schakelen (docs/foundation/PDF-LAYERS.md).
 const pdfLagen = lees('./panels/LayersPanel.jsx');
 const menu = lees('../ContextMenu.jsx');
 
-test('de sectie PDF-lagen blijft alleen-lezen (K-001)', () => {
+test('de sectie PDF-lagen schakelt de weergave via de selectie-API, niet via de PDF', () => {
   const sectie = pdfLagen.slice(pdfLagen.indexOf('id="layers-pdf-section"'));
-  assert.match(sectie, /<input type="checkbox" checked=\{layer\.visible\} disabled \/>/);
-  assert.match(sectie, /leftPanel\.layerToggleUnavailable/);
-  assert.doesNotMatch(pdfLagen, /onChange=/);
   assert.match(sectie, /leftPanel\.pdfLayersFromDrawing/);
+  // Oog, alleen-deze, alles aan/uit, filter, terug naar standaard.
+  for (const id of ['pdf-layers-filter', 'pdf-layers-show-all', 'pdf-layers-hide-all', 'pdf-layers-reset',
+    'pdf-layers-save-default']) assert.match(sectie, new RegExp(`id="${id}"`), id);
+  assert.match(sectie, /class="al-flag layer-list-eye"/);
+  assert.match(sectie, /class="al-flag layer-list-solo"/);
+  // Elke wijziging loopt via native-ocg-selection.js (wachtrij, caches, onthouden).
+  for (const fn of ['setNativeOcgVisibility', 'soloNativeOcg', 'setAllNativeOcg', 'resetNativeOcgSelection',
+    'saveNativeOcgSelectionAsDefault']) assert.match(pdfLagen, new RegExp(`m\\.${fn}\\(`), fn);
+  // De PDF-standaard alleen na een bevestiging.
+  const opslaan = pdfLagen.slice(pdfLagen.indexOf('const saveAsDefault'));
+  assert.ok(opslaan.indexOf('showConfirm') < opslaan.indexOf('saveNativeOcgSelectionAsDefault'));
+  // Een laag die niet te schakelen is, blijft uit.
+  assert.match(sectie, /disabled=\{!layer\.toggleable\}/);
 });
 
 test('"Nieuwe laag" is een knop met zichtbare tekst die meteen laat hernoemen', () => {

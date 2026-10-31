@@ -338,9 +338,13 @@ pub fn render_page_to_rgba_with_annotations(
         .use_lcd_text_rendering(true)
         .set_format(PdfBitmapFormat::BGRA);
     // Native OCG default visibility is honored by the bundled PDFium (see
-    // pdfium-worker/tests/ocg_visibility.rs). Interactive OCG switching is
-    // still unavailable: the render request and cache do not carry a selected
-    // visibility state, and LayersPanel keeps its controls disabled (K-001).
+    // pdfium-worker/tests/ocg_visibility.rs). A layer view chosen in the
+    // Layers panel reaches this page as an in-memory render copy whose
+    // default configuration lists the chosen groups (ocg-render-copy); the
+    // render request carries that visibility and the pixmap cache never
+    // serves a default-state render for it (lookup_for_render). PDFs the
+    // copy cannot be built for are detected before a change
+    // (js/pdf/native-ocg-support.js), and the panel disables its toggles.
 
     if let Some(show) = annot_appearance {
         apply_annotation_appearance(&page, &show.names, &show.indices)?;

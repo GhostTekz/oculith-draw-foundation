@@ -49,7 +49,7 @@ When no document is open, the work area says "No PDF Selected". Use **File ▸ O
 
 ## The window
 
-From top to bottom, the window has a menu bar, the properties bar, the document tabs, the work area with its panels and toolbars, the navigation bar, the bottom panel and the status bar.
+From top to bottom, the window has a menu bar, the workflow toolbar, the properties bar, the document tabs, the work area with its panels and toolbars, the navigation bar, the bottom panel and the status bar.
 
 ### Title bar and menu bar
 
@@ -57,10 +57,10 @@ The menu bar is merged with the window title row: the Oculith logo, the menus, a
 
 The menus are:
 
-- **Oculith**: About, Preferences (Ctrl+K or Ctrl+,), Profiles, Keyboard Shortcuts, Exit.
+- **Oculith**: About, Preferences (Ctrl+,), Profiles, Keyboard Shortcuts, Exit.
 - **File**: New, Open, Open Recent, Combine, Close, Close All, Save, Save As, Import, Export (PDF export, Raster PDF, To CAD, IFC Report), Email, Annotate Screenshot, Print.
 - **Edit**: Undo, Redo, Undo History; Cut, Copy, Paste, Paste in Place, Duplicate, Move, Multiply, Offset; Delete, Clear Page Markups, Clear All Markups; Pan, Select, Select Area, Lasso, Select All, Deselect, selection cycling; Snapshot, Screenshot, Vector Snippet, Format Painter, Group and Ungroup; Arrange, Format, Image; PDF Content (Edit Text, Add Text); Redaction; Find.
-- **View**: zoom and fit, page modes, Rotate View, Go To, Previous and Next View, split views and Sync, grid and snaps, Dark Mode, Dimmer, Theme, Disable Line Weights, Reader Mode, Show Keystrokes, and the bars.
+- **View**: zoom and fit, page modes, Rotate View, Go To, Previous and Next View, split views and Sync, grid and snaps, Dark Mode, Dimmer, Theme, Disable Line Weights, Reader Mode, Show Keystrokes, Workflow (one entry per workflow tab), and the bars.
 - **Document**: Document Properties, Page Setup, Rotate Pages, Insert, Extract, Delete and Reorder Pages, Crop, Shift Page, Deskew, Page Labels, Headers & Footers, Watermark, Compare Documents, OCR, Reduce File Size, Flatten, Unflatten.
 - **Batch**: Combine and the batch operations (see [Batch operations](#batch-operations)).
 - **Tools**: Markup, Stamp, Measure, Raceway, Sketch to Scale, Form, Signature, Hyperlink, File Attachment, Attach Photo, View Photos, File Attachments panel, Visual Search, Toolbars, Reuse, Line Styles.
@@ -69,20 +69,22 @@ The menus are:
 
 Alt plus the first letter opens a menu (Alt+O, F, E, V, D, W, H). F9 shows or hides the menu bar.
 
-**Help ▸ Find Tools + Commands** (Ctrl+Shift+P) opens a search box over every command. Type part of a name, then press Enter to run the first match.
+**Help ▸ Find Tools + Commands** (Ctrl+K, Cmd+K on macOS, or Ctrl+Shift+P) opens the command palette: one search box over every command, tool, panel and workflow tab (an add-on's commands too), the pages of the open drawing (type a page number or a sheet label such as E-101), the other open documents, recent files and add-on tools. Each row shows where the command lives and its shortcut. With an empty box the commands you used last come first; commands you use often rise in the results. The search forgives a skipped letter and matches initials ("ep" finds Extract Pages). Arrow keys move, Enter runs, Alt+Enter (or the pin button) adds the command to Quick Access, Esc closes.
 
 **Help ▸ Extensions** installs, reloads and removes `.oppx` extension packages, a mechanism inherited from Open PDF Studio.
 
 ### Profiles
 
-A profile restores a full workspace: which panels are open and where, their sizes, and which toolbars show. Switch profiles in **Oculith ▸ Profiles** or from the Profile button on the navigation bar.
+A profile restores a full workspace: which panels are open and where, their sizes, which toolbars show, which workflow tabs the workflow toolbar shows and which one it opens on. Switch profiles in **Oculith ▸ Profiles** or from the Profile button on the navigation bar. An add-on can bring its own profiles.
 
-| Profile | Layout |
-|---|---|
-| Oculith (default) | Tool Chest open on the left, markup and measure toolbars on the right, Markups List at the bottom |
-| Oculith Advanced | Thumbnails on the left, Properties panel on the right, Markups List at the bottom, Standard toolbar shown |
-| Quantity Takeoff | Measurements on the left, Measure toolbar on the right, Markups List and Quantities at the bottom |
-| Document | Thumbnails on the left, bottom panel collapsed |
+| Profile | Layout | Workflow tabs |
+|---|---|---|
+| Oculith (default) | Tool Chest open on the left, markup and measure toolbars on the right, Markups List at the bottom | All; opens on Markup |
+| Basic | Thumbnails on the left, no side toolbars, bottom panel collapsed | Review, Markup, Measure, Sheets, Output, View |
+| Reviewer | Thumbnails on the left, Properties panel on the right, Markups List at the bottom | Review, Markup, Compare, Sheets, Output, View |
+| Oculith Advanced | Thumbnails on the left, Properties panel on the right, Markups List at the bottom | All; opens on Review |
+| Quantity Takeoff | Measurements on the left, Measure toolbar on the right, Markups List and Quantities at the bottom | All; opens on Takeoff |
+| Document | Thumbnails on the left, bottom panel collapsed | Sheets, Compare, Output, Review, View |
 
 Panel sizes are remembered per profile.
 
@@ -90,9 +92,30 @@ Panel sizes are remembered per profile.
 
 - **Properties toolbar**: directly under the menu bar. Its contents follow what is selected; see [Properties bar](#properties-bar-and-properties-panel).
 - **Markup, Draw and Measure toolbars**: vertical, on the right edge. Markup has Text Box, Callout, Note, Highlight, Pen, Eraser, Cloud, Stamp, Snapshot, Hyperlink and Count. Draw has Line, Arrow, Polyline, Rectangle, Ellipse, Polygon, Arc, Conduit Run and Cable Tray Run. Measure has Length, Polylength, Area, Perimeter, Angle, Volume and Dynamic Fill. An overflow button holds the tools that do not fit.
-- **Standard toolbar**: an optional horizontal row with file and edit commands.
+- **Workflow toolbar**: directly under the menu bar. See [Workflow toolbar](#workflow-toolbar).
 
 Show or hide each one in **Tools ▸ Toolbars**.
+
+### Workflow toolbar
+
+The workflow toolbar groups the tools by the job at hand. Its top row holds the workflow tabs; the row below holds the tools of the selected tab in named groups, each tool with its icon and label.
+
+| Tab | Groups |
+|---|---|
+| Review | Select, Comment (Note, Text Box, Callout, Highlight, Cloud, Stamp, Flag), Attach, Find |
+| Markup | Shapes, Freehand, Text, Style (Format Painter, Line Styles, Reuse, Tool Chest), Sketch to Scale |
+| Measure | Scale (Calibrate, Set Scale, Detect Scales, Viewport), Length, Area, Angles, Results |
+| Takeoff | Count, Runs (Conduit, Cable Tray, Polylength, Area), Quantities, Find |
+| Sheets | Navigate (Thumbnails, Drawing Set, Bookmarks, Page Labels), Pages, Page Setup, Links |
+| Compare | Compare Documents and Slip Sheet, Split View and Sync, Layers |
+| Output | Save and Print, Export, Finish (Flatten, Reduce, Redaction, Watermark, Headers & Footers), Batch |
+| View | Zoom, Page Layout, Display (Dark Mode, Dimmer, Thin Lines, Reader Mode), Grid and Snap, Window |
+
+While markups are selected, a **Selection** tab appears in the accent colour with Edit, Style, Arrange and Group; while an image is selected, an **Image** tab. Their properties stay in the properties bar below. When the row is too narrow, the last groups show their icons only, and then the last tools move into **More**. Hover a tool for its name and shortcut. The fold button at the right hides the tool row and keeps the tabs.
+
+**Quick Access**, at the right end of the tab row, holds the commands you pin: right-click any tool on the workflow toolbar or the vertical toolbars and choose **Add to Quick Access**, or press Alt+Enter in the command palette. Right-click a Quick Access button to remove it or move it; the ▾ menu lists them and resets the default set (Open, Save, Undo, Redo, Print). Next to it, the search box opens the command palette.
+
+An add-on can add its own workflow tab (and a matching submenu in **Tools**).
 
 ### Panel hosts
 
@@ -585,7 +608,15 @@ Markup layers group markups so you can show, hide, print or lock them together. 
 
 ## PDF layers
 
-The bottom section of the Layers panel lists the PDF's own layers (optional content groups that switch page content, such as CAD layers). Switching them on and off is not available yet; the list is read-only. A PDF without its own layers says so and points to Markup Layers.
+The bottom section of the Layers panel lists the PDF's own layers (optional content groups that switch page content, such as CAD layers). A PDF without its own layers says so and points to Markup Layers.
+
+- Click the eye next to a layer to show or hide it, or the eye next to a group heading for every layer in the group.
+- **Show only this layer** (the target button on hover) hides every other drawing layer, for example to look at the electrical layers without the architectural background.
+- The section toolbar has a name filter, **Show all**, **Hide all** (on the filtered layers when a filter is typed), **Reset to the PDF's default layers** and **Save layer visibility as the PDF default**.
+- The layers you show or hide are a view. The app remembers it per document; Save keeps the PDF's own layer settings unless you choose **Save layer visibility as the PDF default**.
+- Display, thumbnails, print, image and raster PDF export, screenshots, snapping and measuring follow the view. Extract Pages, PDF/X export and CAD export ask first: reset the layers and continue, or export a raster copy where offered. Text search still finds text on hidden layers.
+
+[PDF layers](PDF-LAYERS.md) lists every output route and the current limits.
 
 **Element Visibility** (Window ▸ Panels) is a separate view filter: per markup type, toggle visibility, halftone (dim) or a tint colour. It changes the view only.
 
@@ -866,7 +897,7 @@ Markups on hidden or non-printing layers are left out.
 
 ### Preferences
 
-**Oculith ▸ Preferences** (Ctrl+K) has these tabs:
+**Oculith ▸ Preferences** (Ctrl+,) has these tabs:
 
 - **General**: theme, interface language, author name, restore last session, PrtScn screenshot capture, and the **AI link (MCP)** switch and port.
 - **Annotations**: default colour, line width, font size, highlight opacity, and defaults for text boxes, callouts, highlights, notes, shapes, drawing and measurements.
@@ -933,8 +964,8 @@ The **AI link (MCP)** lets an AI assistant or a test tool on the same computer o
 | Ctrl+W | Close |
 | Ctrl+P | Print |
 | Ctrl+D | Document Properties |
-| Ctrl+K or Ctrl+, | Preferences |
-| Ctrl+Shift+P | Find Tools + Commands |
+| Ctrl+, | Preferences |
+| Ctrl+K or Ctrl+Shift+P | Find Tools + Commands |
 | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | Undo / Redo |
 | Ctrl+Shift+H | Undo History |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / Copy / Paste |

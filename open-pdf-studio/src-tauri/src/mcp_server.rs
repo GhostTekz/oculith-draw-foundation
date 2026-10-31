@@ -43,6 +43,7 @@ use axum::{
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+use crate::mcp_addon_tools::{self, AddonRegister, AddonTool};
 use crate::mcp_app_bridge::{self, McpAppBridge};
 use crate::mcp_tool_meta::{beschikbaar, meta, Profiel};
 
@@ -64,6 +65,8 @@ pub struct AppState {
     pub profiel: Profiel,
     /// De poort waarop we luisteren; de Host-kop moet daarbij passen.
     pub poort: u16,
+    /// Tools an installed add-on registered (see mcp_addon_tools.rs).
+    pub addons: Arc<AddonRegister>,
 }
 
 impl AppState {
@@ -75,6 +78,7 @@ impl AppState {
             app_handle,
             profiel,
             poort,
+            addons: mcp_addon_tools::globaal(),
         }
     }
 }
@@ -1253,6 +1257,12 @@ fn handle_tools_list() -> Value {
 /// annotaties die Claude gebruikt voor toestemming (lezen gaat zonder vragen,
 /// wijzigen vraagt altijd). Zie mcp_tool_meta.rs.
 pub fn tools_list_voor(profiel: Profiel) -> Value {
+    tools_list_met(profiel, &AddonRegister::new())
+}
+
+/// `tools_list_voor` plus the tools installed add-ons registered. Add-on
+/// tools are offered in both profiles; they carry their own annotations.
+pub fn tools_list_met(profiel: Profiel, addons: &AddonRegister) -> Value {
     let mut v = handle_tools_list();
     if let Some(tools) = v["tools"].as_array_mut() {
         tools.retain(|t| t["name"].as_str().map_or(false, |n| beschikbaar(n, profiel)));
@@ -1266,8 +1276,15 @@ pub fn tools_list_voor(profiel: Profiel) -> Value {
                 });
             }
         }
+        tools.extend(addons.descriptors());
     }
     v
+}
+
+/// May `naam` be called on this server: a built-in tool of the profile, or a
+/// registered add-on tool.
+fn aanroepbaar(state: &AppState, naam: &str) -> bool {
+    beschikbaar(naam, state.profiel) || state.addons.tool(naam).is_some()
 }
 
 /// Dispatch a `tools/call` request to the matching tool handler. Returns
@@ -1280,6 +1297,9 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, (i
         .and_then(|v| v.as_str())
         .unwrap_or("<missing>");
     let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
+    if let Some(tool) = state.addons.tool(name) {
+        return tool_addon_call(state, &tool, &arguments).await;
+    }
     match name {
         "list_test_pdfs" => tool_list_test_pdfs(state).await,
         "screenshot_page" => tool_screenshot_page(state, &arguments).await,
@@ -1400,6 +1420,27 @@ async fn tool_set_window_size(state: &AppState, arguments: &Value) -> Result<Val
         }],
         "isError": false,
     }))
+}
+
+/// The bridge request for an add-on tool: the WebView validates the
+/// arguments, asks the user before a tool that writes, runs it and logs it.
+/// A writing tool gets a long limit, so the user has time to decide.
+pub fn addon_verzoek(tool: &AddonTool, arguments: &Value) -> (&'static str, Value, Duration) {
+    let limiet = if tool.schrijft { Duration::from_secs(330) } else { Duration::from_secs(120) };
+    let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
+    ("mcp:addon-call", json!({ "name": tool.naam, "arguments": arguments }), limiet)
+}
+
+async fn tool_addon_call(state: &AppState, tool: &AddonTool, arguments: &Value) -> Result<Value, (i32, String)> {
+    let (event, payload, limiet) = addon_verzoek(tool, arguments);
+    let mut uit = tool_app_request(state, event, &payload, limiet).await?;
+    // The WebView answers { ok: false, error } for a refused, denied or
+    // failed call: report it to the client as a tool error.
+    let mislukt = uit["content"][0]["text"].as_str()
+        .and_then(|t| serde_json::from_str::<Value>(t).ok())
+        .map_or(false, |v| v["ok"] == false);
+    uit["isError"] = json!(mislukt);
+    Ok(uit)
 }
 
 /// Generic dispatch for the `app_*` tools that drive the LIVE WebView via
@@ -1844,12 +1885,12 @@ async fn mcp_handler(
 
     let response = match method {
         "initialize" => rpc_result(id, handle_initialize()),
-        "tools/list" => rpc_result(id, tools_list_voor(state.profiel)),
+        "tools/list" => rpc_result(id, tools_list_met(state.profiel, &state.addons)),
         "tools/call" => {
             let empty = Value::Null;
             let params = body.get("params").unwrap_or(&empty);
             let naam = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            if !beschikbaar(naam, state.profiel) {
+            if !aanroepbaar(&state, naam) {
                 rpc_error(
                     id,
                     jsonrpc_error::INVALID_PARAMS,
@@ -1898,6 +1939,7 @@ pub async fn start(
         app_handle,
         profiel: Profiel::Ontwikkeling,
         poort: port,
+        addons: mcp_addon_tools::globaal(),
     };
 
     let addr: SocketAddr = format!("127.0.0.1:{port}")
@@ -2215,6 +2257,7 @@ mod tests {
             app_handle: None,
             profiel: Profiel::Ontwikkeling,
             poort: 9223,
+            addons: Arc::new(AddonRegister::new()),
         };
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -2289,7 +2332,7 @@ mod tests {
         pdfs.sort_by_key(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(u64::MAX));
         let smallest = pdfs.first().expect("no pdfs in corpus").clone();
 
-        let state = AppState { test_pdfs_dir: std::sync::Arc::new(corpus), app_handle: None, profiel: Profiel::Ontwikkeling, poort: 9223 };
+        let state = AppState { test_pdfs_dir: std::sync::Arc::new(corpus), app_handle: None, profiel: Profiel::Ontwikkeling, poort: 9223, addons: Arc::new(AddonRegister::new()) };
         let args = serde_json::json!({
             "path": smallest.to_string_lossy(),
             "page_index": 0,
@@ -2342,6 +2385,7 @@ mod tests {
             app_handle: None,
             profiel: Profiel::Ontwikkeling,
             poort: 9223,
+            addons: Arc::new(AddonRegister::new()),
         };
         let args = serde_json::json!({ "path": pdf.to_string_lossy() });
         let result = tool_get_pdf_metadata(&state, &args).await.expect("metadata ok");
@@ -2394,7 +2438,7 @@ mod tests {
             .expect("no pdfs in corpus")
             .clone();
 
-        let state = AppState { test_pdfs_dir: std::sync::Arc::new(corpus), app_handle: None, profiel: Profiel::Ontwikkeling, poort: 9223 };
+        let state = AppState { test_pdfs_dir: std::sync::Arc::new(corpus), app_handle: None, profiel: Profiel::Ontwikkeling, poort: 9223, addons: Arc::new(AddonRegister::new()) };
         let args = serde_json::json!({
             "path": smallest.to_string_lossy(),
             "width": 200
@@ -2524,6 +2568,7 @@ mod tests {
             app_handle: None,
             profiel: Profiel::Ontwikkeling,
             poort: 9223,
+            addons: Arc::new(AddonRegister::new()),
         };
         for (name, args) in [
             ("app_mouse_move",  serde_json::json!({"x": 100, "y": 100})),
@@ -2542,5 +2587,89 @@ mod tests {
                 "{name} message should explain missing AppHandle, got: {msg}"
             );
         }
+    }
+
+    fn addon_tool(naam: &str, schrijft: bool) -> Value {
+        json!({
+            "name": naam, "title": "Add-on tool", "description": "Reads or writes something.",
+            "inputSchema": { "type": "object", "properties": { "page": { "type": "integer" } } },
+            "writes": schrijft,
+        })
+    }
+
+    fn state_met(addons: Arc<AddonRegister>, profiel: Profiel) -> AppState {
+        AppState {
+            test_pdfs_dir: Arc::new(PathBuf::from(".")),
+            app_handle: None,
+            profiel,
+            poort: 9223,
+            addons,
+        }
+    }
+
+    #[test]
+    fn addon_tools_staan_in_de_lijst_van_beide_profielen() {
+        let r = AddonRegister::new();
+        r.vervang(1, &[addon_tool("addon_ab_read", false), addon_tool("addon_ab_write", true)],
+            |n| meta(n).is_some()).unwrap();
+        for profiel in [Profiel::Publiek, Profiel::Ontwikkeling] {
+            let v = tools_list_met(profiel, &r);
+            let arr = v["tools"].as_array().unwrap();
+            let lees = arr.iter().find(|t| t["name"] == "addon_ab_read").expect("read tool listed");
+            assert_eq!(lees["annotations"]["readOnlyHint"], true);
+            let schrijf = arr.iter().find(|t| t["name"] == "addon_ab_write").expect("write tool listed");
+            assert_eq!(schrijf["annotations"]["destructiveHint"], true);
+            assert_eq!(arr.len(), tools_list_voor(profiel)["tools"].as_array().unwrap().len() + 2);
+        }
+        // Without add-ons the public list is the published one.
+        assert!(!tools_list_voor(Profiel::Publiek)["tools"].as_array().unwrap().iter()
+            .any(|t| t["name"].as_str().unwrap_or_default().starts_with(mcp_addon_tools::PREFIX)));
+    }
+
+    #[test]
+    fn addon_tool_mag_geen_ingebouwd_gereedschap_overschrijven() {
+        // A built-in name never passes the namespace check, and the
+        // collision check is the second line of defence.
+        let r = AddonRegister::new();
+        assert!(r.vervang(1, &[addon_tool("app_undo", true)], |n| meta(n).is_some()).is_err());
+        for m in crate::mcp_tool_meta::TOOLS {
+            assert!(!mcp_addon_tools::geldige_naam(m.naam), "{} looks like an add-on tool", m.naam);
+        }
+    }
+
+    #[test]
+    fn addon_aanroep_gaat_via_de_brug() {
+        let r = AddonRegister::new();
+        r.vervang(1, &[addon_tool("addon_ab_read", false), addon_tool("addon_ab_write", true)],
+            |n| meta(n).is_some()).unwrap();
+        let lees = r.tool("addon_ab_read").unwrap();
+        let (event, payload, limiet) = addon_verzoek(&lees, &json!({ "page": 2 }));
+        assert_eq!(event, "mcp:addon-call");
+        assert_eq!(payload, json!({ "name": "addon_ab_read", "arguments": { "page": 2 } }));
+        assert!(limiet < Duration::from_secs(300));
+        let schrijf = r.tool("addon_ab_write").unwrap();
+        let (_, payload, limiet) = addon_verzoek(&schrijf, &Value::Null);
+        assert_eq!(payload["arguments"], json!({}));
+        assert!(limiet >= Duration::from_secs(300), "time for the user to approve");
+    }
+
+    #[tokio::test]
+    async fn addon_aanroep_zonder_app_en_onbekende_addon() {
+        let r = Arc::new(AddonRegister::new());
+        r.vervang(1, &[addon_tool("addon_ab_read", false)], |n| meta(n).is_some()).unwrap();
+        let state = state_met(r.clone(), Profiel::Publiek);
+        assert!(aanroepbaar(&state, "addon_ab_read"));
+        assert!(!aanroepbaar(&state, "addon_ab_missing"));
+        assert!(!aanroepbaar(&state, "app_get_recent_console"), "dev tool stays out of the public profile");
+        // A registered tool is routed to the WebView (absent in this test).
+        let (_, msg) = handle_tools_call(&state, &json!({ "name": "addon_ab_read", "arguments": {} }))
+            .await.unwrap_err();
+        assert!(msg.contains("AppHandle unavailable"), "{msg}");
+        // An unregistered add-on name is not a method.
+        let (code, _) = handle_tools_call(&state, &json!({ "name": "addon_ab_missing" })).await.unwrap_err();
+        assert_eq!(code, jsonrpc_error::METHOD_NOT_FOUND);
+        // Removing the add-on removes the tool.
+        r.vervang(1, &[], |_| false).unwrap();
+        assert!(!aanroepbaar(&state, "addon_ab_read"));
     }
 }
