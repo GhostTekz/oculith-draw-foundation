@@ -349,6 +349,7 @@ js/sets/sheet-register.test.mjs
 js/sets/slip-sheet.test.mjs
 js/ui/panels/markup-search.test.mjs
 js/ui/panels/markups-dock-count.test.mjs
+js/ui/panels/thumbnail-tile.test.mjs
 js/ui/panels/markup-column-sort.test.mjs
 js/ui/panels/markup-saved-filters.test.mjs
 scripts/unit-test-list-coverage.test.mjs

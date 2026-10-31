@@ -17,13 +17,19 @@ export const THUMBNAIL_DEFER_MS = 500;
  */
 export const THUMBNAIL_RENDER_TIMEOUT_MS = 8_000;
 
-/** Defer hidden thumbnails except pages visible in the detached view. */
+/**
+ * Defer hidden thumbnails except pages visible in the detached view. The
+ * view reports either a page set (`pages`, a filtered grid) or a `start`/`end` run.
+ */
 export function partitionThumbnailInvalidations(pageNums, panelShown, detachedRange) {
   if (panelShown) return { immediate: [...pageNums], deferred: [] };
   const immediate = [];
   const deferred = [];
+  const visible = (pageNum) => (detachedRange?.pages instanceof Set
+    ? detachedRange.pages.has(pageNum)
+    : !!detachedRange && pageNum >= detachedRange.start && pageNum <= detachedRange.end);
   for (const pageNum of pageNums) {
-    if (detachedRange && pageNum >= detachedRange.start && pageNum <= detachedRange.end) immediate.push(pageNum);
+    if (visible(pageNum)) immediate.push(pageNum);
     else deferred.push(pageNum);
   }
   return { immediate, deferred };

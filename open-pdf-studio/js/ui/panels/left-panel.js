@@ -59,14 +59,14 @@ export function cachedThumbnailForDocument(docId, pageNum) {
   return thumbnailCache.get(docId)?.get(pageNum) || null;
 }
 
-/** Prioritize the bounded range visible in the separate thumbnail window. */
-export function setDetachedThumbnailRange(docId, start, end) {
-  detachedVisibleRange = docId && Number.isSafeInteger(start) && Number.isSafeInteger(end)
-    ? { docId, start: Math.max(1, start), end: Math.min(start + 23, end) } : null;
+/** Prioritize the bounded set of pages visible in the separate thumbnail window. */
+export function setDetachedThumbnailPages(docId, pages) {
+  const wanted = Array.isArray(pages)
+    ? pages.filter((page) => Number.isSafeInteger(page) && page >= 1).slice(0, 48) : [];
+  detachedVisibleRange = docId && wanted.length ? { docId, pages: new Set(wanted) } : null;
   const deferred = deferredThumbnailPages.get(docId);
   if (deferred && detachedVisibleRange) {
-    const visible = [...deferred].filter((page) => page >= detachedVisibleRange.start
-      && page <= detachedVisibleRange.end);
+    const visible = [...deferred].filter((page) => detachedVisibleRange.pages.has(page));
     for (const page of visible) deferred.delete(page);
     if (!deferred.size) deferredThumbnailPages.delete(docId);
     if (visible.length) invalidateThumbnails(visible);
@@ -207,9 +207,8 @@ function updateVisiblePriorities() {
   });
 
   if (detachedVisibleRange?.docId === activeDoc.id && docState) {
-    for (let pageNum = detachedVisibleRange.start;
-      pageNum <= Math.min(detachedVisibleRange.end, docState.numPages); pageNum++) {
-      if (!docCache.has(pageNum)) priorityPages.add(pageNum);
+    for (const pageNum of detachedVisibleRange.pages) {
+      if (pageNum <= docState.numPages && !docCache.has(pageNum)) priorityPages.add(pageNum);
     }
   }
 
