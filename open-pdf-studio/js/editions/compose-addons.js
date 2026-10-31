@@ -18,7 +18,7 @@ const CORE_PANELS = new Set([
 const CORE_SHORTCUTS = new Set(`V Shift+V L A R E C K Q T N P H S I W Shift+H Shift+F F G
   Shift+L Shift+C Shift+E Shift+N Shift+P M Shift+Alt+L Shift+Alt+Q Shift+Alt+A
   Shift+Alt+P Shift+Alt+V Shift+Alt+D Shift+Alt+U Shift+Alt+G Shift+Alt+C J
-  Ctrl+G Ctrl+Shift+G Ctrl+Shift+L Ctrl+Shift+C Shift+O O Ctrl+N Ctrl+O Ctrl+S
+  Ctrl+G Ctrl+J Ctrl+Shift+G Ctrl+Shift+L Ctrl+Shift+C Shift+O O Ctrl+N Ctrl+O Ctrl+S
   Ctrl+Shift+S Ctrl+P Ctrl+W Ctrl+D Ctrl+Shift+M Ctrl+Shift+U Ctrl+Shift+P
   Ctrl+Z Delete Ctrl+A Ctrl+X Ctrl+C Ctrl+V Ctrl+Shift+V Escape Shift+Space
   Ctrl+Shift+H Ctrl+= Ctrl+- Ctrl+0 Ctrl+1 Ctrl+2 Ctrl+5 Ctrl+Shift++ Ctrl+Shift+_
@@ -57,7 +57,7 @@ const CORE_COMMAND_IDS = new Set(`format.applyStyle format.applyStylePreset form
   tools.markup.image tools.markup.removeImage tools.measure.setScale tools.measure.detectScales tools.quantities
   tools.join tools.explode tools.stampEditor tools.parametricSymbol tools.reuse
   view.actualSize view.rotateLeft view.rotateRight view.firstPage view.previousPage
-  view.nextPage view.lastPage view.thinLines view.readerMode view.keystrokes
+  view.nextPage view.lastPage view.goToSheet view.thinLines view.readerMode view.keystrokes
   view.menuBar tools.visualSearch window.leftPanel window.hidePanels
   window.autoHidePanelAccess window.fullScreen tools.lineStyles`
   .split(/\s+/).filter(Boolean));

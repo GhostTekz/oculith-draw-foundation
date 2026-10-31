@@ -12,6 +12,8 @@ These checks catch mismatched or changed files. They do not establish who create
 
 An add-on may request `js/sets/register-context.js` from the host when that module is available. Its `drawingSetSnapshot()` function returns a frozen copy of the local drawing-set name, stable sheet IDs, labels, titles, current sources, earlier sources, and recorded PDF fingerprints. It exposes no register write method. Check `host.provides('js/sets/register-context.js')` before adding the module to `requires` when supporting older compatible editor builds. A recorded fingerprint describes the saved PDF bytes at the time of registration; add-ons must check the current file before treating a source as verified.
 
+For incoming drawing revisions, an add-on may read a PDF that is not open with `js/pdf/pdf-inspect.js` (`withPdfDocument(bytes, read)` hands `read` a PDF.js document and destroys it afterwards), read title blocks and match sheet IDs with `js/sets/sheet-title-suggest.js` and `js/sets/slip-sheet-match.js`, and read an .xlsx with `js/pdf/xlsx-read.js`. To record new revisions in the drawing set it opens the Slip Sheet confirmation with its rows through `js/solid/stores/dialogStore.js` (`openDialog('slipSheet', { files, rows, revision, onDone, onCancel })`); the set changes only when the user confirms there.
+
 An add-on can also add tools to the AI link (MCP) through `js/mcp/addon-tools.js`; see [Add-on tools for the AI link](ADDON-TOOLS.md).
 
 ## Install, update, and remove

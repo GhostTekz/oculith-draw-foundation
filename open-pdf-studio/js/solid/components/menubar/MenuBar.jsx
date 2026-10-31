@@ -24,6 +24,7 @@ import { lazyModule } from '../../commands/util.js';
 import { menuKeyAction, barKeyAction, edgeIndex, isNavigable } from './menuModel.js';
 import MenuPopup from './MenuPopup.jsx';
 import CommandPalette from '../CommandPalette.jsx';
+import GoToSheet from '../GoToSheet.jsx';
 import { AppLogo, WindowControls, hasDialogs } from '../TitleBar.jsx';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { isTauri } from '../../../core/platform.js';
@@ -334,6 +335,7 @@ export default function MenuBar() {
         </Portal>
       </Show>
       <CommandPalette />
+      <GoToSheet />
     </div>
   );
 }

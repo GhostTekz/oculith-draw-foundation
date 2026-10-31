@@ -147,7 +147,7 @@ export const MENUS = [
       'view.singlePage', 'view.continuous', 'view.sideBySide', 'view.continuousSideBySide',
       SEP,
       sub('rotateView', ['view.rotateLeft', 'view.rotateRight']),
-      sub('goTo', ['view.firstPage', 'view.previousPage', 'view.nextPage', 'view.lastPage']),
+      sub('goTo', ['view.goToSheet', SEP, 'view.firstPage', 'view.previousPage', 'view.nextPage', 'view.lastPage']),
       'view.previousView', 'view.nextView',
       SEP,
       // MultiView (WP5, docs/MULTIVIEW.md); the external editor order.
@@ -162,6 +162,9 @@ export const MENUS = [
       SEP,
       sub('workflow', WORKFLOW_ITEMS),
       'tools.toolbar.standard', 'tools.toolbar.navigation', 'tools.toolbar.status', 'view.menuBar',
+      // The right side toolbar repeats the workflow toolbar's markup and
+      // measure tools; hidden by default in most profiles, shown from here.
+      'tools.toolbar.markup', 'tools.toolbar.measure',
     ],
   },
   {

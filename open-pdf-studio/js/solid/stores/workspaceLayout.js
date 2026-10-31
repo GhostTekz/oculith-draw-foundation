@@ -111,13 +111,14 @@ const PROFILES = {
     workflows: ['review', 'markup', 'measure', 'sheets', 'output', 'view'],
   }),
   // Drawing review: comments, compare, the Properties panel at the right.
+  // No side toolbar: the workflow toolbar holds the same markup tools.
   reviewer: () => ({
     hosts: {
       left: host(without(LEFT_ORDER, 'properties'), 'thumbnails', 260, false),
       right: host(['properties'], 'properties', 300, false),
       bottom: host(BOTTOM_TABS, 'markupsList', 230, false),
     },
-    toolbars: toolbars({ measure: false }),
+    toolbars: toolbars({ markup: false, measure: false }),
     workflow: 'review',
     workflows: ['review', 'markup', 'compare', 'sheets', 'output', 'view'],
   }),

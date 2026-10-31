@@ -727,6 +727,15 @@
       "hintClose": "sluiten",
       "pinned": "Vastgezet in Snelle toegang"
     },
+    "goToSheet": {
+      "title": "Ga naar blad",
+      "placeholder": "Bladnummer, label of titel (E2 → E-201)",
+      "empty": "Geen passend blad",
+      "page": "Pagina {{page}}",
+      "hintMove": "om te bewegen",
+      "hintGo": "om te gaan",
+      "hintClose": "om te sluiten"
+    },
     "windowControls": {
       "minimize": "Minimaliseren",
       "maximize": "Maximaliseren",
@@ -838,6 +847,7 @@
     "previousPage": "Vorige pagina",
     "nextPage": "Volgende pagina",
     "lastPage": "Laatste pagina",
+    "goToSheet": "Ga naar blad…",
     "showGrid": "Raster tonen",
     "snapToGrid": "Aan raster uitlijnen",
     "snapToContent": "Aan inhoud uitlijnen",
@@ -970,8 +980,8 @@
       "navigation": "Navigatiebalk",
       "status": "Statusbalk",
       "standard": "Werkstroomwerkbalk",
-      "markup": "Markering",
-      "measure": "Meten"
+      "markup": "Zijwerkbalk: markering",
+      "measure": "Zijwerkbalk: meten"
     },
     "arrange": {
       "alignLeft": "Links uitlijnen",
