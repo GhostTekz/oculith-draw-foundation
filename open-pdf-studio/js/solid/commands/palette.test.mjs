@@ -20,9 +20,11 @@ const usage = await import('../stores/commandUsage.js');
 const { shortcutParts, shortcutText } = await import('./shortcut-display.js');
 const reg = await import('./registry.js');
 
-const en = JSON.parse(readFileSync(new URL('../../i18n/locales/en/common.json', import.meta.url), 'utf8').replace(/^﻿/, ''));
+const locale = (ns) => JSON.parse(readFileSync(new URL(`../../i18n/locales/en/${ns}.json`, import.meta.url), 'utf8').replace(/^﻿/, ''));
+const en = { common: locale('common'), ribbon: locale('ribbon') };
 const t = (key, opts) => {
-  const v = key.replace(/^common:/, '').split('.').reduce((o, k) => o?.[k], en);
+  const [ns, rest] = key.includes(':') ? key.split(':') : ['common', key];
+  const v = rest.split('.').reduce((o, k) => o?.[k], en[ns]);
   return typeof v === 'string' ? v.replace(/\{\{(\w+)\}\}/g, (_, k) => opts?.[k] ?? '') : key;
 };
 const ids = (query, opts = {}) => p.rankEntries(p.commandEntries(t), query, opts).map((e) => e.commandId);
@@ -49,6 +51,55 @@ test('ranking: label over keyword, every word must match, accents and case ignor
   assert.deepEqual(ids('zoom nothinglikethis'), []);
   // A tool found by its workflow tab name.
   assert.ok(ids('takeoff conduit').includes('tools.raceway.conduit'));
+});
+
+test('real queries: only related commands, no scattered or short-prefix noise', () => {
+  // "count" once listed Rotate View Left / Rotate Left (keyword
+  // "counterclockwise") and Synchronize Document (letters scattered in its id).
+  const count = ids('count');
+  assert.equal(count[0], 'tools.measure.count');
+  assert.ok(count.includes('tools.visualSearch'), 'a whole keyword word still counts');
+  for (const noise of ['view.rotateLeft', 'document.rotatePagesLeft', 'view.syncDocument']) {
+    assert.ok(!count.includes(noise), noise);
+  }
+  assert.equal(p.scoreWord('count', 'counterclockwise', { strict: true }), p.SCORE.shortPrefix);
+  assert.equal(p.scoreWord('count', 'view.syncdocument', { strict: true }), 0);
+  const scale = ids('scale');
+  assert.ok(scale.slice(0, 3).includes('tools.measure.setScale'));
+  assert.ok(!scale.includes('tools.trim'), 'a workflow path word alone is weak');
+  assert.ok(scale.length <= 8);
+  assert.equal(ids('layers')[0], 'window.panel.layers');
+  assert.ok(ids('layers').includes('window.panel.annotationLayers'));
+  assert.equal(ids('export')[0], 'file.export');
+  assert.ok(ids('export').length <= 4);
+  const compare = ids('compare');
+  assert.deepEqual(compare.slice(0, 2).sort(), ['document.compare', 'view.workflow.compare']);
+  assert.ok(!compare.includes('view.splitVertical'), 'members of the Compare tab are not matches');
+  assert.ok(ids('wire').length <= 2);
+  assert.ok(!ids('smart review').includes('tools.markup.textBox'), 'no id subsequence');
+  assert.equal(ids('sheet')[0], 'view.workflow.sheets');
+  assert.ok(!ids('sheet').includes('document.deletePages'));
+  // Initials and short typos still work.
+  assert.equal(ids('ep')[0], 'document.extractPages');
+  assert.ok(!ids('ep').includes('batch.repair'), 'two letters are no substring');
+  assert.equal(ids('extrct')[0], 'document.extractPages');
+});
+
+test('real queries over edition commands and sheets: legend, smart review, E-201', () => {
+  const extra = [
+    { key: 'cmd:x.legend', kind: 'command', section: 'commands', commandId: 'x.legend', id: 'x.legendCount', label: 'Legend Count', keywords: ['symbol legend', 'schedule'], path: ['Takeoff'] },
+    { key: 'cmd:x.smart', kind: 'command', section: 'commands', commandId: 'x.smart', id: 'x.smartReview', label: 'Smart Review', keywords: ['check', 'issues'], path: ['Review'] },
+  ];
+  const pages = p.pageEntries({ numPages: 3, labels: ['E-101', 'E-201', 'E-401'], t, goTo: () => {} });
+  const entries = [...p.commandEntries(t), ...extra, ...pages];
+  const rank = (q) => p.rankEntries(entries, q).map((e) => e.key);
+  assert.deepEqual(rank('legend'), ['cmd:x.legend']);
+  assert.equal(rank('smart review')[0], 'cmd:x.smart');
+  assert.ok(rank('smart review').length <= 2);
+  assert.equal(rank('E-201')[0], 'page:2');
+  assert.equal(rank('sheet E-201')[0], 'page:2', 'the "sheet" keyword plus the label');
+  assert.equal(rank('e2')[0], 'page:2', 'initials of a sheet number');
+  assert.equal(rank('lc')[0], 'cmd:x.legend', 'acronym');
 });
 
 test('recent and frequent commands rise, but never over a better text match', () => {

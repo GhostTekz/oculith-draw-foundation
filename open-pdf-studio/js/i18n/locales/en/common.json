@@ -734,6 +734,15 @@
       "hintClose": "to close",
       "pinned": "Pinned to Quick Access"
     },
+    "goToSheet": {
+      "title": "Go to Sheet",
+      "placeholder": "Sheet number, label or title (E2 → E-201)",
+      "empty": "No matching sheet",
+      "page": "Page {{page}}",
+      "hintMove": "to move",
+      "hintGo": "to go",
+      "hintClose": "to close"
+    },
     "windowControls": {
       "minimize": "Minimize",
       "maximize": "Maximize",
@@ -845,6 +854,7 @@
     "previousPage": "Previous Page",
     "nextPage": "Next Page",
     "lastPage": "Last Page",
+    "goToSheet": "Go to Sheet…",
     "showGrid": "Show Grid",
     "snapToGrid": "Snap to Grid",
     "snapToContent": "Snap to Content",
@@ -977,8 +987,8 @@
       "navigation": "Navigation Bar",
       "status": "Status Bar",
       "standard": "Workflow Toolbar",
-      "markup": "Markup",
-      "measure": "Measure"
+      "markup": "Side Toolbar: Markup",
+      "measure": "Side Toolbar: Measure"
     },
     "arrange": {
       "alignLeft": "Align Left",

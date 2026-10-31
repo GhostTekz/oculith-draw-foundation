@@ -123,7 +123,8 @@ test('every menu entry names a registered command, and every command is in a men
     assert.deepEqual(menuPathOf(id), ['common:menu.view'], id);
   }
   // The Navigation bar commands (WP3) are live View menu entries.
-  for (const id of ['view.darkMode', 'view.dimmer', 'view.previousView', 'view.nextView', 'tools.toolbar.navigation', 'tools.toolbar.status']) {
+  for (const id of ['view.darkMode', 'view.dimmer', 'view.previousView', 'view.nextView', 'tools.toolbar.navigation', 'tools.toolbar.status',
+    'tools.toolbar.markup', 'tools.toolbar.measure']) {
     assert.deepEqual(menuPathOf(id), ['common:menu.view'], id);
   }
 });

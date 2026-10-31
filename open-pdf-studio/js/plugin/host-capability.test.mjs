@@ -25,3 +25,22 @@ test('the drawing revision modules (Compare, slip sheet alignment and carry) are
   assert.equal(typeof hostModule('js/compare/page-label-matches.js').suggestPagePairsByLabel, 'function');
   assert.equal(provides('js/compare/compare-viewport.js'), false);
 });
+
+test('the conduit fill tables are part of the interface, so a plug-in computes fill as the Properties panel does', async () => {
+  const { provides, loadHostModules, hostModule } = await import('./host.js');
+  assert.equal(provides('js/annotations/conduit-fill.js'), true);
+  await loadHostModules(['js/annotations/conduit-fill.js']);
+  const fill = hostModule('js/annotations/conduit-fill.js');
+  assert.equal(fill.smallestConduitFor('EMT', [{ count: 9, size: '10', insulation: 'THHN' }]), '3/4');
+});
+
+test('incoming revision PDFs can be read and matched through the interface', async () => {
+  const { provides, loadHostModules, hostModule } = await import('./host.js');
+  for (const id of ['js/pdf/pdf-inspect.js', 'js/pdf/xlsx-read.js', 'js/sets/sheet-title-suggest.js', 'js/sets/slip-sheet-match.js']) {
+    assert.equal(provides(id), true, id);
+  }
+  await loadHostModules(['js/sets/slip-sheet-match.js'], { parallel: true });
+  const match = hostModule('js/sets/slip-sheet-match.js');
+  assert.equal(match.containsSheetId('SHEET E-101 REV 3', 'E-101'), true);
+  assert.equal(provides('js/sets/slip-sheet-run.js'), false, 'running a slip sheet stays with the drawing set confirmation');
+});

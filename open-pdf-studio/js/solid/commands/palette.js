@@ -7,9 +7,14 @@
 //
 // Ranking, per query word (all words must match): label exact > prefix >
 // word prefix > initials ("ep" → Extract Pages) > substring > a compact
-// subsequence; keywords and the menu/workflow path count less, the id
-// least. A word typed in full that matches the label as a whole adds a
-// bonus. Recent and frequent commands (stores/commandUsage.js) are lifted
+// subsequence that starts at a word; keywords and the menu/workflow path
+// count less, the id least. In keywords, path and id only whole-word
+// evidence counts: a short prefix of a long word ("count" in
+// "counterclockwise") is weak and scattered letters do not match at all.
+// A word typed in full that matches the label as a whole adds a bonus.
+// Weak matches (only path, id, substring, subsequence or a short prefix)
+// are dropped when they score far below the best hit and are capped in
+// number. Recent and frequent commands (stores/commandUsage.js) are lifted
 // a little; an exact match still wins. With no query the palette lists
 // recent commands, then every command.
 
@@ -31,27 +36,74 @@ export function normalize(text) {
 
 const words = (text) => text.split(/[^a-z0-9]+/).filter(Boolean);
 
-/** Score one query word against one normalised text (0 = no match). */
-export function scoreWord(q, text) {
+/** Raw word scores. STRONG and up is direct evidence; below is weak. */
+export const SCORE = { exact: 100, prefix: 80, wordPrefix: 60, initials: 55, strong: 55, substring: 40, shortPrefix: 30, subsequence: 12 };
+// A prefix covering less than this share of a keyword word is weak.
+const PREFIX_COVER = 0.45;
+// Weak entries must reach this share of the best score, and only this many show.
+export const WEAK_RATIO = 0.4;
+export const WEAK_LIMIT = 6;
+
+/**
+ * Score one query word against one normalised text (0 = no match).
+ * strict (keywords, path, id): a prefix must cover a fair share of the word
+ * it matches, and no substring or subsequence counts.
+ */
+export function scoreWord(q, text, { strict = false } = {}) {
   if (!q || !text) return 0;
-  if (text === q) return 100;
-  if (text.startsWith(q)) return 80;
+  if (text === q) return SCORE.exact;
   const ws = words(text);
-  if (ws.some((w) => w.startsWith(q))) return 60;
-  if (q.length >= 2 && ws.length >= q.length && ws.map((w) => w[0]).join('').startsWith(q)) return 55;
-  if (text.includes(q)) return 40;
-  if (q.length < 3) return 0;
-  // Subsequence within a compact span (typos and skipped letters, not noise).
-  let start = -1;
-  let i = 0;
-  for (let k = 0; k < text.length && i < q.length; k++) {
-    if (text[k] === q[i]) {
-      if (start < 0) start = k;
-      i++;
-      if (i === q.length && k - start + 1 <= q.length * 2) return 12;
+  const covers = (w) => !strict || q.length >= w.length * PREFIX_COVER;
+  if (text.startsWith(q)) {
+    const first = ws[0] || text;
+    if (ws.length > 1 && text.slice(0, q.length + 1).match(/[^a-z0-9]$/)) return SCORE.prefix; // whole first word(s)
+    return covers(first) || !first.startsWith(q) ? SCORE.prefix : SCORE.shortPrefix;
+  }
+  const prefixed = ws.filter((w) => w.startsWith(q));
+  if (prefixed.length) return prefixed.some(covers) ? SCORE.wordPrefix : SCORE.shortPrefix;
+  if (q.length >= 2 && ws.length >= q.length && ws.map((w) => w[0]).join('').startsWith(q)) return SCORE.initials;
+  if (strict || q.length < 3) return 0;
+  if (text.includes(q)) return SCORE.substring;
+  // Subsequence from the start of a word within a compact span (a skipped
+  // or swapped letter, not letters scattered over the text).
+  for (let s = 0; s < text.length; s++) {
+    if (text[s] !== q[0] || (s > 0 && /[a-z0-9]/.test(text[s - 1]))) continue;
+    let i = 1;
+    for (let k = s + 1; k < text.length && i < q.length && k - s < q.length + 2; k++) {
+      if (text[k] === q[i]) i++;
     }
+    if (i === q.length) return SCORE.subsequence;
   }
   return 0;
+}
+
+/** { score, weak } of an entry for a query; score 0 = no match. */
+export function matchEntry(entry, query) {
+  const q = normalize(query);
+  if (!q) return { score: 0, weak: false };
+  const label = normalize(entry.label);
+  const keywords = (entry.keywords || []).map(normalize);
+  const path = normalize([...(entry.path || []), ...(entry.altPath || [])].join(' '));
+  const id = normalize(entry.id || '');
+  const strict = { strict: true };
+  let total = 0;
+  let weak = false;
+  for (const w of q.split(/\s+/)) {
+    const labelRaw = scoreWord(w, label);
+    const keywordRaw = Math.max(0, ...keywords.map((k) => scoreWord(w, k, strict)));
+    const best = Math.max(
+      labelRaw * 3,
+      keywordRaw * 2,
+      Math.round(scoreWord(w, path, strict) * 1.2),
+      scoreWord(w, id, strict),
+    );
+    if (best === 0) return { score: 0, weak: false };
+    // Direct evidence: a strong hit in the label or a keyword.
+    if (Math.max(labelRaw, keywordRaw) < SCORE.strong) weak = true;
+    total += best;
+  }
+  if (q.includes(' ')) total += scoreWord(q, label) * 3;
+  return { score: total, weak };
 }
 
 /**
@@ -60,42 +112,36 @@ export function scoreWord(q, text) {
  * strings; altPath = the workflow tabs that hold a command.
  */
 export function scoreEntry(entry, query) {
-  const q = normalize(query);
-  if (!q) return 0;
-  const label = normalize(entry.label);
-  const keywords = (entry.keywords || []).map(normalize);
-  const path = normalize([...(entry.path || []), ...(entry.altPath || [])].join(' '));
-  const id = normalize(entry.id || '');
-  let total = 0;
-  for (const w of q.split(/\s+/)) {
-    const best = Math.max(
-      scoreWord(w, label) * 3,
-      ...keywords.map((k) => scoreWord(w, k) * 2),
-      Math.round(scoreWord(w, path) * 1.2),
-      scoreWord(w, id),
-    );
-    if (best === 0) return 0;
-    total += best;
-  }
-  if (q.includes(' ')) total += scoreWord(q, label) * 3;
-  return total;
+  return matchEntry(entry, query).score;
 }
 
 /**
  * Rank entries for a query: matches only, best first; usage lifts a command
- * (entry.commandId) by up to 40 points; ties keep the given order.
+ * (entry.commandId) by up to 40 points; ties keep the given order. Weak
+ * matches under WEAK_RATIO of the best text score are dropped, and at most
+ * WEAK_LIMIT of them are kept.
  */
 export function rankEntries(entries, query, { usage = {}, now = Date.now(), limit } = {}) {
   const scored = [];
+  let top = 0;
   entries.forEach((entry, order) => {
-    const text = scoreEntry(entry, query);
+    const { score: text, weak } = matchEntry(entry, query);
     if (!text) return;
+    top = Math.max(top, text);
     const boost = entry.commandId ? usageBoost(usage[entry.commandId], now) : 0;
     const penalty = entry.disabled ? 15 : 0;
-    scored.push({ entry, score: text + boost - penalty, order });
+    scored.push({ entry, text, weak, score: text + boost - penalty, order });
   });
   scored.sort((a, b) => b.score - a.score || a.order - b.order);
-  const out = scored.map((s) => s.entry);
+  let weakShown = 0;
+  const out = [];
+  for (const s of scored) {
+    if (s.weak) {
+      if (s.text < top * WEAK_RATIO || weakShown >= WEAK_LIMIT) continue;
+      weakShown++;
+    }
+    out.push(s.entry);
+  }
   return limit ? out.slice(0, limit) : out;
 }
 

@@ -154,18 +154,22 @@ export function appendedSheetLabel(register, filePath, page, pageCount, pageLabe
  * Record a confirmed slip sheet in the drawing set. Matched rows replace their
  * sheet (the current source moves to its history); unmatched rows are
  * appended. `outputs` maps each revised PDF to the file the set should point
- * at (the copy that holds carried markups) and its fingerprint.
+ * at (the copy that holds carried markups) and its fingerprint. A row may
+ * carry its own `revision` (read from its title block); the others get
+ * `revision`.
  *
  * @returns {{register: object, replaced: string[], appended: string[]}}
  */
 export function applySlipSheet(register, rows, { revision, changedAt = new Date().toISOString(), outputs, pageCounts = {} }) {
-  const nextRevision = String(revision ?? '').trim();
-  if (!nextRevision) throw new Error('Enter the new revision.');
+  const common = String(revision ?? '').trim();
+  const revisionOf = row => String(row.revision ?? '').trim() || common;
+  if (rows.some(row => row.include && !revisionOf(row))) throw new Error('Enter the new revision.');
   let next = register;
   const replaced = [];
   const appended = [];
   for (const row of rows) {
     if (!row.include) continue;
+    const nextRevision = revisionOf(row);
     const output = outputs?.get?.(row.filePath) || { path: row.filePath };
     if (row.sheetId) {
       next = replaceSheet(next, row.sheetId, output.path, nextRevision, changedAt, row.page, output.fingerprint);

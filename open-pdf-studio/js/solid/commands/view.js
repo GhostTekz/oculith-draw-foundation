@@ -4,6 +4,7 @@
 // commands in registry.js.
 
 import { registerCommand } from './registry.js';
+import { OPEN_GO_TO_SHEET } from './go-to-sheet.js';
 import { state } from '../../core/state.js';
 import { lucide } from '../data/lucideIcons.js';
 import {
@@ -84,6 +85,14 @@ registerCommand({
   id: 'view.lastPage', label: 'common:commands.lastPage', icon: lastPageIcon, category: C,
   enabled: () => hasPdf() && currentPage() < pageCount(),
   run: () => renderer().then((m) => m.goToPage(pageCount())),
+});
+
+registerCommand({
+  // Ctrl+J ("jump"); Ctrl+G stays Group (shortcut-table.js).
+  id: 'view.goToSheet', label: 'common:commands.goToSheet', icon: lucide('file-search'), shortcut: 'Ctrl+J', category: C,
+  enabled: hasPdf, keywords: ['sheet', 'sheet number', 'page label', 'jump', 'go to', 'drawing'],
+  // GoToSheet.jsx listens for this event (no import cycle with the UI).
+  run: () => window.dispatchEvent(new CustomEvent(OPEN_GO_TO_SHEET)),
 });
 
 // --- Grid and snaps (same toggles as the status bar, tools/snap-toggles.js) ---

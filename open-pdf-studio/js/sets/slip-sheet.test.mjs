@@ -249,6 +249,15 @@ test('carry-forward: markups land within 1 pt, get new durable IDs with carriedF
   assert.deepEqual([sheet('A-105').filePath, sheet('A-105').page, sheet('A-105').revision], [OUT, 4, 'B']);
   assert.deepEqual(sheet('A-104').history, [{ filePath: OLD, page: 4, revision: 'A', replacedAt: '2026-10-14T10:00:00.000Z', sourceSha256: FP }]);
 
+  // A row read with its own revision keeps it; the others take the common one.
+  const own = rows.map(row => (row.page === 1 ? { ...row, revision: 'C' } : row));
+  const mixed = applySlipSheet(set, own, { revision: 'B', changedAt: '2026-10-14T10:00:00.000Z', outputs, pageCounts: { [NEW]: 4 } }).register;
+  assert.deepEqual(mixed.sheets.filter(s => ['A-101', 'A-104'].includes(s.label)).map(s => [s.label, s.revision]).sort(), [['A-101', 'C'], ['A-104', 'B']]);
+  assert.throws(() => applySlipSheet(set, own, { revision: '', outputs }), /Enter the new revision/);
+  const allOwn = rows.map(row => ({ ...row, revision: `R${row.page}` }));
+  assert.equal(applySlipSheet(set, allOwn, { revision: '', outputs, pageCounts: { [NEW]: 4 } }).register.sheets
+    .find(s => s.label === 'A-101').revision, 'R1', 'no common revision is needed when every row has its own');
+
   // Set history opens the old revision with its original markups.
   const prior = sheet('A-101').history[0];
   const reopened = await readPage(oldBytes, prior.page);

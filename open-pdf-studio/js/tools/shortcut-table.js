@@ -88,6 +88,8 @@
 //             Ctrl+H (Split Horizontal) and Ctrl+Shift+2 (Unsplit); Split
 //             Vertical is Ctrl+Alt+2 (the external editor "2" plus Alt).
 //   Ctrl+Shift+P  Find Tools + Commands too (our addition, beside Ctrl+K).
+//   Ctrl+G    Group (the external editor). Go to Sheet (view.goToSheet) is Ctrl+J
+//             ("jump"), a free key.
 //   F         the external editor: File Attachment. Was free (no single-key or CAD-chord
 //             use; Shift+F stays Flag, Ctrl+F Find, F1-F12 their own keys).
 

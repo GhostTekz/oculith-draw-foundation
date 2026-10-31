@@ -998,7 +998,7 @@
       "angle": "Angle",
       "count": "Count",
       "dynamicFill": "Dynamic Fill",
-      "group": "Group",
+      "group": "Group (no selection: Go to Sheet)",
       "ungroup": "Ungroup",
       "lock": "Lock / unlock",
       "newDoc": "New document",

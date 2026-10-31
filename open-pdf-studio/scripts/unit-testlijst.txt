@@ -398,6 +398,7 @@ js/solid/components/navigation-status-app.test.mjs
 js/solid/commands/menus.test.mjs
 js/solid/commands/workflows.test.mjs
 js/solid/commands/palette.test.mjs
+js/solid/commands/go-to-sheet.test.mjs
 js/solid/components/menubar/menuModel.test.mjs
 js/annotations/raceway.test.mjs
 js/pdf/raceway-roundtrip.test.mjs

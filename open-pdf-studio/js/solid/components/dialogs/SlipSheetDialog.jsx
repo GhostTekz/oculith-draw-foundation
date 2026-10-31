@@ -10,17 +10,25 @@ import { slipSheetRowErrors } from '../../../sets/slip-sheet-match.js';
 const POINTS = ['oldA', 'oldB', 'newA', 'newB'];
 
 // Batch Slip Sheet confirmation (docs/SLIP-SHEET.md). Opened by the Sets
-// panel with the revised PDFs already read and matched.
+// panel, or by another workflow through openDialog('slipSheet', data), with
+// the revised PDFs already read and matched. `data.revision` fills in the new
+// revision; a row with its own `revision` keeps it. `data.onDone(text,
+// result)` gets the summary and runSlipSheet's result; `data.onCancel()` runs
+// when the dialog closes without a slip sheet.
 export default function SlipSheetDialog(props) {
   const { t } = useTranslation('common');
   const files = props.data?.files || [];
   const pageCounts = Object.fromEntries(files.map(file => [file.filePath, file.pageCount]));
   const [rows, setRows] = createStore((props.data?.rows || []).map(row => ({ ...row, manual: false })));
-  const [revision, setRevision] = createSignal('');
+  const [revision, setRevision] = createSignal(String(props.data?.revision ?? ''));
   const [aligning, setAligning] = createStore({});
   const [busy, setBusy] = createSignal(false);
   const [message, setMessage] = createSignal('');
-  const close = () => { if (!busy()) closeDialog('slipSheet'); };
+  const close = () => {
+    if (busy()) return;
+    closeDialog('slipSheet');
+    props.data?.onCancel?.();
+  };
   const sheets = createMemo(() => [...sheetRegister().sheets].sort((a, b) => a.label.localeCompare(b.label, 'en', { numeric: true })));
   const sheetLabel = id => sheetRegister().sheets.find(sheet => sheet.id === id);
   const errors = createMemo(() => new Map(slipSheetRowErrors(sheetRegister(), rows).map(item => [item.key, item.error])));
@@ -28,6 +36,8 @@ export default function SlipSheetDialog(props) {
     replace: rows.filter(row => row.include && row.sheetId).length,
     append: rows.filter(row => row.include && !row.sheetId).length,
   }));
+  const ownRevision = row => String(row.revision ?? '').trim();
+  const needsRevision = createMemo(() => rows.some(row => row.include && !ownRevision(row)));
 
   const reasonText = row => row.manual ? t('slipSheet.reason.manual')
     : row.reason ? t(`slipSheet.reason.${row.reason}`) : t('slipSheet.reason.none');
@@ -58,7 +68,7 @@ export default function SlipSheetDialog(props) {
   async function apply() {
     if (busy()) return;
     setMessage('');
-    if (!revision().trim()) { setMessage(t('slipSheet.error.revision')); return; }
+    if (needsRevision() && !revision().trim()) { setMessage(t('slipSheet.error.revision')); return; }
     if (!counts().replace && !counts().append) { setMessage(t('slipSheet.error.noRows')); return; }
     if (errors().size) { setMessage(t('slipSheet.error.duplicate')); return; }
     let align;
@@ -68,13 +78,14 @@ export default function SlipSheetDialog(props) {
     try {
       const { runSlipSheet } = await import('../../../sets/slip-sheet-run.js');
       const plain = rows.map(row => ({ key: row.key, filePath: row.filePath, page: row.page, pageLabel: row.pageLabel,
-        sheetId: row.sheetId, reason: row.reason, include: row.include }));
+        sheetId: row.sheetId, reason: row.reason, include: row.include,
+        ...(ownRevision(row) ? { revision: ownRevision(row) } : {}) }));
       const result = await runSlipSheet({ register, rows: plain, pageCounts, revision: revision().trim(), alignments: align,
         onProgress: text => setMessage(t('slipSheet.running', { file: text })) });
       if (sheetRegister() !== register) throw new Error(t('slipSheet.error.setChanged'));
       saveSheetRegister(result.register);
       props.data?.onDone?.(t('slipSheet.done', { replaced: result.replaced.length, appended: result.appended.length,
-        carried: result.carried }));
+        carried: result.carried }), result);
       setBusy(false);
       closeDialog('slipSheet');
     } catch (error) {
@@ -113,7 +124,7 @@ export default function SlipSheetDialog(props) {
             onChange={event => setRows(index(), 'include', event.currentTarget.checked)} /></span>
           <span role="cell" class="slip-sheet-new" title={row.filePath}>
             <strong>{row.pageLabel || t('slipSheet.page', { page: row.page })}</strong>
-            <small>{extractFileName(row.filePath)} · {t('slipSheet.page', { page: row.page })}</small>
+            <small>{extractFileName(row.filePath)} · {t('slipSheet.page', { page: row.page })}{ownRevision(row) ? ` · ${t('slipSheet.rev', { rev: ownRevision(row) })}` : ''}</small>
           </span>
           <span role="cell">
             <select aria-label={t('slipSheet.column.oldSheet')} value={row.sheetId || ''}

@@ -81,6 +81,9 @@ test('every profile: panels unique and known, active inside its host, sizes in l
   const reviewer = wl.createProfileLayout('reviewer');
   assert.ok(reviewer.workflows.includes('compare') && !reviewer.workflows.includes('takeoff'));
   assert.deepEqual(reviewer.hosts.right.tabs, ['properties']);
+  // The right side toolbar repeats the workflow toolbar's markup and measure
+  // tools: hidden in Basic and Reviewer (an edition's Field profile keeps it).
+  for (const l of [basic, reviewer]) assert.deepEqual([l.toolbars.markup.visible, l.toolbars.measure.visible], [false, false]);
 });
 
 test('workflow fields: kept when stored, and the old never-rendered standard flag is reset once', () => {
