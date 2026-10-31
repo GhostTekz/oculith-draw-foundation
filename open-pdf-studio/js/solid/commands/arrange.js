@@ -10,6 +10,7 @@
 // (alignment.js).
 
 import { registerCommand } from './registry.js';
+import { lucide } from '../data/lucideIcons.js';
 import {
   alignLeftIcon, alignCenterIcon, alignRightIcon, alignTopIcon, alignMiddleIcon, alignBottomIcon,
   distSpaceHIcon, distSpaceVIcon, distLeftIcon, distTopIcon, distCenterIcon, distMiddleIcon, distRightIcon,
@@ -111,12 +112,12 @@ registerCommand({
   run: (presetId) => import('../stores/stylePresetsStore.js').then((m) => m.applyStylePresetById(presetId)),
 });
 registerCommand({
-  id: 'format.copyStyle', label: 'common:commands.format.copyStyle', icon: null, category: 'format',
+  id: 'format.copyStyle', label: 'common:commands.format.copyStyle', icon: lucide('clipboard-copy'), category: 'format',
   enabled: formatEnabled, keywords: ['style', 'copy'],
   run: () => import('../stores/stylePresetsStore.js').then((m) => m.copyStyleFromSelection()),
 });
 registerCommand({
-  id: 'format.pasteStyle', label: 'common:commands.format.pasteStyle', icon: null, category: 'format',
+  id: 'format.pasteStyle', label: 'common:commands.format.pasteStyle', icon: lucide('clipboard-paste'), category: 'format',
   enabled: () => formatEnabled() && !!stylePresets()?.copiedStyle() && !formatStore()?.isLocked(),
   keywords: ['style', 'paste'],
   run: () => import('../stores/stylePresetsStore.js').then((m) => m.pasteStyleToSelection()),

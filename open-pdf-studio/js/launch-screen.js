@@ -73,8 +73,12 @@ export function side() {
   };
 }
 
-/** Offer installed add-on actions after the editor is ready. Only a click runs one. */
-export async function showLaunchActions(actions) {
+/**
+ * Offer installed add-on actions after the editor is ready. Only a click runs
+ * one. `copy` may replace the card's eyebrow, title, description and the
+ * label of the button that continues without an action.
+ */
+export async function showLaunchActions(actions, copy = {}) {
   const slot = side();
   if (!slot.element || !Array.isArray(actions) || !actions.length) return;
   const card = document.createElement('div');
@@ -82,12 +86,12 @@ export async function showLaunchActions(actions) {
   card.dataset.addonLaunch = '';
   const eyebrow = document.createElement('p');
   eyebrow.className = 'ls-addon-eyebrow';
-  eyebrow.textContent = 'READY TO WORK';
+  eyebrow.textContent = copy.eyebrow || 'READY TO WORK';
   const title = document.createElement('h2');
-  title.textContent = 'Open your workspace';
+  title.textContent = copy.title || 'Open your workspace';
   const description = document.createElement('p');
   description.className = 'ls-addon-description';
-  description.textContent = 'Choose an add-on action, or continue to your drawing workspace.';
+  description.textContent = copy.description || 'Choose an add-on action, or continue to your drawing workspace.';
   const choices = document.createElement('div');
   choices.className = 'ls-addon-choices';
   const notice = document.createElement('p');
@@ -124,7 +128,7 @@ export async function showLaunchActions(actions) {
     const continueButton = document.createElement('button');
     continueButton.type = 'button';
     continueButton.className = 'ls-addon-continue';
-    continueButton.textContent = 'Continue to workspace';
+    continueButton.textContent = copy.continueLabel || 'Continue to workspace';
     continueButton.addEventListener('click', done);
     choices.append(continueButton);
     slot.element.replaceChildren(card);

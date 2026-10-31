@@ -3094,6 +3094,71 @@
   gap: 8px;
 }
 
+/* ===== Scale review (detected scales per sheet) ===== */
+.scale-review-dialog { width: 860px; max-width: calc(100vw - 32px); }
+.scale-review-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ox-sp-2);
+  margin-bottom: var(--ox-sp-2);
+  font-size: var(--ox-fs-sm);
+}
+.scale-review-progress { color: var(--theme-text-secondary, #666); }
+.scale-review-hint {
+  margin-left: auto;
+  color: var(--theme-text-secondary, #666);
+  font-size: var(--ox-fs-xs);
+}
+.scale-review-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--theme-border, #d4d4d4);
+  border-radius: var(--ox-r-xs, 3px);
+}
+.scale-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ox-fs-sm);
+}
+.scale-review-table th {
+  position: sticky;
+  top: 0;
+  background: var(--theme-surface, #fff);
+  border-bottom: 1px solid var(--theme-border, #d4d4d4);
+  font-weight: 600;
+  text-align: left;
+  padding: 4px 6px;
+}
+.scale-review-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--theme-border-subtle, var(--theme-border, #eee));
+  vertical-align: middle;
+}
+.scale-review-num { text-align: right; font-variant-numeric: tabular-nums; }
+.scale-review-target,
+.scale-review-source {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scale-review-scale { width: 120px; }
+.scale-review-scale.scale-review-invalid { border-color: var(--ox-danger); }
+.scale-review-ratio {
+  margin-left: 6px;
+  color: var(--theme-text-secondary, #666);
+  font-variant-numeric: tabular-nums;
+}
+.scale-review-status { color: var(--theme-text-secondary, #666); }
+.scale-review-done td { opacity: 0.6; }
+.scale-review-info td { font-style: italic; }
+.scale-review-empty {
+  padding: var(--ox-sp-4);
+  text-align: center;
+  color: var(--theme-text-secondary, #666);
+}
+.scale-review-footer-left { display: flex; gap: var(--ox-sp-2); }
+
 /* ===== Message Dialog ===== */
 .message-dialog-overlay {
   z-index: 3000;
@@ -3123,11 +3188,10 @@
   z-index: 1500;
   border: 1px solid #b0a000;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
+  border-radius: var(--ox-r-md);
   display: flex;
   flex-direction: column;
   user-select: none;
-  transition: opacity 0.2s;
   overflow: hidden;
 }
 .sticky-popup-header {
@@ -4163,6 +4227,78 @@ select.ste-field { padding: 2px 4px; cursor: pointer; }
 .parametric-label-inline-editor input {
   width: 82px;
 }
+
+/* ── Add-on tool approval cards (non-modal, bottom-right) ── */
+.addon-tool-approvals {
+  position: fixed;
+  inset-inline-end: 18px;
+  bottom: 18px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 3100;
+}
+.addon-tool-card {
+  padding: 10px 12px;
+  background: var(--ox-surface-2);
+  color: var(--ox-text);
+  border: 1px solid var(--ox-line-3);
+  border-inline-start: 3px solid var(--ox-warn);
+  border-radius: var(--ox-r-sm);
+  box-shadow: var(--ox-shadow-2);
+  font-size: 12px;
+}
+.addon-tool-card-head { font-weight: 600; margin-bottom: 4px; }
+.addon-tool-card-title { font-weight: 600; }
+.addon-tool-card-name,
+.addon-tool-card-args {
+  font-family: var(--ox-font-mono);
+  font-size: 11px;
+  color: var(--ox-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.addon-tool-card-summary { margin-top: 4px; }
+.addon-tool-card-args { margin-top: 4px; white-space: normal; max-height: 48px; }
+.addon-tool-card-note { margin-top: 6px; color: var(--ox-text-2); }
+.addon-tool-card-actions { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.addon-tool-card-actions .pref-btn { padding: 3px 9px; }
+.addon-tool-card-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ox-text-2);
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* ── Add-on tool log ── */
+.addon-tool-log-scroll {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--ox-line-2);
+  border-radius: var(--ox-r-xs);
+}
+.addon-tool-log { width: 100%; border-collapse: collapse; font-size: 12px; }
+.addon-tool-log th, .addon-tool-log td {
+  padding: 3px 6px;
+  text-align: start;
+  border-bottom: 1px solid var(--ox-line);
+  vertical-align: top;
+}
+.addon-tool-log th { position: sticky; top: 0; background: var(--ox-surface-2); }
+.addon-tool-log-args {
+  font-family: var(--ox-font-mono);
+  font-size: 11px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.addon-tool-log-write td:first-child { box-shadow: inset 3px 0 0 var(--ox-warn); }
+.addon-tool-log-failed td:last-child { color: var(--ox-danger-ink); }
 
 /* CAD-uitwisseling: export naar DXF/DWG en import van DWG/DXF (#400).
    Windows-Forms-stijl: rechte hoeken, compact, thema-kleuren. */

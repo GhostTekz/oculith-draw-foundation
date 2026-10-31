@@ -237,6 +237,17 @@ export async function exportAsPdfX({ conformance = 'X-3' } = {}) {
   }
   if (!isTauri()) return false;
 
+  // PDF/X keeps the vector page and the PDF's default layer visibility
+  // (layer-output-policy.js): with hidden layers, reset or export raster.
+  const { confirmLayerRoute } = await import('./layer-output-policy.js');
+  const layerChoice = await confirmLayerRoute(activeDoc, 'pdfx-export');
+  if (layerChoice === 'cancel' || getActiveDocument() !== activeDoc) return false;
+  if (layerChoice === 'raster') {
+    const { exportAsRasterPdf } = await import('./exporter.js');
+    const pages = Array.from({ length: activeDoc.pdfDoc.numPages }, (_, i) => i + 1);
+    return exportAsRasterPdf({ pages, doc: activeDoc });
+  }
+
   const baseName = (activeDoc.fileName || 'document').replace(/\.pdf$/i, '');
   const suffix = conformance === 'X-4' ? 'PDFX-4' : 'PDFX-3';
   const defaultName = `${baseName}_${suffix}.pdf`;

@@ -140,6 +140,37 @@ export function pasViewportToe(id, invoer, opties = {}) {
   return { ok: true, viewport: ann };
 }
 
+/**
+ * Several new viewports at once (confirmed scale proposals): checked like
+ * "Apply Scale to Viewport", added and the measurements recalculated, all
+ * one undo step. Invalid entries are skipped.
+ * @param {Array<{page:number, x:number, y:number, width:number, height:number,
+ *   label:string, scaleString:string, units:string, equation?:object, source?:string}>} lijst
+ * @returns {object[]} the viewports added
+ */
+export function voegViewportsToe(lijst) {
+  const doc = getActiveDocument();
+  if (!doc) return [];
+  const nieuw = [];
+  for (const item of lijst || []) {
+    const check = controleerViewportInvoer(item);
+    if (!check.ok || ![item.x, item.y, item.width, item.height].every(Number.isFinite)) continue;
+    if (!(item.width > 0 && item.height > 0) || !(Number(item.page) > 0)) continue;
+    const ann = createScaleRegion({ page: Number(item.page), x: item.x, y: item.y, width: item.width,
+      height: item.height, ...check.waarden, source: item.source });
+    if (check.waarden.equation) ann.equation = check.waarden.equation;
+    nieuw.push(ann);
+  }
+  if (!nieuw.length) return [];
+  metMetingen(doc, () => {
+    for (const ann of nieuw) {
+      doc.annotations.push(ann);
+      recordAdd(ann);
+    }
+  });
+  return nieuw;
+}
+
 /** Alleen de naam: geen herberekening nodig, wel een ongedaan-stap. */
 export function hernoemViewport(id, label) {
   const doc = getActiveDocument();

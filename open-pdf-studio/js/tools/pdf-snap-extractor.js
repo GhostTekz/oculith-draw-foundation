@@ -3,6 +3,7 @@ import { OPS } from 'pdfjs-dist';
 import { getPageRotation } from '../core/state.js';
 import { slaSnapExtractieOver } from './snap-extractie-beleid.js';
 import RBush from '../vendor/rbush.js';
+import { nativeOcgPdfJsConfig, nativeOcgSelectionForDocument } from '../pdf/native-ocg-selection.js';
 
 /**
  * PDF Vector Geometry Snap Extractor
@@ -44,8 +45,14 @@ export function prefetchPdfVectorGeometry(pageNum) {
   if (pageCache.has(pageNum)) return;
   if (pendingExtractions.has(pageNum)) return;
 
+  // Geometry of the layers shown now; a layer change clears the cache, and a
+  // result read under the previous layer view is not kept.
+  const doc = getActiveDocument();
+  const layerRevision = nativeOcgSelectionForDocument(doc).revision;
   const promise = extractPageGeometry(pageNum)
     .then(result => {
+      if (pendingExtractions.get(pageNum) !== promise) return;
+      if (getActiveDocument() !== doc || nativeOcgSelectionForDocument(doc).revision !== layerRevision) return;
       pageCache.set(pageNum, result);
     })
     .catch(() => {
@@ -319,6 +326,11 @@ export async function extractPageGeometry(pageNum, options = {}) {
 
   const opList = await page.getOperatorList();
   checkActive();
+  // Hidden PDF layers give no snap points or edges (docs/foundation/PDF-LAYERS.md).
+  // `options.allLayers` reads every layer regardless of the view.
+  const ocConfig = options.allLayers ? null : await nativeOcgPdfJsConfig(doc).catch(() => null);
+  checkActive();
+  const layers = optionalContentTracker(ocConfig);
 
   // PDF transform matrix stack (with the line width, which save/restore
   // also scope)
@@ -341,6 +353,11 @@ export async function extractPageGeometry(pageNum, options = {}) {
     }
     const op = ops[i];
     const a = argsArray[i];
+
+    if (op === OPS.beginMarkedContentProps) { layers.begin(a); continue; }
+    if (op === OPS.beginMarkedContent) { layers.begin(null); continue; }
+    if (op === OPS.endMarkedContent) { layers.end(); continue; }
+    if (layers.hidden() && (op === OPS.constructPath || op === OPS.rectangle)) continue;
 
     switch (op) {
       case OPS.save:
@@ -404,6 +421,33 @@ export async function extractPageGeometry(pageNum, options = {}) {
   }
 
   return { points, edges, index: await buildSpatialIndex(points, edges, checkActive) };
+}
+
+/**
+ * Tracks whether the current content is in a hidden optional-content group,
+ * the same way PDF.js decides it while painting: a marked-content section
+ * with an /OC property is hidden when its group (or membership dictionary)
+ * is not visible, and everything nested inside a hidden section is hidden.
+ * @param {{isVisible: (group: any) => boolean}|null} config
+ */
+export function optionalContentTracker(config) {
+  const stack = [];
+  let hiddenDepth = 0;
+  return {
+    begin(args) {
+      const isOc = Array.isArray(args) && args[0] === 'OC';
+      let hidden = false;
+      if (isOc && config && args[1]) {
+        try { hidden = !config.isVisible(args[1]); } catch { hidden = false; }
+      }
+      stack.push(hidden);
+      if (hidden) hiddenDepth++;
+    },
+    end() {
+      if (stack.pop()) hiddenDepth--;
+    },
+    hidden: () => hiddenDepth > 0,
+  };
 }
 
 /**

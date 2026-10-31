@@ -2,6 +2,8 @@
 # Eén pad per regel, relatief aan open-pdf-studio/. Nieuwe tests hier toevoegen,
 # niet in package.json. Regels met # zijn commentaar.
 js/annotations/draw-lookup.test.mjs
+js/mcp/addon-tools.test.mjs
+js/mcp/addon-tools-undo.test.mjs
 js/pdf/large-open.test.mjs
 js/pdf/thumbnail-schedule.test.mjs
 js/pdf/thumbnail-window.test.mjs
@@ -189,6 +191,7 @@ js/annotations/viewport-scale-form.test.mjs
 js/annotations/set-scale-form.test.mjs
 js/annotations/set-scale-app.test.mjs
 js/annotations/set-scale-i18n.test.mjs
+js/annotations/scale-notes.test.mjs
 js/annotations/scale-region-boundary.test.mjs
 js/core/reader-mode.test.mjs
 js/core/reader-mode-tracking.test.mjs
@@ -307,6 +310,7 @@ js/tools/visual-search/visual-search-pdf.test.mjs
 js/pdf/pagina-schaal-roundtrip.test.mjs
 js/pdf/pagina-schaal-precisie.test.mjs
 js/pdf/named-viewports-roundtrip.test.mjs
+js/pdf/scale-proposals-roundtrip.test.mjs
 js/pdf/line-properties-roundtrip.test.mjs
 js/pdf/square-rotation-roundtrip.test.mjs
 js/annotations/durable-markup-id.test.mjs
@@ -392,6 +396,8 @@ js/core/view-history.test.mjs
 js/ui/chrome/navigation-format.test.mjs
 js/solid/components/navigation-status-app.test.mjs
 js/solid/commands/menus.test.mjs
+js/solid/commands/workflows.test.mjs
+js/solid/commands/palette.test.mjs
 js/solid/components/menubar/menuModel.test.mjs
 js/annotations/raceway.test.mjs
 js/pdf/raceway-roundtrip.test.mjs
@@ -494,3 +500,10 @@ js/sets/sheet-metadata-review.test.mjs
 js/sets/sheet-revision-compare.test.mjs
 js/sets/sheet-title-suggest.test.mjs
 scripts/pack-addon-file.test.mjs
+js/pdf/xlsx-workbook.test.mjs
+js/tour/tour-model.test.mjs
+js/pdf/pdf-layers-view.test.mjs
+js/pdf/pdf-layers-routes.test.mjs
+js/pdf/native-ocg-support.test.mjs
+js/tour/tour-i18n.test.mjs
+js/ui/quick-win-styles.test.mjs

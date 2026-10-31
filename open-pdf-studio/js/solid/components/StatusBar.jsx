@@ -1,4 +1,4 @@
-import { Show, For, createMemo, createResource, onMount } from 'solid-js';
+import { Show, For, createEffect, createMemo, createResource, onMount } from 'solid-js';
 import { state } from '../../core/state.js';
 import { useTranslation, localizeNumber } from '../../i18n/useTranslation.js';
 import { pageScaleStatus } from '../../annotations/scale-entry.js';
@@ -12,6 +12,8 @@ import {
 } from '../../ui/chrome/navigation-format.js';
 import { isToolbarVisible } from '../stores/workspaceLayout.js';
 import { lucide } from '../data/lucideIcons.js';
+import { scaleChip, openScaleChip } from '../../ui/chrome/scale-chip.js';
+import { ensurePageScanned } from '../../annotations/scale-proposals.js';
 
 // the external editor status bar (F8, workspaceLayout.toolbars.status). Left: the command
 // hint ("Ready", the active tool, or a passing status message) and the live
@@ -46,11 +48,6 @@ async function resetViewRotation() {
   await zetWeergaveRotatie(0);
 }
 
-// Scale indicator: a click opens Set Scale (prefilled with a detected scale).
-async function openSetScale() {
-  const { showSetScaleDialog } = await import('../../annotations/measurement.js');
-  showSetScaleDialog();
-}
 
 import { engineFor } from '../stores/engineStatusStore.js';
 import { isSplitView, syncState, setSync, toggleSync } from '../stores/multiViewStore.js';
@@ -111,20 +108,19 @@ export default function StatusBar() {
     const d = doc();
     return d?.pdfDoc ? pageScaleOf(d, d.currentPage || 1, state.preferences?.measureScale) : null;
   });
-  const scaleText = () => {
+  // Scale chip: green confirmed, amber read from the sheet (click to
+  // review), red not set (click to set or calibrate).
+  const chip = () => {
     const s = scaleStatus();
-    if (!s) return '';
-    let text;
-    if (s.kind === 'set') {
-      const label = scaleLabel(pageScale()) || s.ratio;
-      text = s.method === 'auto-detect' ? t('navbar.scaleAuto', { scale: label }) : label;
-    } else if (s.kind === 'detected') {
-      text = t('scaleDetected', { ratio: s.ratio });
-    } else {
-      text = t('scaleNotSet');
-    }
-    return s.regions ? `${text} ${t('scaleRegions')}` : text;
+    return s ? scaleChip(s, t, s.kind === 'set' ? scaleLabel(pageScale()) : '') : null;
   };
+  // Read the scale notes of each page that is shown (once per page; the
+  // text comes from the text layer's PDF.js request).
+  createEffect(() => {
+    const d = doc();
+    const page = d?.currentPage || 1;
+    if (d?.pdfDoc && !d.scaleProposals?.[page]) ensurePageScanned(d, page);
+  });
   const paperUnit = () => paperUnitFor(pageScale()?.unit, language());
   const [pageInfo] = createResource(
     () => (doc()?.pdfDoc ? { pdfDoc: doc().pdfDoc, page: doc().currentPage || 1 } : null),
@@ -249,11 +245,16 @@ export default function StatusBar() {
             <button
               class="status-scale"
               id="status-scale"
-              classList={{ 'status-scale--unset': scaleStatus()?.kind !== 'set' || scaleStatus()?.method === 'auto-detect' }}
-              title={t('scaleTitle')}
-              onClick={openSetScale}
+              classList={{
+                'status-scale--ok': chip()?.tone === 'ok',
+                'status-scale--detected': chip()?.tone === 'detected',
+                'status-scale--unset': chip()?.tone === 'unset',
+              }}
+              data-scale-tone={chip()?.tone}
+              title={chip()?.title}
+              onClick={() => openScaleChip(chip(), doc()?.currentPage || 1)}
             >
-              {scaleText()}
+              {chip()?.text}
             </button>
           </Show>
           <Show when={pageSizeText()}>

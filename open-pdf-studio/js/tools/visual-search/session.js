@@ -10,6 +10,7 @@
 
 import { state, getActiveDocument, getPageRotation } from '../../core/state.js';
 import { renderPageRaster, appPageSize, searchScale } from './page-raster.js';
+import { nativeOcgPdfJsConfig } from '../../pdf/native-ocg-selection.js';
 import { rgbaToInk, cropInk, thumbnail } from './matcher.js';
 import { searchRaster, cancelSearches } from './search-engine.js';
 import { matchToResult, countAnnotationsFor, highlightAnnotationsFor } from './results.js';
@@ -40,7 +41,9 @@ export const redrawResults = () => redraw();
  */
 export async function renderSearchPage(doc, pageNum, scale, createCanvas) {
   const page = await doc.pdfDoc.getPage(pageNum);
-  return renderPageRaster(page, scale, { extraRotation: getPageRotation(pageNum) || 0, createCanvas });
+  // Only the PDF layers that are shown (docs/foundation/PDF-LAYERS.md).
+  return renderPageRaster(page, scale, { extraRotation: getPageRotation(pageNum) || 0, createCanvas,
+    optionalContentConfigPromise: nativeOcgPdfJsConfig(doc) });
 }
 
 /**
@@ -52,7 +55,8 @@ export async function buildTemplate(doc, pageNum, rect, createCanvas) {
   const page = await doc.pdfDoc.getPage(pageNum);
   const size = appPageSize(page, getPageRotation(pageNum) || 0);
   const scale = searchScale(rect, size);
-  const raster = await renderPageRaster(page, scale, { extraRotation: getPageRotation(pageNum) || 0, createCanvas });
+  const raster = await renderPageRaster(page, scale, { extraRotation: getPageRotation(pageNum) || 0, createCanvas,
+    optionalContentConfigPromise: nativeOcgPdfJsConfig(doc) });
   const image = { width: raster.width, height: raster.height, data: rgbaToInk(raster.rgba, raster.width, raster.height) };
   const crop = cropInk(image, rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale);
   if (!(crop.width >= 3) || !(crop.height >= 3)) return null;

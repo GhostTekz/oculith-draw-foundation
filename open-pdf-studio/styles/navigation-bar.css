@@ -187,6 +187,10 @@
   font-size: 11px;
 }
 
+.nav-scale[data-scale-tone='ok'] { color: var(--ox-ok-ink); }
+.nav-scale[data-scale-tone='detected'] { color: var(--ox-warn-ink); }
+.nav-scale[data-scale-tone='unset'] { color: var(--ox-danger-ink); }
+
 /* Dimmer ☀▾ and profile 👤▾: a button and its menu caret. */
 .nav-split-btn {
   position: relative;

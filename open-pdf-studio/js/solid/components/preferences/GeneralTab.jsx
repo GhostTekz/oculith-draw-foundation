@@ -5,6 +5,7 @@ import { isTauri } from '../../../core/platform.js';
 import { meldLegeStart, WEB_SESSIE_SLEUTEL } from '../../../core/sessie-herstel.js';
 import { knopUitInBrowser, meldingTekst } from '../../../core/webfuncties.js';
 import { LANGUAGES } from '../../../i18n/config.js';
+import { openDialog } from '../../stores/dialogStore.js';
 import PrefSelect from './PrefSelect.jsx';
 import LanguageSelect from './LanguageSelect.jsx';
 
@@ -12,6 +13,7 @@ export default function GeneralTab(props) {
   const { t } = useTranslation('preferences');
   const { t: tRibbon } = useTranslation('ribbon');
   const { t: tCommon } = useTranslation('common');
+  const { t: tDialogs } = useTranslation('dialogs');
   const mcpUit = () => knopUitInBrowser('prefs-mcp', isTauri());
   const p = props.prefs;
 
@@ -99,6 +101,10 @@ export default function GeneralTab(props) {
           <span style={{ 'margin-left': '8px', color: '#666' }}>{statusTekst()}</span>
         </div>
         <div class="pref-row" style={{ color: '#666', 'font-size': '11px' }}>{t('general.aiLinkHint')}</div>
+        <div class="pref-row">
+          <button type="button" class="pref-btn pref-btn-secondary" id="prefs-mcp-tool-log"
+            onClick={() => openDialog('addon-tool-log')}>{tDialogs('addonTools.openLog')}</button>
+        </div>
       </fieldset>
       <fieldset class="pref-fieldset">
         <legend>{t('general.author')}</legend>

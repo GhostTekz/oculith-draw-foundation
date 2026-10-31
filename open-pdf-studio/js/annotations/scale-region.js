@@ -154,6 +154,8 @@ export function createScaleRegion(props) {
   const extra = {};
   if (validPrecision(props.precision, units)) extra.precision = props.precision;
   if (props.tekeningtypeId) extra.tekeningtypeId = props.tekeningtypeId;
+  // The text the scale was read from ("View: DETAIL 2 · 1/2\" = 1'-0\""), for the status bar.
+  if (typeof props.source === 'string' && props.source.trim()) extra.source = props.source.trim().slice(0, 200);
   return createAnnotation({
     ...extra,
     type: 'scaleRegion',

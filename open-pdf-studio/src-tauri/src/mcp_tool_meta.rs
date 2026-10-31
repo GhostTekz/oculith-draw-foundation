@@ -109,6 +109,8 @@ pub const TOOLS: &[ToolMeta] = &[
     wijzigt("app_type", "Type text"),
     // Alleen in de ontwikkelroute: testgereedschap.
     ontwikkel("app_get_recent_console", "Read app console", true),
+    // Reset and the memory experiments (`release`) change app state.
+    ontwikkel("app_perf_snapshot", "Performance snapshot", false),
     ontwikkel("app_zoom_anchor_test", "Zoom anchor test", true),
     ontwikkel("app_clear_caches", "Clear render caches", false),
     ontwikkel("app_render_race_diagnostic", "Hold native render response", false),

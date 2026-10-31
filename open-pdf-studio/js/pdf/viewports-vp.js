@@ -111,6 +111,7 @@ function viewportDict(context, region, box, rotatie, userUnit) {
   if (Number.isInteger(region.precision)) vp.set(PDFName.of('OPS_Precision'), PDFNumber.of(region.precision));
   else if (validPrecision(region.precision, region.units)) vp.set(PDFName.of('OPS_Precision'), PDFString.of(region.precision));
   if (region.tekeningtypeId) vp.set(PDFName.of('OPS_Tekeningtype'), PDFHexString.fromText(String(region.tekeningtypeId)));
+  if (region.source) vp.set(PDFName.of('OPS_Source'), PDFHexString.fromText(String(region.source)));
   return vp;
 }
 
@@ -259,6 +260,8 @@ export function leesEigenViewports(pdfLibDoc) {
         if (id) item.id = id;
         const tt = tekst(d.lookup(PDFName.of('OPS_Tekeningtype'))).trim();
         if (tt) item.tekeningtypeId = tt;
+        const bron = tekst(d.lookup(PDFName.of('OPS_Source'))).trim();
+        if (bron) item.source = bron;
         uit.push(item);
       }
     } catch {

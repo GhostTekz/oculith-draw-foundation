@@ -5,6 +5,7 @@
 @import './styles/titlebar.css';
 @import './styles/toolbar.css';
 @import './styles/menubar.css';
+@import './styles/workflow-bar.css';
 @import './styles/app-menu.css';
 @import './styles/ribbon.css';
 @import './styles/document-tabs.css';
@@ -25,6 +26,7 @@
 @import './styles/status-bar.css';
 @import './styles/navigation-bar.css';
 @import './styles/find-bar.css';
+@import './styles/tour.css';
 @import './styles/rtl.css';
 @import './styles/mobile.css';
 @import './styles/oculith-workspace.css';

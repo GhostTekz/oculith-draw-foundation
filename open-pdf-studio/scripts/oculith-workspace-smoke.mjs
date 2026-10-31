@@ -68,7 +68,11 @@ try {
   await page.locator('#pdf-container.visible').waitFor({ timeout: 15000 });
   assert.match(await page.locator('.properties-toolbar .ptb-doc-name').innerText(), /review-sheet\.pdf/);
   const canvasTop = (await page.locator('#pdf-container').boundingBox()).y;
-  assert.ok(canvasTop <= 101, `canvas starts at y=${canvasTop}`);
+  // Menu row, properties bar and tabs take 101 px; the workflow toolbar
+  // (tabs and one tool row) adds its own height.
+  const workflowBar = (await page.locator('#workflow-bar').boundingBox())?.height || 0;
+  assert.ok(workflowBar <= 66, `workflow toolbar is ${workflowBar} px`);
+  assert.ok(canvasTop <= 101 + workflowBar, `canvas starts at y=${canvasTop}`);
 
   await page.locator('.ws-host-left .sp-symbol-btn.sp-symbol-oculith').first().click();
   const sheet = await page.locator('#pdf-canvas').boundingBox();

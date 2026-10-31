@@ -22,3 +22,5 @@ import './set-batch-link.js';
 // Previous / Next View, Dimmer and Dark Mode (Navigation bar work package).
 import '../../ui/chrome/navigation-commands.js';
 import './multiview.js';
+// Workflow toolbar tabs and the edition's own commands.
+import './workflow.js';

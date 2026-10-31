@@ -118,6 +118,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
   // plan-review workspace layout (js/solid/stores/workspaceLayout.js). null
   // until first saved; while null, the two keys above are migrated on load.
   workspaceLayout: null,
+  // The workflow toolbar (js/solid/components/WorkflowBar.jsx): the Quick
+  // Access commands pinned at its right (null = the default set), the
+  // workflow tab shown, and whether its tool row is folded away.
+  quickAccess: null,
+  activeWorkflow: null,
+  workflowBarCollapsed: false,
 
   // Appearance
   defaultAnnotationColor: '#FF0000',

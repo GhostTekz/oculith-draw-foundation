@@ -73,6 +73,7 @@ import { markupCheckmarkColumnForSave, saveMarkupCheckmarkColumn } from './marku
 import { checkmarkValue } from '../annotations/custom-checkmark-column.js';
 import { markupFormulaColumnForSave, saveMarkupFormulaColumn } from './markup-formula-column.js';
 import { schrijfAnnotatieLagen, ocVoorAnnotatie } from './saver/annotatie-lagen.js';
+import { writeNativeOcgDefault } from './saver/native-ocg-default.js';
 import { layersForSave, currentLayerId } from '../annotations/annotatie-lagen.js';
 import { pdfTextString, toWinAnsiText, winAnsiLiteral, asciiPdfName } from './saver/pdf-text.js';
 import { buildHyperlinkDict, isAppHyperlinkDict } from './saver/hyperlink-dict.js';
@@ -413,7 +414,8 @@ async function savePDFNow(saveAsPath = null, opties = {}, activeDoc = getActiveD
   }
   if (!state.documents.includes(activeDoc)) return false;
   const doel = saveAsPath || activeDoc?.saveTargetPath || currentPath;
-  _saveBezig = _savePDFNu(saveAsPath, activeDoc).finally(() => { _saveBezig = null; });
+  _saveBezig = _savePDFNu(saveAsPath, activeDoc, null, { nativeOcgDefault: opties.nativeOcgDefault })
+    .finally(() => { _saveBezig = null; });
   const gelukt = await _saveBezig;
   if (gelukt && activeDoc) {
     // De vorige uitkomst gold voor het oude bestand: opnieuw verifiëren. Het
@@ -451,7 +453,7 @@ export async function savedPdfBytes(activeDoc = getActiveDocument(), refs = new 
   return bytes instanceof Uint8Array ? bytes : null;
 }
 
-async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
+async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null, { nativeOcgDefault = null } = {}) {
   const currentPath = activeDoc?.filePath;
   const sourcePdf = activeDoc?.pdfDoc;
   const stillCurrent = () => state.documents.includes(activeDoc)
@@ -638,6 +640,11 @@ async function _savePDFNu(saveAsPath, activeDoc, alleenBytes = null) {
       huidigeLaag: currentLayerId(doc),
       annotaties: docAnnotations,
     });
+
+    // "Save layer visibility as the PDF default" (native-ocg-selection.js):
+    // only on that explicit command; an ordinary save keeps the PDF's own
+    // default layer configuration untouched (docs/foundation/PDF-LAYERS.md).
+    if (nativeOcgDefault?.length && !alleenBytes) writeNativeOcgDefault(pdfDocLib, nativeOcgDefault);
 
     // Everything outside the models that goes into a markup's dictionary:
     // when it changed, every page is rebuilt.

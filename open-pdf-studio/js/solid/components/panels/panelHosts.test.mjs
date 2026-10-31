@@ -224,7 +224,7 @@ test('profiles: Oculith Advanced shows Thumbnails left and Properties right; siz
   assert.equal(wl.activeProfile(), 'oculithAdvanced', 'old ids still work');
   assert.equal(wl.getHost('right').size, 360, 'its remembered size');
   assert.equal(profiles.applyWorkspaceProfile('nope'), false);
-  assert.deepEqual([...profiles.WORKSPACE_PROFILES], ['oculith', 'oculithAdvanced', 'quantityTakeoff', 'document']);
+  assert.deepEqual([...profiles.WORKSPACE_PROFILES], ['oculith', 'basic', 'reviewer', 'oculithAdvanced', 'quantityTakeoff', 'document']);
   profiles.applyWorkspaceProfile('document');
   assert.equal(wl.getHost('bottom').collapsed, true);
   assert.equal(wl.isToolbarVisible('markup'), false);

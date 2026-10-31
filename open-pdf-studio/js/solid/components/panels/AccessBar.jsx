@@ -8,7 +8,7 @@ import { workspaceLayout } from '../../stores/workspaceLayout.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { lucide } from '../../data/lucideIcons.js';
 import { accessBarItems } from './panelHostLogic.js';
-import { getPanelEntry, panelTooltip, panelTitle } from './panelRegistry.js';
+import { getPanelEntry, panelTitle } from './panelRegistry.js';
 import { clickAccessTab, toggleHost } from './panelActions.js';
 import { showPanelTabMenu } from '../../stores/contextMenuStore.js';
 
@@ -65,7 +65,7 @@ export default function AccessBar(props) {
       <For each={items()}>{(item) => (
         <button type="button" role="tab" class={`ws-access-tab${item.active ? ' active' : ''}`}
           data-panel={item.id} aria-selected={item.active} aria-label={panelTitle(item.id, t)}
-          title={panelTooltip(item.id, t)}
+          data-tip={panelTitle(item.id, t)} data-tip-key={getPanelEntry(item.id)?.shortcut || ''}
           onClick={() => clickAccessTab(props.host, item.id)}
           onContextMenu={(e) => menuAt(e, item.id)}
           innerHTML={getPanelEntry(item.id)?.icon || ''} />

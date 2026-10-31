@@ -647,6 +647,22 @@ export async function extractPages(pageNumbers, deleteFromOriginal) {
     return;
   }
 
+  // A vector copy keeps every PDF layer at its default visibility: with
+  // hidden layers, reset them first or export what is shown as raster
+  // (layer-output-policy.js). Raster is offered only for a plain extract.
+  const { confirmLayerRoute } = await import('./layer-output-policy.js');
+  const layerChoice = await confirmLayerRoute(activeDoc, 'extract-pages', deleteFromOriginal ? {
+    ask: ({ options }) => import('../solid/stores/dialogStore.js').then(({ openDialog }) => new Promise((resolve) => {
+      openDialog('layer-selection', { route: 'extract-pages', options: options.filter(o => o !== 'raster'), resolve });
+    })),
+  } : {});
+  if (layerChoice === 'cancel' || getActiveDocument() !== activeDoc) return;
+  if (layerChoice === 'raster') {
+    const { exportAsRasterPdf } = await import('./exporter.js');
+    await exportAsRasterPdf({ pages: pageNumbers, doc: activeDoc });
+    return;
+  }
+
   const cacheKey = getCacheKey();
   const currentBytes = getCachedPdfBytes(cacheKey) || await getPdfBytes(cacheKey);
   if (!currentBytes) return;

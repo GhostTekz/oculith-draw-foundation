@@ -117,6 +117,7 @@ export const dimensionIcon = toolIcon('dimension');
 export const scaleBarIcon = toolIcon('scale-bar');
 export const calibrateIcon = toolIcon('calibrate');
 export const setScaleIcon = toolIcon('set-scale');
+export const detectScalesIcon = lucide('scan-text');
 export const addViewportIcon = toolIcon('viewport');
 export const scaleRegionIcon = toolIcon('viewport');
 export const quantitiesIcon = toolIcon('takeoff');

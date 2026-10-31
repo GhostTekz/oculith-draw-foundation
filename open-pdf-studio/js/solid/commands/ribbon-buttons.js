@@ -157,6 +157,7 @@ export const RIBBON_BUTTON_COMMANDS = Object.freeze({
   // MeasureTab.jsx
   'measure-calibrate': 'tools.measure.calibrate',
   'measure-set-scale': 'tools.measure.setScale',
+  'measure-detect-scales': 'tools.measure.detectScales',
   'measure-add-viewport': 'tools.measure.addViewport',
   'measure-distance': 'tools.measure.length',
   'measure-area': 'tools.measure.area',

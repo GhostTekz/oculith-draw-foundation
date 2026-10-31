@@ -65,6 +65,9 @@ export const ICONS = [
   'log-out', 'command', 'panel-bottom', 'moon', 'file-search',
   // Tool Chest and Markups List panels (the external editor panel parity)
   'share', 'funnel', 'columns-3', 'square-minus', 'square-plus',
+  // workflow toolbar, Quick Access and the command palette
+  'pin', 'pin-off', 'ruler', 'list-checks', 'cable', 'message-square-text',
+  'panel-top-close', 'panel-top-open',
 ];
 
 const ICON_ATTRS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';

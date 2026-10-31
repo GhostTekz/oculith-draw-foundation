@@ -20,6 +20,8 @@
 //                                     not have yet (Batch menu, spec §8)
 
 import { edition } from '../../editions/active.js';
+import { PROFILE_IDS } from '../stores/workspaceLayout.js';
+import { WORKFLOWS, BUILTIN_WORKFLOWS } from './workflows.js';
 
 export const SEP = '-';
 
@@ -59,13 +61,22 @@ const BATCH_LIVE = {
 
 const sub = (key, items, extra = {}) => ({ submenu: `common:menu.${key}`, items, ...extra });
 
+// View ▸ Workflow: one entry per workflow tab (workflows.js).
+const WORKFLOW_ITEMS = WORKFLOWS.filter((wf) => !wf.contextual).map((wf) => `view.workflow.${wf.id}`);
+// Tools ▸ <edition workflow>: an edition's workflow tab as a submenu, its
+// groups between separators, so every command it brings is in a menu too.
+const groupsAsItems = (wf) => wf.groups.flatMap((group, i) => (i ? [SEP, ...group.items] : group.items));
+const EDITION_TOOL_MENUS = WORKFLOWS
+  .filter((wf) => !wf.contextual && !BUILTIN_WORKFLOWS.some((b) => b.id === wf.id))
+  .map((wf) => ({ submenu: wf.label, icon: wf.icon, items: groupsAsItems(wf) }));
+
 export const MENUS = [
   {
     id: 'oculith', label: 'common:menu.oculith', mnemonic: 'O', items: [
       'oculith.about',
       SEP,
       'oculith.preferences',
-      sub('profiles', ['oculith.profile.oculith', 'oculith.profile.oculithAdvanced', 'oculith.profile.quantityTakeoff', 'oculith.profile.document']),
+      sub('profiles', PROFILE_IDS.map((id) => `oculith.profile.${id}`)),
       'oculith.keyboardShortcuts',
       SEP,
       'oculith.exit',
@@ -149,7 +160,8 @@ export const MENUS = [
       sub('theme', ['view.themeDark', 'view.themeLight']),
       'view.thinLines', 'view.readerMode', 'view.keystrokes',
       SEP,
-      'tools.toolbar.navigation', 'tools.toolbar.status', 'view.menuBar',
+      sub('workflow', WORKFLOW_ITEMS),
+      'tools.toolbar.standard', 'tools.toolbar.navigation', 'tools.toolbar.status', 'view.menuBar',
     ],
   },
   {
@@ -196,7 +208,7 @@ export const MENUS = [
       ]),
       sub('stamp', ['tools.stamp', 'tools.stampEditor', 'tools.parametricSymbol']),
       sub('measure', [
-        'tools.measure.calibrate', 'tools.measure.setScale', 'tools.measure.addViewport',
+        'tools.measure.calibrate', 'tools.measure.setScale', 'tools.measure.detectScales', 'tools.measure.addViewport',
         SEP,
         'tools.measure.length', 'tools.measure.polylength', 'tools.measure.area', 'tools.measure.perimeter',
         'tools.measure.angle', 'tools.measure.volume', 'tools.measure.arcLength', 'tools.measure.radius3',
@@ -207,6 +219,7 @@ export const MENUS = [
         'tools.quantities',
       ]),
       sub('raceway', ['tools.raceway.conduit', 'tools.raceway.cableTray']),
+      ...EDITION_TOOL_MENUS,
       sub('sketchToScale', ['tools.trim', 'tools.extend', 'tools.split', 'tools.break', 'tools.lengthen',
         'tools.array', 'tools.join', 'tools.explode']),
       sub('form', ['window.panel.formFields']),
@@ -235,6 +248,7 @@ export const MENUS = [
   {
     id: 'help', label: 'common:menu.help', mnemonic: 'H', items: [
       'help.findCommands',
+      'help.showTour', 'help.showBasicsTour',
       SEP,
       'oculith.keyboardShortcuts',
       SEP,

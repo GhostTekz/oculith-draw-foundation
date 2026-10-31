@@ -14,6 +14,7 @@ mod identity_migration;
 mod email;
 pub mod linux_runtime;
 pub mod logboek;
+pub mod mcp_addon_tools;
 pub mod mcp_app_bridge;
 pub mod mcp_koppeling;
 pub mod mcp_server;
@@ -4728,6 +4729,7 @@ pub fn run(opts: StartupOpts) {
             template_scope::allow_template_scope,
             reader_position_scope::allow_reader_position_scope,
             mcp_app_bridge::app_response,
+            mcp_addon_tools::mcp_addon_tools_set,
             mcp_app_bridge::mcp_bridge_ready,
             mcp_koppeling::mcp_instellen,
             mcp_koppeling::mcp_status,

@@ -3278,6 +3278,14 @@ async function handleListPrinters(params) {
 
 
 /** app_list_layers — de annotatielagen van het actieve document. */
+/** A tool an installed add-on registered (js/mcp/addon-tools.js): the
+ *  argument check, the user's approval for a write, the undo step and the
+ *  log all happen there. */
+async function handleAddonCall(params) {
+  const { callAddonTool } = await import('./mcp/addon-tools.js');
+  return callAddonTool(String(params?.name ?? ''), params?.arguments ?? {});
+}
+
 async function handleListLayers(params) {
   if (params && typeof params === 'object' && Object.keys(params).length) {
     return { ok: false, error: `unknown argument: ${Object.keys(params)[0]}` };
@@ -3392,6 +3400,8 @@ const HANDLERS = {
   'mcp:list-layers':        handleListLayers,
   'mcp:create-layer':       handleCreateLayer,
   'mcp:set-layer':          handleSetLayer,
+  // Tools registered by installed add-ons
+  'mcp:addon-call':         handleAddonCall,
   // Assistant relay — external MCP client as the AI brain
   'mcp:assistant-ask':      handleAssistantAsk,
   'mcp:assistant-pending':  handleAssistantPending,

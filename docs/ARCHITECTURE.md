@@ -142,6 +142,7 @@ The shell contains an MCP server (`src-tauri/src/mcp_server.rs`) that speaks JSO
 - The public tools open, navigate and zoom documents, take screenshots of the view, create, list, update and delete annotations, set the measure scale, place schedules, work with layers, snippets, CAD import and export, printing, tabs and saving.
 - `app_list_commands` and `app_run_command` expose every command in the registry.
 - The tool contract is published as `mcp-stdio/tools.json` and `mcpb/manifest.json`.
+- Installed add-ons can add tools (`addon_<namespace>_<tool>`) through `js/mcp/addon-tools.js`; the editor asks the user before each one that changes something and logs every call. See [Add-on tools for the AI link](ADDON-TOOLS.md).
 
 ## Repository map
 

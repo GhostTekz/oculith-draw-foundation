@@ -174,19 +174,43 @@ export function pageScaleStatus(doc, pageNum, legacyScale = null) {
   let scale = schaalOpPunt(doc, pageNum, NaN, NaN);
   let method = scale?.method;
   if (scale && method === 'document') method = doc.measureScale?.method || 'document';
-  if (scale && method === 'page') method = paginaSchaal(doc, pageNum)?.method || 'page';
+  let source = null;
+  if (scale && method === 'page') {
+    const own = paginaSchaal(doc, pageNum);
+    method = own?.method || 'page';
+    source = own?.source || null;
+  }
   if (!scale) {
     const legacy = geldigeDocumentSchaal(legacyScale);
     if (legacy) { scale = legacy; method = 'preference'; }
   }
+  // Scale proposals read from this page (scale-proposals.js): only a
+  // suggestion until the user applies them.
+  const entry = doc.scaleProposals?.[pageNum];
+  const pendingPage = entry?.pageScale?.status === 'pending' ? entry.pageScale : null;
+  const pendingViews = (entry?.views || []).filter(v => v?.status === 'pending');
   if (scale) {
-    return {
+    const status = {
       kind: 'set',
       ratio: formatRatio(ratioFromPixelsPerUnit(scale.pixelsPerUnit, scale.unit)),
       unit: scale.unit,
       method,
       regions,
     };
+    if (typeof source === 'string' && source) status.source = source;
+    if (pendingViews.length) status.pendingViews = pendingViews.length;
+    return status;
+  }
+  if (entry) {
+    if (pendingPage || pendingViews.length) {
+      const first = pendingPage || pendingViews[0];
+      return {
+        kind: 'detected', ratio: pendingPage ? formatRatio(pendingPage.ratio) : '', regions,
+        views: pendingViews.length, sourceText: first.sourceText || first.text || '',
+        source: first.source, title: first.title || '', confidence: first.confidence,
+      };
+    }
+    return { kind: 'none', regions };
   }
   const detected = Number(doc.detectedScale?.ratio);
   if (Number.isFinite(detected) && detected > 0) {

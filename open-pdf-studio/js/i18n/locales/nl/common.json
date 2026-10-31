@@ -381,6 +381,30 @@
     "noLayers": "Deze PDF heeft zelf geen lagen. Lagen voor je markeringen staan in Markeringslagen.",
     "layerToggleUnavailable": "Lagen aan- en uitzetten is nog niet beschikbaar",
     "pdfLayersFromDrawing": "uit de tekening",
+    "pdfLayerShow": "Laag tonen",
+    "pdfLayerHide": "Laag verbergen",
+    "pdfLayerSolo": "Alleen deze laag tonen",
+    "pdfLayerGroupToggle": "De lagen in deze groep tonen of verbergen",
+    "pdfLayerShowAll": "Alle lagen tonen",
+    "pdfLayerHideAll": "Alle lagen verbergen",
+    "pdfLayerReset": "Terug naar de standaardlagen van de PDF",
+    "pdfLayerFilter": "Lagen filteren",
+    "pdfLayerNotSwitchable": "Deze laag kan niet worden geschakeld",
+    "pdfLayerSaveDefault": "Laagzichtbaarheid opslaan als standaard van de PDF",
+    "pdfLayerSaveDefaultConfirm": "Het document nu opslaan met de hier getoonde lagen als standaard? Andere PDF-lezers openen het dan met deze lagen.",
+    "pdfLayerViewNote": "De laagweergave wijkt af van de standaard van de PDF. Opslaan behoudt de eigen laaginstellingen van de PDF. Snappen volgt de getoonde lagen; zoeken op tekst vindt ook tekst op verborgen lagen.",
+    "pdfLayerUnsupported": {
+      "encrypted": "De lagen van een versleutelde PDF kunnen hier niet worden geschakeld.",
+      "indirectProperties": "Deze PDF bewaart zijn laaginstellingen in een vorm die de weergave niet kan schakelen.",
+      "configs": "Deze PDF heeft alternatieve laagconfiguraties; de lagen kunnen hier niet worden geschakeld.",
+      "indirectDefault": "Deze PDF bewaart zijn standaardlaagconfiguratie in een vorm die de weergave niet kan schakelen.",
+      "autoState": "Deze PDF schakelt lagen automatisch (auto-state-regels); de lagen kunnen hier niet worden geschakeld.",
+      "radioGroups": "Deze PDF heeft keuzegroepen (keuzerondjes) voor lagen; de lagen kunnen hier niet worden geschakeld.",
+      "locked": "Deze PDF heeft vergrendelde lagen; de lagen kunnen hier niet worden geschakeld.",
+      "baseState": "De laagconfiguratie van deze PDF heeft een basisstatus die de weergave niet kan schakelen.",
+      "malformed": "De laaginstellingen van deze PDF konden niet worden gelezen; de lagen kunnen hier niet worden geschakeld."
+    },
+    "pdfLayerUnsupportedHint": "De tekening toont de lagen zoals de PDF ze instelt.",
     "fieldsCount": "{{count}} velden",
     "noFormFields": "Geen formuliervelden in dit document",
     "couldNotLoadFormFields": "Formuliervelden konden niet worden geladen",
@@ -494,7 +518,9 @@
       "oculith": "Oculith",
       "oculithAdvanced": "Oculith Geavanceerd",
       "quantityTakeoff": "Hoeveelheden opnemen",
-      "document": "Document"
+      "document": "Document",
+      "basic": "Basis",
+      "reviewer": "Beoordelaar"
     },
     "size": "Grootte"
   },
@@ -681,9 +707,25 @@
       "print": "Afdrukken"
     },
     "palette": {
-      "placeholder": "Gereedschap en opdrachten zoeken",
+      "placeholder": "Gereedschap, opdrachten, panelen en pagina's zoeken",
       "empty": "Geen opdrachten gevonden",
-      "title": "Gereedschap + opdrachten zoeken"
+      "title": "Gereedschap + opdrachten zoeken",
+      "recent": "Recent",
+      "commands": "Opdrachten",
+      "tools": "Gereedschap",
+      "panels": "Panelen",
+      "pages": "Pagina's",
+      "documents": "Open documenten",
+      "files": "Recente bestanden",
+      "addons": "Gereedschap van add-ons",
+      "goToPage": "Ga naar pagina {{page}}",
+      "switchTo": "Wissel naar",
+      "open": "Openen",
+      "hintMove": "verplaatsen",
+      "hintRun": "uitvoeren",
+      "hintPin": "vastzetten in Snelle toegang",
+      "hintClose": "sluiten",
+      "pinned": "Vastgezet in Snelle toegang"
     },
     "windowControls": {
       "minimize": "Minimaliseren",
@@ -693,7 +735,8 @@
     },
     "menuBar": "Menubalk",
     "batchLink": "Koppelen",
-    "raceway": "Kabelgoot en buis"
+    "raceway": "Kabelgoot en buis",
+    "workflow": "Werkstroom"
   },
   "capture": {
     "title": "Capture",
@@ -835,11 +878,15 @@
     "extensions": "Extensies…",
     "fileAssociations": "Bestandskoppelingen…",
     "startupDiagnostics": "Opstartdiagnose",
+    "showTour": "Rondleiding opnieuw tonen",
+    "showBasicsTour": "Rondleiding basis",
     "profiles": {
       "oculith": "Oculith",
       "oculithAdvanced": "Oculith uitgebreid",
       "quantityTakeoff": "Hoeveelheden",
-      "document": "Document"
+      "document": "Document",
+      "basic": "Basis",
+      "reviewer": "Beoordelaar"
     },
     "panels": {
       "thumbnails": "Miniaturen",
@@ -888,6 +935,7 @@
       "removeImage": "Afbeelding verwijderen",
       "calibrate": "Kalibreren",
       "setScale": "Schaal instellen…",
+      "detectScales": "Schalen herkennen…",
       "addViewport": "Viewport toevoegen",
       "length": "Lengte",
       "polylength": "Polylengte",
@@ -921,7 +969,7 @@
       "properties": "Eigenschappenwerkbalk",
       "navigation": "Navigatiebalk",
       "status": "Statusbalk",
-      "standard": "Standaard",
+      "standard": "Werkstroomwerkbalk",
       "markup": "Markering",
       "measure": "Meten"
     },
@@ -1430,6 +1478,128 @@
     "clearMarks": "Markeringen wissen",
     "branchFrom": "Aftakking van {{name}}",
     "closeTitle": "Sluiten (Esc)"
+  },
+  "tour": {
+    "close": "Rondleiding sluiten",
+    "closeTitle": "Sluiten (Esc). De rondleiding gaat de volgende keer hier verder.",
+    "stepOf": "Stap {{index}} van {{total}}",
+    "skip": "Overslaan",
+    "back": "Vorige",
+    "next": "Volgende",
+    "done": "Klaar"
+  },
+  "basicsTour": {
+    "title": "Basis",
+    "steps": [
+      {
+        "title": "Een tekening openen",
+        "body": [
+          "Open een PDF-tekeningenset met Bestand > Openen of Ctrl+O.",
+          "Recente bestanden staan ook in het menu Bestand."
+        ]
+      },
+      {
+        "title": "Door de bladen bladeren",
+        "body": [
+          "Miniaturen tonen elk blad. Klik op een miniatuur om erheen te gaan."
+        ]
+      },
+      {
+        "title": "Pagina's en zoomen",
+        "body": [
+          "Typ een paginanummer of blader met de pijlen.",
+          "Zoom met Ctrl en het muiswiel; Ctrl+0 past de pagina in het venster."
+        ]
+      },
+      {
+        "title": "Markeren",
+        "body": [
+          "Kies een markeringsgereedschap in het gereedschapspalet of het menu Gereedschap en teken op het blad.",
+          "Esc gaat terug naar Selecteren."
+        ]
+      },
+      {
+        "title": "Meten op schaal",
+        "body": [
+          "Stel eerst de schaal van het blad in: Gereedschap > Meten > Schaal instellen, bijvoorbeeld 1/8\" = 1'-0\".",
+          "Lengtes en oppervlakken lees je dan in werkelijke eenheden af."
+        ]
+      },
+      {
+        "title": "Opslaan",
+        "body": [
+          "Ctrl+S slaat je markeringen op in de PDF.",
+          "Toon deze rondleiding opnieuw via Help."
+        ]
+      }
+    ]
+  },
+  "workflow": {
+    "review": "Beoordelen",
+    "markup": "Markeren",
+    "measure": "Meten",
+    "takeoff": "Opname",
+    "sheets": "Bladen",
+    "compare": "Vergelijken",
+    "output": "Uitvoer",
+    "view": "Beeld",
+    "selection": "Selectie",
+    "image": "Afbeelding",
+    "groups": {
+      "select": "Selecteren",
+      "comment": "Opmerking",
+      "attach": "Bijvoegen",
+      "find": "Zoeken",
+      "shapes": "Vormen",
+      "freehand": "Uit de vrije hand",
+      "text": "Tekst",
+      "style": "Stijl",
+      "sketch": "Schetsen op schaal",
+      "scale": "Schaal",
+      "linear": "Lengte",
+      "area": "Oppervlak",
+      "angles": "Hoeken",
+      "results": "Resultaten",
+      "count": "Tellen",
+      "runs": "Leidingen",
+      "quantities": "Hoeveelheden",
+      "navigate": "Navigeren",
+      "pages": "Pagina's",
+      "pageSetup": "Pagina-instelling",
+      "links": "Koppelingen",
+      "compare": "Vergelijken",
+      "split": "Gesplitste weergave",
+      "layers": "Lagen",
+      "file": "Bestand",
+      "export": "Exporteren",
+      "finish": "Afronden",
+      "batch": "Batch",
+      "zoom": "Zoomen",
+      "layout": "Paginaweergave",
+      "display": "Weergave",
+      "snap": "Raster en snappen",
+      "window": "Venster",
+      "edit": "Bewerken",
+      "arrange": "Schikken",
+      "group": "Groeperen",
+      "image": "Afbeelding"
+    },
+    "bar": "Werkstroomwerkbalk",
+    "tabs": "Werkstromen",
+    "contextual": "Zichtbaar zolang een markering is geselecteerd",
+    "more": "Meer gereedschap",
+    "collapse": "Gereedschapsrij verbergen (alleen de werkstroomtabs blijven)",
+    "expand": "Gereedschapsrij tonen",
+    "search": "Gereedschap en opdrachten zoeken",
+    "quickAccess": "Snelle toegang",
+    "quickAccessMenu": "Snelle toegang aanpassen",
+    "pin": "Toevoegen aan Snelle toegang",
+    "unpin": "Verwijderen uit Snelle toegang",
+    "moveLeft": "Naar links",
+    "moveRight": "Naar rechts",
+    "resetQuickAccess": "Snelle toegang herstellen",
+    "quickAccessEmpty": "Klik met rechts op gereedschap en kies Toevoegen aan Snelle toegang.",
+    "moreShort": "Meer"
   },
   "toolSetSharing": {
     "manage": "Gereedschapssets beheren…",

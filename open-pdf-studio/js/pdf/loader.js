@@ -838,11 +838,24 @@ export async function loadPDF(filePath, docIndex, preloadedData = null, { exactS
           // text layer's PDF.js request (page-text-content.js).
           if (doc._firstPaint) await untilOrAfter(doc._firstPaint, 10_000);
           if (isClosed() || doc.measureScale) return;
-          const result = await detectScaleFromPdf(1, doc);
+          // Page 1 is read as a sheet (title block, view titles, scale
+          // bars) into scale proposals; other pages when they are shown or
+          // on "Detect scales for all pages" (scale-proposals.js).
+          const { ensurePageScanned } = await import('../annotations/scale-proposals.js');
           if (isClosed() || doc.measureScale) return;
-          if (result && result.ratio > 0) {
-            doc.detectedScale = { ratio: result.ratio, scaleText: result.scaleText, imperial: result.imperial === true };
+          const entry = await ensurePageScanned(doc, 1);
+          if (isClosed() || doc.measureScale) return;
+          if (!entry) {
+            const result = await detectScaleFromPdf(1, doc);
+            if (isClosed() || doc.measureScale) return;
+            if (result && result.ratio > 0) {
+              doc.detectedScale = { ratio: result.ratio, scaleText: result.scaleText, imperial: result.imperial === true };
+            }
+          } else if (entry.pageScale) {
+            doc.detectedScale = { ratio: entry.pageScale.ratio, scaleText: entry.pageScale.text,
+              imperial: entry.pageScale.imperial === true };
           }
+          if (isActive()) updateAllStatus();
         } catch (e) {
           // Non-critical — ignore auto-detect failures
         }

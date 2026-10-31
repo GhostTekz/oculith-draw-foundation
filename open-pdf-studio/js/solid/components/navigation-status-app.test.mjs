@@ -68,7 +68,7 @@ test('status bar: hint, scale, page size, cursor; page navigation and zoom moved
     'nav-page-size', 'nav-scale', 'nav-doc-properties', 'nav-dimmer', 'nav-profile', 'nav-layout-single', 'nav-layout-continuous']) {
     assert.match(navBar, new RegExp(`id="${id}"`), id);
   }
-  assert.match(navBar, /showSetScaleDialog\(\)/, 'the scale text opens Set Scale');
+  assert.match(navBar, /openScaleChip\(chip\(\), page\(\)\)/, 'the scale text opens Set Scale, or the review of a detected scale');
 });
 
 test('F4 / F8 toggle the bars through workspaceLayout.toolbars', () => {

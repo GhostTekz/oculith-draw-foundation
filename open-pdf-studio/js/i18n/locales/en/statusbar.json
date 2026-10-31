@@ -119,6 +119,13 @@
   "scaleNotSet": "Scale not set",
   "scaleRegions": "+ regions",
   "scaleTitle": "Drawing scale of this page. Scale regions override it where they are drawn. Click to set the scale.",
+  "scaleDetectedViews": "Detected {{count}} view scales: review?",
+  "scalePendingViews": "+ {{count}} to review",
+  "scaleDetectedTitle": "Read from {{source}} ({{confidence}}% confidence). Not applied yet: measurements and totals stay Scale not set. Click to review.",
+  "scaleDetectedPlainTitle": "A scale was found in the drawing text. Not applied yet: measurements and totals stay Scale not set. Click to set the scale.",
+  "scaleSetSourceTitle": "Scale {{ratio}}, confirmed from {{source}}. Click to change it.",
+  "scalePendingTitle": "{{count}} view scale(s) read from the sheet are not applied yet. Click to review.",
+  "scaleNotSetTitle": "Scale not set: measurements stay in page units. Click to set or calibrate the scale.",
   "snapToggles": {
     "group": "Drawing aids",
     "content": "Content",

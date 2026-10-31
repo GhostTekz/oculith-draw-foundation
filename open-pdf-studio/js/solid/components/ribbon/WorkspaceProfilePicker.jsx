@@ -1,5 +1,6 @@
 import { For, Show, createSignal, onMount, onCleanup } from 'solid-js';
 import { activeWorkspaceProfile, applyWorkspaceProfile, WORKSPACE_PROFILES } from '../../stores/workspaceProfiles.js';
+import { profileLabelKey } from '../../stores/workspaceLayout.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 
 export default function WorkspaceProfilePicker() {
@@ -11,7 +12,7 @@ export default function WorkspaceProfilePicker() {
 
   // Profiles are whole panel layouts (workspaceLayout.js); until the menu bar's
   // Oculith ▸ Profiles lands, this picker is the switcher.
-  const label = (profile) => t(`panelHost.profile.${profile}`);
+  const label = (profile) => t(profileLabelKey(profile));
 
   const focusItem = (last = false) => {
     const items = menu?.querySelectorAll('[role="menuitemradio"]');
