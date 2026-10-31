@@ -1,13 +1,18 @@
 {
   "$schema": "https://schemas.tauri.app/config/2",
   "identifier": "thumbnail-view",
-  "description": "Minimal event and window controls for the separate thumbnail view",
+  "description": "Minimal event and window controls for the floating thumbnail tile",
   "platforms": ["linux", "macOS", "windows"],
   "windows": ["thumbnail-*"],
   "permissions": [
     "core:event:default",
     "core:window:allow-get-all-windows",
     "core:window:allow-set-focus",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-current-monitor",
+    "core:window:allow-scale-factor"
   ]
 }

@@ -1,16 +1,20 @@
 // The drawing window owns PDF rendering and the thumbnail cache. A separate
-// view window receives only visible cached images and sends page navigation
-// back here; it never opens a second copy of the drawing.
+// floating tile receives only visible cached images and page captions, and
+// sends page navigation back here; it never opens a second copy of the drawing.
 import { getActiveDocument } from '../../core/state.js';
-import { cachedThumbnailForDocument, onDetachedThumbnailChange, setDetachedThumbnailRange } from './left-panel.js';
+import { cachedThumbnailForDocument, onDetachedThumbnailChange, setDetachedThumbnailPages } from './left-panel.js';
+import { TILE_DEFAULTS, TILE_MEMORY_KEY, tilePlacement } from './thumbnail-tile-placement.js';
+import { tilePageInfo, validTilePages } from './thumbnail-tile-grid.js';
 
 const STATE = 'thumbnail-view:state';
 const IMAGES = 'thumbnail-view:images';
+const INFO = 'thumbnail-view:info';
 const READY = 'thumbnail-view:ready';
 const RANGE = 'thumbnail-view:range';
 const GOTO = 'thumbnail-view:goto';
+const DOCK = 'thumbnail-view:dock';
 const CLOSED = 'thumbnail-view:closed';
-const MAX_RANGE = 24;
+const FIRST_PAGES = Array.from({ length: 12 }, (_, index) => index + 1);
 const MAX_IMAGES_PER_SYNC = 4;
 
 let childLabel = '';
@@ -18,8 +22,9 @@ let sourceLabel = '';
 let listeners = null;
 let timer = null;
 let ready = false;
-let requested = { docId: '', start: 1, end: 12 };
+let requested = { docId: '', pages: FIRST_PAGES };
 let lastState = '';
+let lastInfo = { docId: '', pdfDoc: null, register: null, sent: false };
 let sentImages = new Map();
 let sending = false;
 let pendingSync = false;
@@ -43,11 +48,29 @@ function clearConnection() {
   timer = null;
   ready = false;
   lastState = '';
+  lastInfo = { docId: '', pdfDoc: null, register: null, sent: false };
   sentImages = new Map();
   pendingSync = false;
-  requested = { docId: '', start: 1, end: 12 };
+  requested = { docId: '', pages: FIRST_PAGES };
   onDetachedThumbnailChange(null);
-  setDetachedThumbnailRange(null, 0, 0);
+  setDetachedThumbnailPages(null, []);
+}
+
+/** Page labels and drawing-set sheet numbers/titles, sent once per document change. */
+async function syncInfo(current) {
+  const doc = getActiveDocument();
+  if (!current.docId || doc?.id !== current.docId) return;
+  const { sheetRegister } = await import('../../solid/stores/sheetRegisterStore.js');
+  const register = sheetRegister();
+  if (lastInfo.sent && lastInfo.docId === doc.id && lastInfo.pdfDoc === doc.pdfDoc
+      && lastInfo.register === register) return;
+  const pdfDoc = doc.pdfDoc;
+  let labels = null;
+  try { labels = await pdfDoc.getPageLabels(); } catch { labels = null; }
+  if (getActiveDocument() !== doc || doc.pdfDoc !== pdfDoc || !ready) return;
+  const info = tilePageInfo(pdfDoc.numPages, labels, register?.sheets, doc.filePath);
+  await tauri().event.emitTo(childLabel, INFO, { source: sourceLabel, docId: doc.id, info });
+  lastInfo = { docId: doc.id, pdfDoc, register, sent: true };
 }
 
 async function sync(force = false) {
@@ -60,15 +83,18 @@ async function sync(force = false) {
     if (force || key !== lastState) {
       await tauri().event.emitTo(childLabel, STATE, { source: sourceLabel, ...current });
       if (current.docId !== requested.docId) {
-        requested = { docId: current.docId, start: 1, end: 12 };
+        requested = { docId: current.docId, pages: FIRST_PAGES };
         sentImages = new Map();
-        setDetachedThumbnailRange(current.docId, 1, 12);
+        setDetachedThumbnailPages(current.docId, FIRST_PAGES);
       }
       lastState = key;
     }
     if (!current.docId) return;
+    if (force) lastInfo.sent = false;
+    await syncInfo(current);
     const changed = [];
-    for (let page = requested.start; page <= Math.min(requested.end, current.count); page++) {
+    for (const page of requested.pages) {
+      if (page > current.count) continue;
       const image = cachedThumbnailForDocument(current.docId, page);
       if (!image?.dataURL) {
         if (sentImages.has(page)) changed.push({ page, dataURL: null });
@@ -113,26 +139,34 @@ async function ensureListeners() {
       void sync(true);
     });
     await event.listen(RANGE, (message) => {
-      const { child, docId, start, end } = message.payload || {};
-      if (child !== childLabel || docId !== snapshot().docId
-          || !Number.isSafeInteger(start) || !Number.isSafeInteger(end)
-          || start < 1 || end < start || end - start >= MAX_RANGE) return;
-      if (requested.docId === docId && requested.start === start && requested.end === end) return;
-      requested = { docId, start, end };
+      const { child, docId } = message.payload || {};
+      const current = snapshot();
+      const pages = validTilePages(message.payload?.pages, current.count);
+      if (child !== childLabel || docId !== current.docId || !pages) return;
+      if (requested.docId === docId && requested.pages.length === pages.length
+          && requested.pages.every((page, index) => page === pages[index])) return;
+      requested = { docId, pages };
+      const wanted = new Set(pages);
       for (const page of sentImages.keys()) {
-        if (page < start || page > end) sentImages.delete(page);
+        if (!wanted.has(page)) sentImages.delete(page);
       }
-      setDetachedThumbnailRange(docId, start, end);
+      setDetachedThumbnailPages(docId, pages);
       void sync();
     });
     await event.listen(GOTO, (message) => {
-      const { child, docId, page } = message.payload || {};
+      const { child, docId, page, focus } = message.payload || {};
       const current = snapshot();
       if (child !== childLabel || docId !== current.docId
           || !Number.isSafeInteger(page) || page < 1 || page > current.count) return;
       import('../../pdf/renderer.js').then(({ goToPage }) => goToPage(page))
-        .then(() => tauri()?.window?.getCurrentWindow?.()?.setFocus?.())
+        .then(() => { if (focus) return tauri()?.window?.getCurrentWindow?.()?.setFocus?.(); })
         .catch((error) => console.warn('[thumbnails] page navigation failed:', error));
+    });
+    await event.listen(DOCK, (message) => {
+      if (message.payload?.child !== childLabel) return;
+      import('../../solid/commands/window.js').then(({ revealPanel }) => revealPanel('thumbnails'))
+        .then(() => tauri()?.window?.getCurrentWindow?.()?.setFocus?.())
+        .catch((error) => console.warn('[thumbnails] could not show the side panel:', error));
     });
     await event.listen(CLOSED, (message) => {
       if (message.payload?.child === childLabel) clearConnection();
@@ -152,6 +186,64 @@ function startWatchdog(W) {
   }, 2000);
 }
 
+function readMemory() {
+  try { return globalThis.localStorage?.getItem(TILE_MEMORY_KEY) || null; } catch { return null; }
+}
+
+/** Physical rectangle for the tile: remembered, else beside this window. */
+async function tileRect() {
+  const api = tauri().window;
+  const self = api.getCurrentWindow();
+  let owner = null;
+  try {
+    const [position, size] = await Promise.all([self.outerPosition(), self.outerSize()]);
+    if (size.width > 0 && size.height > 0) owner = { x: position.x, y: position.y, width: size.width, height: size.height };
+  } catch { /* fall back to the browser's view of this window */ }
+  if (!owner && window.outerWidth > 0) {
+    const ratio = window.devicePixelRatio || 1;
+    owner = { x: window.screenX * ratio, y: window.screenY * ratio,
+      width: window.outerWidth * ratio, height: window.outerHeight * ratio };
+  }
+  let monitors = [];
+  try { monitors = await api.availableMonitors(); } catch { monitors = []; }
+  return tilePlacement({ memory: readMemory(), monitors, owner });
+}
+
+async function createTile(W) {
+  const rect = await tileRect();
+  const scale = rect.scale || 1;
+  const view = new W(childLabel, {
+    url: `index.html?view=thumbnails&source=${encodeURIComponent(sourceLabel)}`,
+    title: 'Pages',
+    x: Math.round(rect.x / scale), y: Math.round(rect.y / scale),
+    width: Math.round(rect.width / scale), height: Math.round(rect.height / scale),
+    minWidth: TILE_DEFAULTS.minWidth, minHeight: TILE_DEFAULTS.minHeight,
+    resizable: true, maximizable: false, minimizable: false, fullscreen: false,
+    decorations: false, shadow: true, skipTaskbar: true,
+    // Owned by the drawing window: kept above it, closed with it (Windows),
+    // a transient dialog (Linux) or a child window (macOS).
+    parent: sourceLabel,
+    visible: false, focus: true,
+  });
+  await new Promise((resolve, reject) => {
+    view.once('tauri://created', resolve);
+    view.once('tauri://error', (event) => reject(new Error(String(event?.payload ?? 'window error'))));
+  });
+  // Logical options are converted with one scale factor; set the exact
+  // physical geometry so a tile on a second monitor with another scale lands right.
+  const dpi = tauri().dpi;
+  if (dpi?.PhysicalSize && dpi?.PhysicalPosition) {
+    try {
+      await view.setSize(new dpi.PhysicalSize(rect.width, rect.height));
+      await view.setPosition(new dpi.PhysicalPosition(rect.x, rect.y));
+    } catch (error) {
+      console.warn('[thumbnails] tile placement was not applied:', error);
+    }
+  }
+  await view.show();
+  await view.setFocus();
+}
+
 async function openView() {
   await ensureListeners();
   onDetachedThumbnailChange(() => { queueMicrotask(() => { void sync(); }); });
@@ -165,19 +257,17 @@ async function openView() {
     if (!ready) { ready = true; void sync(true); }
     return;
   }
-  const view = new W(childLabel, {
-    url: `index.html?view=thumbnails&source=${encodeURIComponent(sourceLabel)}`,
-    title: 'Thumbnails', width: 260, height: 680, minWidth: 200,
-    minHeight: 280, resizable: true, decorations: true,
-  });
-  view.once('tauri://error', (event) => {
-    console.warn('[thumbnails] separate view failed:', event);
-    clearConnection();
-  });
   startWatchdog(W);
+  try {
+    await createTile(W);
+  } catch (error) {
+    console.warn('[thumbnails] separate view failed:', error);
+    clearConnection();
+    throw error;
+  }
 }
 
-/** Open or focus one view per drawing window. The source retains PDF ownership. */
+/** Open or focus one tile per drawing window. The source retains PDF ownership. */
 export function openDetachedThumbnails() {
   if (!opening) opening = openView().finally(() => { opening = null; });
   return opening;

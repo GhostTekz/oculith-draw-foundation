@@ -60,6 +60,8 @@ test('a markup edit does not re-render thumbnails while the Thumbnails panel is 
     { immediate: [], deferred: [1, 2, 3] });
   assert.deepEqual(partitionThumbnailInvalidations([1, 2, 3], false, { start: 2, end: 2 }),
     { immediate: [2], deferred: [1, 3] });
+  assert.deepEqual(partitionThumbnailInvalidations([1, 2, 3, 4], false, { pages: new Set([1, 4]) }),
+    { immediate: [1, 4], deferred: [2, 3] });
   assert.deepEqual(partitionThumbnailInvalidations([1, 2, 3], true, null),
     { immediate: [1, 2, 3], deferred: [] });
   assert.match(links, /export function flushDeferredThumbnails\(\)/);

@@ -103,7 +103,7 @@ Panels live in three hosts: left, right and bottom. Each host has an access bar 
 - **Window ▸ Hide Panels** (Shift+F4) hides all hosts. **Auto-Hide Panel Access** hides the access bars while their panels are closed.
 - The header of each panel shows its title and a ▾ panel menu with panel-specific items.
 - Thumbnails and Tool Chest have a size slider in the footer.
-- On desktop, drag the Thumbnails header outside the application window, or use its separate-window button, to open a live thumbnail view beside the drawing. Clicking a page there navigates the drawing window; the view follows the active document and closes independently.
+- On desktop, drag the Thumbnails header outside the application window, or use its separate-window button, to float the thumbnails as a small tool window at the drawing's right edge. Drag it by its title bar to a corner or another monitor; it stays above the drawing, reopens where you left it (or beside the drawing when that monitor is gone) and closes with its drawing window. Each page shows its sheet number or page label and the drawing set title. Type in the filter box to narrow by sheet, title or page, use the S/M/L toggle for the thumbnail size, the arrow keys and Enter to open a page, Esc to close, and the dock button to put the thumbnails back in the side panel.
 
 The panels are:
 
